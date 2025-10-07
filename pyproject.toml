@@ -1,0 +1,114 @@
+[build-system]
+requires = ["setuptools>=64.0.0", "versioningit"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cvt"
+dynamic = ["version", "dependencies", "optional-dependencies"]
+description = "Climate Vulnerability Tool to assess the vulnerability of the transport network in the North to climate hazards."
+readme = "README.md"
+license = { "file" = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "Transport for the North" }]
+classifiers = [
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+"Bug Tracker" = "https://github.com/transport-for-the-north/cvt/issues"
+Homepage = "https://github.com/transport-for-the-north/cvt"
+Source = "https://github.com/transport-for-the-north/cvt"
+
+[tool.setuptools.dynamic]
+dependencies = { "file" = "requirements.txt" }
+
+[tool.setuptools.dynamic.optional-dependencies]
+dev = { "file" = "requirements_dev.txt" }
+docs = { "file" = "docs/requirements.txt" }
+
+# Dynamic versioning for editable installs
+[tool.setuptools.cmdclass]
+build_py = "versioningit.cmdclass.build_py"
+sdist = "versioningit.cmdclass.sdist"
+
+# Packaging options
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"cvt" = ["py.typed"]
+
+# Linters
+[tool.black]
+line-length = 95
+target-version = ['py311']
+
+[tool.pylint.messages_control]
+disable = [
+    "line-too-long",    # Compatibility with black
+    "too-many-lines",
+    "use-dict-literal",
+    "use-list-literal",
+]
+
+# Pylint settings
+[tool.pylint.basic]
+good-names = ["df", "fn", "ca", "tp", "x", "i"]
+
+[tool.pylint.main]
+ignore = ["__init__.py", "_version.py"]
+
+[tool.pylint.design]
+max-args = 10
+max-attributes = 15
+max-statements = 100
+
+[tool.mypy]
+packages = ["cvt"]
+namespace_packages = true
+ignore_missing_imports = true
+allow_redefinition = true
+
+[tool.pydocstyle]
+convention = "numpy"
+match = '(?!_test)(?!test_)(?!__init__).*\.py'
+add-ignore = [
+    "D202", # Temporary compatibility with black
+]
+
+[tool.isort]
+profile = "black"
+src_paths = ["src", "tests"]
+
+skip = ["__init__.py", "_version.py"]
+skip_glob = [".*"]
+
+# Section commenting
+import_heading_stdlib = "Built-Ins"
+import_heading_thirdparty = "Third Party"
+import_heading_firstparty = "Local Imports"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "--cov=caf --cov-report=xml -n auto"
+
+[tool.coverage.report]
+include_namespace_packages = true
+
+# Versioning
+[tool.versioningit.vcs]
+method = "git"
+match = ["v*"]
+default-tag = "0.0.1"
+
+[tool.versioningit.onbuild]
+source-file = "src/cvt/_version.py"
+build-file = "cvt/_version.py"
+
+[tool.versioningit.format]
+distance = "{base_version}+{distance}.{vcs}{rev}"
+dirty = "{base_version}+{distance}.{vcs}{rev}.dirty"
+distance-dirty = "{base_version}+{distance}.{vcs}{rev}.dirty"
