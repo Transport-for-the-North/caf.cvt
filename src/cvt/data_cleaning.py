@@ -3,6 +3,8 @@
 import pandas as pd
 import geopandas as gpd
 
+from shapely.geometry import Polygon
+
 def clip_to_boundary(gdf, boundary):
     '''Takes a GeoDataFrame and a boundary and returns a GeoDataFrame'''
     boundary = boundary.to_crs(gdf.crs) # Match CRS
@@ -18,4 +20,11 @@ def standard_cleaning(gdf, columns_to_keep):
     gdf = gdf[~gdf.geometry.is_empty]
     gdf = gdf[gdf.geometry.notnull()]
 
-
+def convert_point_to_grid(x, y, size):
+    '''Takes a point and converts it to a grid of the given size'''
+    return Polygon([
+        (x - size, y - size),
+        (x + size, y - size),
+        (x + size, y + size),
+        (x - size, y + size),
+    ])
