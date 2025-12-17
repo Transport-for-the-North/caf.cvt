@@ -38,12 +38,38 @@ HAZARD_IN = RAW_INPUT_PATH / "Hazard"
 HAZARD_OUT = OUTPUT_PATH / "Hazard"
 
 EXTREME_WEATHER_IN = HAZARD_IN / "Extreme Weather"
-
 EXTREME_WEATHER_OUT = HAZARD_OUT / "Extreme Weather"
+
+FLOODING_IN = HAZARD_IN / "Flooding"
+FLOODING_OUT = HAZARD_OUT / "Flooding"
+
+GROUND_STABILITY_IN = HAZARD_IN / "Ground Stability"
+GROUND_STABILITY_OUT = HAZARD_OUT / "Ground Stability"
+
+COASTAL_EROSION_IN = HAZARD_IN / "Coastal Erosion"
+COASTAL_EROSION_OUT = HAZARD_OUT / "Coastal Erosion"
+
+### GLOBAL VARIABLES
+
+code_number_map = {'NT': ['50', '55'],
+                       'NU': ['00', '05'],
+                       'NX': ['50'],
+                       'NY': ['00', '05', '50', '55'],
+                       'NZ': ['00', '05', '50'],
+                       'OV': ['00'],
+                       'SD': ['00', '05', '50', '55'],
+                       'SE': ['00', '05', '50', '55'],
+                       'SJ': ['00', '05', '50', '55'],
+                       'SK': ['00', '05', '50', '55'],
+                       'TA': ['00', '05'],
+                       'TF': ['00', '05', '50', '55'],
+                       }
 
 def main():
     data_cleaning(OTHER_IN / "TfN_Boundary" / "Transport_for_the_north_boundary_2020_generalised.shp")
-### DEFINE FUNCTIONS
+
+
+### GENERAL FUNCTIONS
 
 def clip_to_boundary(gdf, boundary):
     '''Takes a GeoDataFrame and a boundary and returns a GeoDataFrame clipped to that boundary'''
@@ -225,6 +251,37 @@ def aggregate_link_flows(ods, routes, links):
     link_flows = pd.merge(link_demand, links, left_on='link_id', right_index=True)
 
     return link_flows
+
+def calculate_exceedance(threshold, gdf, variable, timescale):
+    gdf['exceedance'] = gdf[variable] > threshold
+
+    # Group by grid square and year, and count exceedance days
+    exceedance_counts = (
+      gdf[gdf['exceedance']]
+     .groupby(['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude', 'year'])
+     .size()
+     .reset_index(name='exceedance_days')
+    )
+
+    # Calculate the average exceedance days per year for each grid square
+    average_exceedance = (
+        exceedance_counts
+        .groupby(['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude'])['exceedance_days']
+        .mean()
+        .reset_index(name=f'avg_excd_{timescale}')
+    )
+
+    return average_exceedance
+
+def calculate_percentile(gdf, quantiles, variable):
+    percentiles = (
+        gdf.groupby(['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude'])[variable]
+        .quantile(quantiles)
+        .unstack()
+        .reset_index()
+    )
+
+    return percentiles
 
 # DATA CLEANING
 
@@ -441,6 +498,11 @@ def clean_ncn(path, boundary):
 
 def clean_hazards(boundary):
     clean_extreme_weather(boundary)
+    clean_flooding(boundary)
+    clean_ground_stability(boundary)
+    clean_coastal_erosion(boundary)
+
+
 
 ### EXTREME WEATHER
 
@@ -450,13 +512,31 @@ def clean_extreme_weather(boundary):
         "!summer_maximum_temperature_change_projections_12km.shp", boundary)
     clean_temp_min(f"zip://{EXTREME_WEATHER_IN / "Winter_Minimum_Temperature_Change___Projections_12km_grid.zip"}"
                    "!winter_minimum_temperature_change_projections_12km.shp", boundary)
-
-
+    clean_summer_precip(f"zip://{EXTREME_WEATHER_IN / "Summer_Precipitation_Change___Projections_12km_grid.zip"}"
+                        "!summer_precipitation_change_projections_12km.shp", boundary)
+    clean_winter_precip(f"zip://{EXTREME_WEATHER_IN / "Winter_Precipitation_Change___Projections_12km_grid.zip"}"
+                        "!winter_precipitation_change_projections_12km.shp", boundary)
+    clean_rain_days(f"zip://{EXTREME_WEATHER_IN / "Annual_Count_of_10mm_Rain_Days_1991_2020.zip"}"
+                    "!Annual_Count_of_10mm_Rain_Days_1991-2020.shp", boundary)
+    clean_drought_index(f"zip://{EXTREME_WEATHER_IN / "Drought_Severity_Index_12_Month_Accumulations.zip"}"
+              "!Drought_Severity_Index_12_Month_Accumulations_-_Projections.shp", boundary)
+    clean_hot_summer_days(f"zip://{EXTREME_WEATHER_IN / "Annual_Count_of_Hot_Days___Projections__12km_grid.zip"}"
+                          "!annual_count_of_hot_summer_days_projections_12km.shp", boundary)
+    clean_extreme_summer_days(f"zip://{EXTREME_WEATHER_IN 
+                                       / "Annual_Count_of_Extreme_Summer_Days_Projections_12km_Grid.zip"}"
+                              "!annual_count_of_extreme_summer_days_projections_12km.shp", boundary)
+    clean_frost_days(f"zip://{EXTREME_WEATHER_IN / "Annual_Count_of_Frost_Days_Projections_12km_Grid.zip"}"
+                     "!annual_count_of_frost_days_projections_12km.shp", boundary)
+    clean_icing_days(f"zip://{EXTREME_WEATHER_IN / "Annual_Count_of_Icing_Days___Projections__12km_grid.zip"}"
+                     "!annual_count_of_icing_days_projections_12km.shp", boundary)
+    clean_wind_speed(EXTREME_WEATHER_IN / "CEDA_Max_Wind_Speed", boundary)
+    clean_wind_driven_rain(f"zip://{EXTREME_WEATHER_IN / "Annual_Index_of_Wind_Driven_Rain_Projections_5km.zip"}"
+                           "!Annual_Index_of_Wind_Driven_Rain_-_Projections_(5km).shp", boundary)
 
 def clean_temp_max(path, boundary):
     temp_max = gpd.read_file(path)
     temp_max['grid_id'] = range(1, len(temp_max) + 1)
-    temp_max = temp_max[['grid_id', 'tasmax_s_4', 'tasmax__22', 'geometry']]  # Select relevant columns
+    temp_max = temp_max[['grid_id', 'tasmax_s_4', 'tasmax__22', 'geometry']]
     temp_max.rename(columns={'tasmax_s_4': 'tasmax_s_b', 'tasmax__22': 'tasmax_s_f'}, inplace=True)
     temp_max['tasmax_s_f'] = temp_max['tasmax_s_b'] + temp_max['tasmax_s_f']
     tfn_temp_max = clip_to_boundary(temp_max, boundary)
@@ -472,6 +552,306 @@ def clean_temp_min(path, boundary):
     tfn_temp_min = clip_to_boundary(temp_min, boundary)
     tfn_temp_min = explode_to_polygons(tfn_temp_min)
     tfn_temp_min.to_file(EXTREME_WEATHER_OUT / "TfN Winter Min Temperature Change Projections" / "tfn_temp_min.shp")
+
+def clean_summer_precip(path, boundary):
+    precip_sum = gpd.read_file(path)
+    precip_sum['grid_id'] = range(1, len(precip_sum) + 1)
+    precip_sum = precip_sum[['grid_id', 'pr_summe_3', 'pr_summ_21', 'geometry']]
+    precip_sum.rename(columns={'pr_summe_3': 'pr_s_base','pr_summ_21': 'pr_s_pct_f'}, inplace=True)
+    precip_sum['pr_s_f'] = precip_sum['pr_s_base'] * (1 + (precip_sum['pr_s_pct_f'] / 100))
+    precip_sum.drop(columns=['pr_s_pct_f'], inplace=True)
+    tfn_precip_sum = clip_to_boundary(precip_sum, boundary)
+    tfn_precip_sum = explode_to_polygons(tfn_precip_sum)
+    tfn_precip_sum.to_file(EXTREME_WEATHER_OUT / "TfN Summer Precipitation Change Projections" / "tfn_precip_sum.shp")
+
+def clean_winter_precip(path, boundary):
+    precip_win = gpd.read_file(path)
+    precip_win['grid_id'] = range(1, len(precip_win) + 1)
+    precip_win = precip_win[['grid_id', 'pr_winte_3', 'pr_wint_21', 'geometry']]
+    precip_win.rename(columns={'pr_winte_3': 'pr_w_base','pr_wint_21': 'pr_w_pct_f',}, inplace=True)
+    precip_win['pr_w_f'] = precip_win['pr_w_base'] * (1 + (precip_win['pr_w_pct_f'] / 100))
+    precip_win.drop(columns=['pr_w_pct_f'], inplace=True)
+    tfn_precip_win = clip_to_boundary(precip_win, boundary)
+    tfn_precip_win = explode_to_polygons(tfn_precip_win)
+    tfn_precip_win.to_file(EXTREME_WEATHER_OUT / "TfN Winter Precipitation Change Projections" / "tfn_precip_win.shp")
+
+def clean_rain_days(path, boundary):
+    rain_days = gpd.read_file(path)
+    tfn_rain_days = clip_to_boundary(rain_days, boundary)
+    tfn_rain_days = explode_to_polygons(tfn_rain_days)
+    tfn_rain_days.to_file(EXTREME_WEATHER_OUT / "TfN 10mm Rain Days 1991-2020" / "tfn_rain_days.shp")
+
+def clean_drought_index(path, boundary):
+    drought_index = gpd.read_file(path)
+    drought_index = drought_index[['DSI12_ba_4', 'DSI12_40_m', 'geometry']]
+    drought_index.rename(columns={'DSI12_ba_4': 'dsi_base', 'DSI12_40_m': 'dsi_future'}, inplace=True)
+    tfn_drought = clip_to_boundary(drought_index, boundary)
+    tfn_drought = explode_to_polygons(tfn_drought)
+    tfn_drought.to_file(EXTREME_WEATHER_OUT / "TfN Drought Severity Index" / "tfn_drought_index.shp")
+
+def clean_hot_summer_days(path, boundary):
+    hot_days = gpd.read_file(path)
+    hot_days['grid_id'] = range(1, len(hot_days) + 1)
+    hot_days = hot_days[['grid_id', 'HSD_base_4', 'HSD_40_med', 'geometry']]
+    hot_days.rename(columns={'HSD_base_4': 'hsd_base', 'HSD_40_med': 'hsd_future'}, inplace=True)
+    tfn_hot_days = clip_to_boundary(hot_days, boundary)
+    tfn_hot_days = explode_to_polygons(tfn_hot_days)
+    tfn_hot_days.to_file(EXTREME_WEATHER_OUT / "TfN Hot Summer Days Projections" / "tfn_hot_days.shp")
+
+def clean_extreme_summer_days(path, boundary):
+    extr_days = gpd.read_file(path)
+    extr_days['grid_id'] = range(1, len(extr_days) + 1)
+    extr_days = extr_days[['grid_id', 'ESD_base_4', 'ESD_40_med', 'geometry']]
+    extr_days.rename(columns={'ESD_base_4': 'esd_base','ESD_40_med': 'esd_future'}, inplace=True)
+    tfn_extr_days = clip_to_boundary(extr_days, boundary)
+    tfn_extr_days = explode_to_polygons(tfn_extr_days)
+    tfn_extr_days.to_file(EXTREME_WEATHER_OUT / "TfN Extreme Summer Days Projections" / "tfn_extr_days.shp")
+
+def clean_frost_days(path, boundary):
+    frost_days = gpd.read_file(path)
+    frost_days['grid_id'] = range(1, len(frost_days) + 1)
+    frost_days = frost_days[['grid_id', 'FrostDay_3', 'FrostDa_18', 'geometry']]
+    frost_days.rename(columns={'FrostDay_3': 'frost_d_b', 'FrostDa_18': 'frost_d_f'}, inplace=True)
+    tfn_frost_days = clip_to_boundary(frost_days, boundary)
+    tfn_frost_days = explode_to_polygons(tfn_frost_days)
+    tfn_frost_days.to_file(EXTREME_WEATHER_IN / "TfN Frost Days Projections" / "tfn_frost_days.shp")
+
+def clean_icing_days(path, boundary):
+    ice_days = gpd.read_file(path)
+    ice_days['grid_id'] = range(1, len(ice_days) + 1)
+    ice_days = ice_days[['grid_id', 'IcingDay_3', 'IcingDa_18', 'geometry']]
+    ice_days.rename(columns={'IcingDay_3': 'ice_d_b','IcingDa_18': 'ice_d_f'}, inplace=True)
+    tfn_ice_days = clip_to_boundary(ice_days, boundary)
+    tfn_ice_days = explode_to_polygons(tfn_ice_days)
+    tfn_ice_days.to_file(EXTREME_WEATHER_OUT / "TfN Icing Days Projections" / "tfn_ice_days.shp")
+
+def clean_wind_speed(path, boundary):
+    windspd_c = xr.open_dataset(path / "wsgmax10m_rcp85_land-cpm_uk_5km_01_day_20701201-20801130.nc").to_dataframe()
+    windspd_f = xr.open_dataset(path / "wsgmax10m_rcp85_land-cpm_uk_5km_01_day_19901201-20001130.nc").to_dataframe()
+
+    exc_c = calculate_exceedance(20, windspd_c, 'wsgmax10m', 'c')
+    exc_f = calculate_exceedance(20, windspd_f, 'wsgmax10m', 'f')
+    pct_c = calculate_percentile(windspd_c, [0.95, 0.99], 'wsgmax10m')
+    pct_f = calculate_percentile(windspd_f, [0.95, 0.99], 'wsgmax10m')
+
+    pct_c.columns = ['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude', 'p95_c', 'p99_c']
+    pct_f.columns = ['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude', 'p95_f','p99_f']
+
+    def merge_and_fill(df1, df2, fill_col):
+        return pd.merge(df1, df2, on=['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude'],
+                        how='outer').fillna({fill_col: 0})
+
+    windspd_c_combined = merge_and_fill(pct_c, exc_c, 'avg_excd_c')
+    windspd_f_combined = merge_and_fill(pct_f, exc_f, 'avg_excd_f')
+    windspd_combined = merge_and_fill(windspd_c_combined, windspd_f_combined, 'avg_excd_f')
+
+    windspd_combined['geometry'] = [convert_point_to_grid(x, y, 2500)
+        for x, y in zip(windspd_combined['projection_x_coordinate'], windspd_combined['projection_y_coordinate'])]
+    windspd_combined = gpd.GeoDataFrame(windspd_combined, geometry='geometry', crs="EPSG:27700")
+    windspd_combined = windspd_combined[['p95_c', 'p99_c', 'avg_excd_c','p95_f', 'p99_f', 'avg_excd_f','geometry']]
+    tfn_windspd = clip_to_boundary(windspd_combined, boundary)
+    tfn_windspd = explode_to_polygons(tfn_windspd)
+    tfn_windspd.to_file(EXTREME_WEATHER_OUT / "TfN Wind Speed Projections" / "tfn_windspd.shp")
+
+def clean_wind_driven_rain(path, boundary):
+    wdr = gpd.read_file(path)
+
+    wdr_agg = (
+        wdr.groupby(['x_coord', 'y_coord'])
+        .agg({
+            'WDR_base_1': 'mean',
+            'WDR_40_Med': 'mean',
+            'geometry': 'first'  # keep the first geometry for each group
+        })
+        .reset_index()
+    )
+
+    wdr_agg = wdr_agg[['WDR_base_1', 'WDR_40_Med', 'geometry']]
+    wdr_agg.rename(columns={'WDR_base_1': 'wdr_base', 'WDR_40_Med': 'wdr_future'}, inplace=True)
+    wdr_agg = gpd.GeoDataFrame(wdr_agg, geometry='geometry', crs='EPSG:3857')
+    tfn_wdr = clip_to_boundary(wdr_agg, boundary)
+    tfn_wdr = explode_to_polygons(tfn_wdr)
+    tfn_wdr.to_file(EXTREME_WEATHER_OUT / "TfN Wind Driven Rain Index" / "tfn_wdr.shp")
+
+### FLOODING
+
+def clean_flooding(boundary):
+    extract_flood_data(extract=False)
+
+    clean_flood("RoFRS", "RoFRS", "v202501", boundary,
+                 "TfN RoFRS CC" / "tfn_rofrs_cc.gpkg", True)
+    clean_flood("RoFRS", "RoFRS", "v202501", boundary,
+                 "TfN RoFRS" / "tfn_rofrs.gpkg", False)
+    clean_flood("RoFSW CC", "RoFSW", "v202509", boundary,
+                "TfN RoFSW CC" / "tfn_rofsw_cc.gpkg", True)
+    clean_flood("RoFSW", "RoFSW", "v202509", boundary,
+                "TfN RoFSW" / "tfn_rofsw.gpkg", False)
+
+def extract_gdb_file(code, number, flood_data, version, cc):
+    try:
+        base_path = FLOODING_IN / flood_data
+        if cc == True:
+            zip_path = base_path / code / f"{flood_data}_Climate_Change_01_{code}{number}_{version}.zip"
+            extract_to = base_path / code
+            gdb_path = extract_to / f"{flood_data}_Climate_Change_01_{code}{number}_{version}.gdb"
+        else:
+            zip_path = base_path / code / f"{flood_data}_{code}{number}_{version}.zip"
+            extract_to = base_path / code
+            gdb_path = extract_to / f"{flood_data}_{code}{number}_{version}.gdb"
+
+        # Check if zip file exists
+        if not zip_path.exists():
+          print(f"Zip file not found: {zip_path}")
+          return None
+
+        # Extract the contents
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_to)
+
+        # Check if GDB folder exists
+        if not gdb_path.exists():
+            print(f"GDB folder not found: {gdb_path}")
+            return None
+
+        layers = fiona.listlayers(gdb_path)
+        if not layers:
+            print("No layers found in:", gdb_path)
+            return None
+
+        print("Available layers:", layers)
+        gdf = gpd.read_file(gdb_path, layer=layers[0])
+
+        return gdf
+    except Exception as e:
+        print(f"Error processing {code}{number}: {e}")
+        return None
+
+def read_gdb(code, number, file_name, flood_data, version, cc):
+    base_path = FLOODING_IN / flood_data / code
+
+    if cc == True:
+        gdb_path = base_path / f"{flood_data}_Climate_Change_01_{code}{number}_{version}.gdb"
+    else:
+        gdb_path = base_path / f"{flood_data}_{code}{number}_{version}.gdb"
+
+    # Check if GDB folder exists
+    if not gdb_path.exists():
+        print(f"GDB folder not found: {gdb_path}")
+        return None
+
+    layers = fiona.listlayers(gdb_path)
+    if not layers:
+        print("No layers found in:", gdb_path)
+        return None
+
+    print("Available layers:", layers)
+    gdf = gpd.read_file(gdb_path, layer=layers[0])
+
+    return gdf
+
+def extract_flood_data(extract):
+    if extract == False:
+        return
+
+    for code in code_number_map.keys():
+        for number in code_number_map[code]:
+            # Climate Change Datasets
+             extract_gdb_file(code, number, "RoFRS", "v202501", True)
+             extract_gdb_file(code, number, "RoFSW", "v202509", True)
+
+            # Present Day Datasets
+             extract_gdb_file(code, number, "RoFRS", "v202501", False)
+             extract_gdb_file(code, number, "RoFSW", "v202509", False)
+
+def clean_flood(file_name, flood_type, version, boundary, out_path, cc):
+    gdfs = []
+    for code in code_number_map.keys():
+        for number in code_number_map[code]:
+            gdf = read_gdb(code, number, file_name, flood_type, version, cc)  # Read file
+            tfn_gdf = clip_to_boundary(gdf, boundary)
+            gdfs.append(tfn_gdf)  # Add to list
+            print(code, number)
+            del gdf, tfn_gdf
+
+    flood_data = pd.concat(gdfs, ignore_index=True)
+    flood_data = extract_poly_from_geomcollection(flood_data)
+    flood_data = flood_data[['Risk_band', 'geometry']]
+    flood_data.to_file(FLOODING_OUT / out_path, driver="GPKG")
+
+### GROUND STABILITY
+
+def clean_ground_stability(boundary):
+    clean_geosure(f"zip://{GROUND_STABILITY_IN / "GeoSureHexGrids.zip"}!/GeoSureHexGrids/Data", boundary)
+    clean_geoclimate(GROUND_STABILITY_IN / "GeoClimateUKCP18OpenData" / "GeoclimateUKCP18_Open", boundary)
+
+def clean_geosure(path, boundary):
+    geosure_layers = {
+        'cd': gpd.read_file(path + "/GB_Hex_5km_GS_CollapsibleDeposits_v8.shp"),
+        'cg': gpd.read_file(path + "/GB_Hex_5km_GS_CompressibleGround_v8.shp"),
+        'ls': gpd.read_file(path + "/GB_Hex_5km_GS_Landslides_v8.shp"),
+        'rs': gpd.read_file(path + "/GB_Hex_5km_GS_RunningSand_v8.shp"),
+        'ss': gpd.read_file(path + "/GB_Hex_5km_GS_ShrinkSwell_v8.shp"),
+        'sr': gpd.read_file(path + "/GB_Hex_5km_GS_SolubleRocks_v8.shp")
+    }
+
+    tfn_geosure_layers = {}
+    for code, df in geosure_layers.items():
+        df.rename(columns={'CLASS': f'{code}_risk'}, inplace=True)
+        tfn_geosure_layers[code] = clip_to_boundary(df, boundary)
+        tfn_geosure_layers[code] = explode_to_polygons(tfn_geosure_layers[code])
+
+    # Merge layers based on nearest centroids
+    base_code = 'cd'
+    tfn_geosure = tfn_geosure_layers[base_code][['cd_risk', 'geometry']].copy()
+    for code, layer in tfn_geosure_layers.items():
+        if code == base_code:
+            continue  # skip the base layer
+        layer_subset = layer[[f'{code}_risk', 'geometry']] # Select only the relevant class and geometry columns
+        matched = nearest_centroids(tfn_geosure, layer_subset) # Apply nearest centroid matching
+        tfn_geosure[f'{code}_risk'] = matched[f'{code}_risk'] # Add the matched CLASS column to the base dataframe
+
+    tfn_geosure = tfn_geosure[['cd_risk', 'cg_risk', 'ls_risk', 'rs_risk', 'ss_risk', 'sr_risk', 'geometry']]
+    tfn_geosure.to_file(GROUND_STABILITY_OUT / "TfN GeoSure" / "tfn_geosure.shp")
+
+def clean_geoclimate(path, boundary):
+    for year in ['2030', '2070']:
+        gdf = gpd.read_file(path / f"GeoClimateUKCP18_ShrinkSwell_{year}_Average_Open.shp")
+        gdf.rename(columns={'CLASS': 'ss_geo_risk'}, inplace=True)
+        gdf = gdf[['ss_geo_risk', 'geometry']]
+        tfn_gdf = clip_to_boundary(gdf, boundary)
+        tfn_gdf = explode_to_polygons(tfn_gdf)
+        tfn_gdf.to_file(GROUND_STABILITY_OUT / "BGS Shrink Swell" / year / f"tfn_bgs_ss_{year}.shp")
+
+### COASTAL EROSION
+
+def clean_coastal_erosion(boundary):
+    clean_giz(f"zip://{COASTAL_EROSION_IN / "National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.shp.zip"}"
+              "!NCERM_Ground_Instability_Zone.shp", boundary)
+    clean_ncerm(f"zip://{COASTAL_EROSION_IN / "National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.shp.zip"}!",
+                boundary)
+
+def clean_giz(path, boundary):
+    ncerm_giz = gpd.read_file(path)
+    ncerm_giz = ncerm_giz[['smp_no', 'geometry']]
+    tfn_ncerm_giz = clip_to_boundary(ncerm_giz, boundary)
+    tfn_ncerm_giz = explode_to_polygons(tfn_ncerm_giz)
+    tfn_ncerm_giz.to_file(COASTAL_EROSION_OUT / "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.shp")
+
+def clean_ncerm(path, boundary):
+    for year in ['2055', '2105']:
+        gdf = gpd.read_file(path + f"NCERM_SMP_{year}_70CC.shp")
+        gdf = gdf[['smp_name', 'geometry']]
+        tfn_gdf = clip_to_boundary(gdf, boundary)
+        tfn_gdf = explode_to_polygons(tfn_gdf)
+        tfn_gdf.to_file(COASTAL_EROSION_OUT / "NCERM" / f"SMP_{year}_70CC" / f"tfn_ncerm_smp_{year}_70CC.shp")
+
+
+
+
+
+
+
+
 
 
 
