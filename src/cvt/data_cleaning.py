@@ -20,8 +20,8 @@ from pathlib import Path
 import zipfile
 
 ### FILE PATHS
-RAW_INPUT_PATH = Path("F:/") / "4. Climate Datasets" / "Climate Vulnerability Tool" / "raw inputs"
-OUTPUT_PATH = Path("F:/") / "4. Climate Datasets" / "Climate Vulnerability Tool" / "model inputs"
+RAW_INPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "raw inputs"
+OUTPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model inputs"
 
 INFRASTRUCTURE_IN = RAW_INPUT_PATH / "Infrastructure"
 INFRASTRUCTURE_OUT = OUTPUT_PATH / "Infrastructure"
@@ -49,24 +49,12 @@ GROUND_STABILITY_OUT = HAZARD_OUT / "Ground Stability"
 COASTAL_EROSION_IN = HAZARD_IN / "Coastal Erosion"
 COASTAL_EROSION_OUT = HAZARD_OUT / "Coastal Erosion"
 
-### GLOBAL VARIABLES
+IMPACT_IN = RAW_INPUT_PATH / "Impact"
+IMPACT_OUT = OUTPUT_PATH / "Impact"
 
-code_number_map = {'NT': ['50', '55'],
-                       'NU': ['00', '05'],
-                       'NX': ['50'],
-                       'NY': ['00', '05', '50', '55'],
-                       'NZ': ['00', '05', '50'],
-                       'OV': ['00'],
-                       'SD': ['00', '05', '50', '55'],
-                       'SE': ['00', '05', '50', '55'],
-                       'SJ': ['00', '05', '50', '55'],
-                       'SK': ['00', '05', '50', '55'],
-                       'TA': ['00', '05'],
-                       'TF': ['00', '05', '50', '55'],
-                       }
-
+# Main function, replace this later to be in the main script
 def main():
-    data_cleaning(OTHER_IN / "TfN_Boundary" / "Transport_for_the_north_boundary_2020_generalised.shp")
+    data_cleaning(OTHER_IN / "TfN Boundary" / "Transport_for_the_north_boundary_2020_generalised.shp")
 
 
 ### GENERAL FUNCTIONS
@@ -77,21 +65,16 @@ def clip_to_boundary(gdf, boundary):
     gdf_boundary = gpd.clip(gdf, boundary) # Clip GDF to boundary
     return gdf_boundary
 
-def standard_cleaning(gdf, boundary, columns_to_keep, rename_map, replace_na_cols, out_path):
-    '''Takes a GeoDataFrame, performs standard cleaning operations, and returns a GeoDataFrame'''
-    # Attribute cleaning
-    gdf = gdf.drop_duplicates(subset=['geometry']) # Drop duplicate rows
-    gdf = gdf[columns_to_keep] # Filter for relevant columns
-    gdf = gdf.rename(columns=rename_map) # Rename columns
-    gdf[replace_na_cols] = gdf[replace_na_cols].replace(0, pd.NA) # Replace 0s with NA
+def write_to_file(gdf, output_path, driver=None):
+    '''Function to write a GeoDataFrame to a file'''
+    output_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists, make one if not
 
-    # Spatial cleaning
-    gdf = gdf[~gdf.geometry.is_empty] # Remove empty geometries
-    gdf = gdf[gdf.geometry.notnull()] # Remove null geometries
-    tfn_gdf = clip_to_boundary(gdf, boundary) # Clip to spatial boundary
-    tfn_gdf.to_file(out_path) # Write to file
+    if gdf.empty:
+        raise ValueError(f"GeoDataFrame is empty. Nothing written to {output_path}")
 
-    return tfn_gdf
+    gdf.to_file(output_path, driver=driver)
+
+
 
 def df_to_gdf(df, x_col, y_col, crs):
     '''Takes a DataFrame and converts it to a GeoDataFrame using spatial columns'''
@@ -193,65 +176,6 @@ def nearest_centroids(gdf1, gdf2):
 
     return result
 
-def read_noham_h5(year, time_period, user_class, NOHAM_FLOWS_PATH, OUTPUT_DIR):
-    '''Reads NoHAM h5 files and extracts the link, routes, and od's DataFrames'''
-    with py7zr.SevenZipFile(NOHAM_FLOWS_PATH, mode='r') as archive:
-        archive.extract(path=OUTPUT_DIR, targets=[f"input h5s/{year}/NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"])
-
-    with h5py.File(OUTPUT_DIR / "input h5s" / year / f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5", 'r') as f:
-        # Get OD's
-        od_columns = [x.decode() for x in f['data/OD/block0_items'][:]]
-        od_values = f['data/OD/block0_values'][:]
-
-        od_labels = [
-            f['data/OD/axis1_label0'][:],
-            f['data/OD/axis1_label1'][:],
-            f['data/OD/axis1_label2'][:],
-            f['data/OD/axis1_label3'][:],
-            f['data/OD/axis1_label4'][:]
-        ]
-
-        # Get routes
-        route_col = [x.decode() for x in f['data/Route/block0_items']][:][0]
-        route_values = f['data/Route/block0_values'][:]
-
-        # MultiIndex labels
-        route_label0 = f['data/Route/axis1_label0'][:]
-        route_label1 = f['data/Route/axis1_label1'][:]
-
-        # Get links
-        link_values = f['data/link/block0_values'][:]
-        link_columns = [x.decode() for x in f['data/link/block0_items'][:]]
-
-    # Build OD Dataframe
-    od_multi_index = pd.MultiIndex.from_arrays(od_labels, names=['o', 'd', 'route', 'uc', 'total_links'])
-    od_df = pd.DataFrame(od_values, index = od_multi_index, columns = od_columns)
-
-    # Build Route Dataframe
-    route_multi_index = pd.MultiIndex.from_arrays([route_label0, route_label1], names=['route', 'link_id'])
-    route_df = pd.DataFrame(route_values, index=route_multi_index, columns=[route_col])
-
-    # Build Link DataFrame
-    link_df = pd.DataFrame(link_values, columns=link_columns)
-
-    return od_df, route_df, link_df
-
-def aggregate_link_flows(ods, routes, links):
-    '''Takes NoHAM ODs, Routes, and Links to create aggregated link flows DataFrame'''
-    # Flatten OD and Route data
-    od_flat = ods.reset_index()[['route', 'abs_demand']]
-    route_flat = routes.reset_index()[['route', 'link_id']]
-
-    # Merge OD demand with route links
-    od_links = od_flat.merge(route_flat, on='route')
-
-    # Aggregate demand per link_id
-    link_demand = od_links.groupby('link_id')['abs_demand'].sum().reset_index()
-
-    link_flows = pd.merge(link_demand, links, left_on='link_id', right_index=True)
-
-    return link_flows
-
 def calculate_exceedance(threshold, gdf, variable, timescale):
     gdf['exceedance'] = gdf[variable] > threshold
 
@@ -291,6 +215,7 @@ def data_cleaning(boundary_path):
 
     clean_infrastruture(boundary)
     clean_hazards(boundary)
+    clean_impact(boundary)
 
 
 ## TfN Boundary
@@ -316,15 +241,15 @@ def clean_roads(boundary):
 
 def clean_os_roads(os_road_path, boundary):
     os_road = gpd.read_file(os_road_path)
-    os_road.drop_duplicates(subset=['identifier', 'geometry'], inplace=True)  # Drop duplicate rows
-    os_road = os_road[['identifier', 'roadNumber', 'name1', 'function', 'geometry']]  # Filter for relevant columns
-    os_road.rename(columns={'name1': 'name', 'roadNumber': 'road_number'}, inplace=True)  # Rename columns
+    os_road.drop_duplicates(subset=['identifier', 'geometry'], inplace=True)
+    os_road = os_road[['identifier', 'roadNumber', 'name1', 'function', 'geometry']]
+    os_road.rename(columns={'name1': 'name', 'roadNumber': 'road_number'}, inplace=True)
     os_road[['road_number', 'name', 'function']] = (
-        os_road[['road_number', 'name', 'function']].replace(0, pd.NA))  # Replace 0s with NA
-    os_road = os_road[~os_road.geometry.is_empty]  # Remove empty geometries
-    os_road = os_road[os_road.geometry.notnull()]  # Remove null geometries
-    tfn_os_road = clip_to_boundary(os_road, boundary)  # Clip to spatial boundary
-    tfn_os_road.to_file(ROAD_OUT / "TfN OS Road" / "tfn_os_road.shp")  # Write to file
+        os_road[['road_number', 'name', 'function']].replace(0, pd.NA))
+    os_road = os_road[~os_road.geometry.is_empty]
+    os_road = os_road[os_road.geometry.notnull()]
+    tfn_os_road = clip_to_boundary(os_road, boundary)
+    write_to_file(tfn_os_road, ROAD_OUT / "TfN OS Road" / "tfn_os_road.shp")
 
 def clean_noham_roads(noham_roads_path_2023, noham_roads_path_2048, boundary):
     noham_2023 = gpd.read_file(noham_roads_path_2023)
@@ -676,16 +601,30 @@ def clean_wind_driven_rain(path, boundary):
 ### FLOODING
 
 def clean_flooding(boundary):
-    extract_flood_data(extract=False)
+    code_number_map = {'NT': ['50', '55'],
+                       'NU': ['00', '05'],
+                       'NX': ['50'],
+                       'NY': ['00', '05', '50', '55'],
+                       'NZ': ['00', '05', '50'],
+                       'OV': ['00'],
+                       'SD': ['00', '05', '50', '55'],
+                       'SE': ['00', '05', '50', '55'],
+                       'SJ': ['00', '05', '50', '55'],
+                       'SK': ['00', '05', '50', '55'],
+                       'TA': ['00', '05'],
+                       'TF': ['00', '05', '50', '55'],
+                       }
+
+    extract_flood_data(code_number_map ,extract=False)
 
     clean_flood("RoFRS", "RoFRS", "v202501", boundary,
-                 "TfN RoFRS CC" / "tfn_rofrs_cc.gpkg", True)
+                 Path("TfN RoFRS CC") / "tfn_rofrs_cc.gpkg", True, code_number_map)
     clean_flood("RoFRS", "RoFRS", "v202501", boundary,
-                 "TfN RoFRS" / "tfn_rofrs.gpkg", False)
+                 Path("TfN RoFRS") / "tfn_rofrs.gpkg", False, code_number_map)
     clean_flood("RoFSW CC", "RoFSW", "v202509", boundary,
-                "TfN RoFSW CC" / "tfn_rofsw_cc.gpkg", True)
+                Path("TfN RoFSW CC") / "tfn_rofsw_cc.gpkg", True, code_number_map)
     clean_flood("RoFSW", "RoFSW", "v202509", boundary,
-                "TfN RoFSW" / "tfn_rofsw.gpkg", False)
+                Path("TfN RoFSW") / "tfn_rofsw.gpkg", False, code_number_map)
 
 def extract_gdb_file(code, number, flood_data, version, cc):
     try:
@@ -749,7 +688,7 @@ def read_gdb(code, number, file_name, flood_data, version, cc):
 
     return gdf
 
-def extract_flood_data(extract):
+def extract_flood_data(code_number_map, extract):
     if extract == False:
         return
 
@@ -763,7 +702,7 @@ def extract_flood_data(extract):
              extract_gdb_file(code, number, "RoFRS", "v202501", False)
              extract_gdb_file(code, number, "RoFSW", "v202509", False)
 
-def clean_flood(file_name, flood_type, version, boundary, out_path, cc):
+def clean_flood(file_name, flood_type, version, boundary, out_path, cc, code_number_map):
     gdfs = []
     for code in code_number_map.keys():
         for number in code_number_map[code]:
@@ -844,6 +783,197 @@ def clean_ncerm(path, boundary):
         tfn_gdf = clip_to_boundary(gdf, boundary)
         tfn_gdf = explode_to_polygons(tfn_gdf)
         tfn_gdf.to_file(COASTAL_EROSION_OUT / "NCERM" / f"SMP_{year}_70CC" / f"tfn_ncerm_smp_{year}_70CC.shp")
+
+## IMPACT
+
+def clean_impact(boundary):
+    clean_freight_demand(boundary)
+    clean_noham_flows()
+
+### FREIGHT
+
+def clean_freight_demand(boundary):
+    tfn_freight_network_demand = read_freight_demand(IMPACT_IN / "Freight" / "rail_freight_network_demand.gpkg", boundary)
+    tfn_os_freight_network_demand = map_freight_networks(tfn_freight_network_demand,
+                         INFRASTRUCTURE_OUT / "Rail" / "TfN OS Freight Rail" / "tfn_freight_rail_links.shp")
+    tfn_os_freight_network_demand.to_file(IMPACT_OUT / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
+
+def read_freight_demand(path, boundary):
+    freight_network_demand = gpd.read_file(path)
+    freight_network_demand = freight_network_demand[['dij_id', '2022_23_total', '2050_51 sc2_total', 'geometry']]
+    tfn_freight_network_demand = clip_to_boundary(freight_network_demand, boundary)
+    return tfn_freight_network_demand
+
+def map_freight_networks(tfn_freight_network_demand, os_path):
+    tfn_os_freight_rail = gpd.read_file(os_path)
+    tfn_os_freight_rail = tfn_os_freight_rail.to_crs(tfn_freight_network_demand.crs)
+    tfn_os_freight_network_demand = gpd.sjoin_nearest(
+        tfn_os_freight_rail,
+        tfn_freight_network_demand,
+        how="left",
+        max_distance=500,
+        distance_col="distance"
+    )
+    tfn_os_freight_network_demand[['2022_23_total', '2050_51 sc2_total']] = tfn_os_freight_network_demand[
+        ['2022_23_total', '2050_51 sc2_total']].fillna(0)
+    tfn_os_freight_network_demand.drop(columns=['index_right'], inplace=True)
+    return tfn_os_freight_network_demand
+
+### NoHAM
+
+def clean_noham_flows():
+    link_flows = aggregate_link_flows_year(IMPACT_IN / "NoHAM Link Flows" / "input h5s.7z",
+                              IMPACT_IN / "NoHAM Link Flows" / "h5 files")
+
+    tfn_noham_flows = link_flows['2023'].merge(
+        link_flows['2048'],
+        on='noham_link_name',
+        suffixes=('_c', '_f'),  # _c for current, _f for future
+        how='outer'  # Keep all rows, fill missing with NA
+    )
+
+    tfn_noham_flows_c = link_flows['2023']
+    tfn_noham_flows_f = link_flows['2048']
+
+    tfn_noham_net_flows_c = merge_noham_flow_network(tfn_noham_flows_c,
+                                                     ROAD_OUT / "TfN NoHAM 2023" / "tfn_noham_2023.shp")
+    tfn_noham_net_flows_f = merge_noham_flow_network(tfn_noham_flows_f,
+                                                     ROAD_OUT / "TfN NoHAM 2023" / "tfn_noham_2048.shp")
+
+    tfn_noham_net_flows_c.to_file(IMPACT_OUT /  "TfN NoHAM Flows" / "2023" / "tfn_noham_net_flows_c.gpkg")
+    tfn_noham_net_flows_f.to_file(IMPACT_OUT / "TfN NoHAM Flows" / "2048" / "tfn_noham_net_flows_f.gpkg")
+
+def read_noham_h5(year, time_period, user_class, noham_path, output_path, extract):
+    '''Reads NoHAM h5 files and extracts the link, routes, and od's DataFrames'''
+    if extract == True:
+        with py7zr.SevenZipFile(noham_path, mode='r') as archive:
+            archive.extract(
+                path=output_path,
+                targets=[f"input h5s/{year}/NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"])
+
+    with h5py.File(output_path / "input h5s" / year /
+                   f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5", 'r') as f:
+        # Get OD's
+        od_columns = [x.decode() for x in f['data/OD/block0_items'][:]]
+        od_values = f['data/OD/block0_values'][:]
+
+        od_labels = [
+            f['data/OD/axis1_label0'][:],
+            f['data/OD/axis1_label1'][:],
+            f['data/OD/axis1_label2'][:],
+            f['data/OD/axis1_label3'][:],
+            f['data/OD/axis1_label4'][:]
+        ]
+
+        # Get routes
+        route_col = [x.decode() for x in f['data/Route/block0_items']][:][0]
+        route_values = f['data/Route/block0_values'][:]
+
+        # MultiIndex labels
+        route_label0 = f['data/Route/axis1_label0'][:]
+        route_label1 = f['data/Route/axis1_label1'][:]
+
+        # Get links
+        link_values = f['data/link/block0_values'][:]
+        link_columns = [x.decode() for x in f['data/link/block0_items'][:]]
+
+    # Build OD Dataframe
+    od_multi_index = pd.MultiIndex.from_arrays(od_labels, names=['o', 'd', 'route', 'uc', 'total_links'])
+    od_df = pd.DataFrame(od_values, index = od_multi_index, columns = od_columns)
+
+    # Build Route Dataframe
+    route_multi_index = pd.MultiIndex.from_arrays([route_label0, route_label1], names=['route', 'link_id'])
+    route_df = pd.DataFrame(route_values, index=route_multi_index, columns=[route_col])
+
+    # Build Link DataFrame
+    link_df = pd.DataFrame(link_values, columns=link_columns)
+
+    return od_df, route_df, link_df
+
+def aggregate_link_flows(ods, routes, links):
+    '''Takes NoHAM ODs, Routes, and Links to create aggregated link flows DataFrame'''
+    # Flatten OD and Route data
+    od_flat = ods.reset_index()[['route', 'abs_demand']]
+    route_flat = routes.reset_index()[['route', 'link_id']]
+
+    # Merge OD demand with route links
+    od_links = od_flat.merge(route_flat, on='route')
+
+    # Aggregate demand per link_id
+    link_demand = od_links.groupby('link_id')['abs_demand'].sum().reset_index()
+
+    link_flows = pd.merge(link_demand, links, left_on='link_id', right_index=True)
+
+    return link_flows
+
+def aggregate_link_flows_year(noham_path, output_path):
+    years = ["2023", "2048"]
+    time_periods = ["TS1", "TS2", "TS3"]
+    user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
+
+    link_flows = {}
+    for year in years:
+        ts_dfs = []
+        print(year)
+        for time_period in time_periods:
+            print(time_period)
+            uc_dfs = []
+            for user_class in user_classes:
+                print(user_class)
+                od_df, route_df, link_df = read_noham_h5(year, time_period, user_class, noham_path, output_path, False)
+                link_demand = aggregate_link_flows(od_df, route_df, link_df)  # Get link based demand
+                link_demand = link_demand.rename(
+                    columns={'abs_demand': f'{user_class}_{time_period}'})  # Rename demand column
+                link_demand['noham_link_name'] = link_demand['a'].astype(str) + '_' + link_demand['b'].astype(
+                    str)  # Create unique noham link id
+                link_demand = link_demand[['noham_link_name', f'{user_class}_{time_period}']]  # Keep relevant columns
+                uc_dfs.append(link_demand)  # Add to list of df's
+
+            # Merge all user class dataframes
+            combined_uc_df = uc_dfs[0]
+            for df_uc in uc_dfs[1:]:
+                combined_uc_df = combined_uc_df.merge(df_uc, on='noham_link_name', how='outer')
+
+            # Compute total demand for all vehicles for each time period
+            combined_uc_df[f'all_vehs_{time_period}'] = combined_uc_df[
+                [f"{uc}_{time_period}" for uc in user_classes]].sum(axis=1)
+
+            # Store result
+            ts_dfs.append(combined_uc_df)
+
+        # Merge all time period dataframes
+        combined_ts_df = ts_dfs[0]
+        for df_ts in ts_dfs[1:]:
+            combined_ts_df = combined_ts_df.merge(df_ts, on='noham_link_name', how='outer')
+
+        # Compute totals for each user class across all time periods
+        for uc in user_classes:
+            combined_ts_df[f"{uc}_total"] = combined_ts_df[[f"{uc}_{tp}" for tp in time_periods]].sum(axis=1)
+
+        # Compute total of each user class across all time periods
+        combined_ts_df['all_vehs_total'] = combined_ts_df[[f'all_vehs_{tp}' for tp in time_periods]].sum(axis=1)
+
+        # Add to data dictionary
+        link_flows[year] = combined_ts_df
+
+        return link_flows
+
+def merge_noham_flow_network(tfn_noham_flows, noham_path):
+    tfn_noham_link = gpd.read_file(noham_path)
+    tfn_noham_link.rename(columns={'noham_link': 'noham_link_name'}, inplace=True)
+    tfn_noham_net_flows = pd.merge(
+        tfn_noham_link,
+        tfn_noham_flows,
+        on='noham_link_name',
+        how='left'  # Keep all network, adding flows where available
+    )
+    return tfn_noham_net_flows
+
+
+
+
+
+
 
 
 
