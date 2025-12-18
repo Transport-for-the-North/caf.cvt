@@ -7,24 +7,18 @@ import fiona
 from shapely.geometry import Point, Polygon, MultiPolygon, GeometryCollection, box
 from shapely import wkt
 import numpy as np
-
 import xarray as xr
 import h5py
 import py7zr
-import io
-
-import matplotlib.pyplot as plt
-import contextily as ctx
-
 from pathlib import Path
 import zipfile
 
 ### FILE PATHS
 RAW_INPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "raw inputs"
-OUTPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model inputs"
+MODEL_INPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model inputs"
 
 INFRASTRUCTURE_IN = RAW_INPUT_PATH / "Infrastructure"
-INFRASTRUCTURE_OUT = OUTPUT_PATH / "Infrastructure"
+INFRASTRUCTURE_OUT = MODEL_INPUT_PATH / "Infrastructure"
 
 ROAD_IN = INFRASTRUCTURE_IN / "Road"
 RAIL_IN = INFRASTRUCTURE_IN / "Rail"
@@ -35,22 +29,20 @@ RAIL_OUT = INFRASTRUCTURE_OUT / "Rail"
 OTHER_OUT = INFRASTRUCTURE_OUT / "Other"
 
 HAZARD_IN = RAW_INPUT_PATH / "Hazard"
-HAZARD_OUT = OUTPUT_PATH / "Hazard"
+HAZARD_OUT = MODEL_INPUT_PATH / "Hazard"
 
 EXTREME_WEATHER_IN = HAZARD_IN / "Extreme Weather"
-EXTREME_WEATHER_OUT = HAZARD_OUT / "Extreme Weather"
-
 FLOODING_IN = HAZARD_IN / "Flooding"
-FLOODING_OUT = HAZARD_OUT / "Flooding"
-
 GROUND_STABILITY_IN = HAZARD_IN / "Ground Stability"
-GROUND_STABILITY_OUT = HAZARD_OUT / "Ground Stability"
-
 COASTAL_EROSION_IN = HAZARD_IN / "Coastal Erosion"
+
+EXTREME_WEATHER_OUT = HAZARD_OUT / "Extreme Weather"
+FLOODING_OUT = HAZARD_OUT / "Flooding"
+GROUND_STABILITY_OUT = HAZARD_OUT / "Ground Stability"
 COASTAL_EROSION_OUT = HAZARD_OUT / "Coastal Erosion"
 
 IMPACT_IN = RAW_INPUT_PATH / "Impact"
-IMPACT_OUT = OUTPUT_PATH / "Impact"
+IMPACT_OUT = MODEL_INPUT_PATH / "Impact"
 
 # Main function, replace this later to be in the main script
 def main():
@@ -74,8 +66,6 @@ def write_to_file(gdf, output_path, driver=None):
 
     gdf.to_file(output_path, driver=driver)
 
-
-
 def df_to_gdf(df, x_col, y_col, crs):
     '''Takes a DataFrame and converts it to a GeoDataFrame using spatial columns'''
     geometry = [Point(xy) for xy in zip(df[x_col], df[y_col])]  # Create geometry from lat/lon
@@ -90,21 +80,6 @@ def convert_point_to_grid(x, y, size):
         (x + size, y + size),
         (x - size, y + size),
     ])
-
-def create_grid(bounds, cell_size):
-    '''Takes bounds and a cell size and returns a grid of the given size within the bounds'''
-    xmin, ymin, xmax, ymax = bounds
-    rows = int(np.ceil((ymax - ymin) / cell_size))
-    cols = int(np.ceil((xmax - xmin) / cell_size))
-    grid_cells = []
-    for i in range(cols):
-        for j in range(rows):
-            x0 = xmin + i * cell_size
-            y0 = ymin + j * cell_size
-            x1 = x0 + cell_size
-            y1 = y0 + cell_size
-            grid_cells.append(box(x0, y0, x1, y1))
-    return gpd.GeoDataFrame(geometry=grid_cells, crs="EPSG:27700")
 
 def extract_poly_from_geomcollection(gdf):
     '''Takes a GeoDataFrame and extracts polygons from the GeomCollection objects and turns them into new rows'''
@@ -218,7 +193,7 @@ def data_cleaning(boundary_path):
     clean_impact(boundary)
 
 
-## TfN Boundary
+## Geographic Boundary
 def read_boundary_path(boundary_path):
     tfn_boundary = gpd.read_file(boundary_path)
     return tfn_boundary
@@ -262,7 +237,7 @@ def clean_noham_roads(noham_roads_path_2023, noham_roads_path_2048, boundary):
         noham_network = noham_network[~noham_network.geometry.is_empty]
         noham_network = noham_network[noham_network.geometry.notnull()]
         tfn_noham_network = clip_to_boundary(noham_network, boundary)
-        tfn_noham_network.to_file(ROAD_OUT / f"TfN NoHAM {year}" / f"tfn_noham_{year}.shp")
+        write_to_file(tfn_noham_network, ROAD_OUT / f"TfN NoHAM {year}" / f"tfn_noham_{year}.shp")
 
 ### RAIL
 
@@ -293,11 +268,11 @@ def clean_passenger_rail(tfn_rail_links):
     tfn_pass_rail = tfn_rail_links[tfn_rail_links['railwayuse'].isin(['Freight And Passenger', 'Passenger'])]
     tfn_pass_rail = tfn_pass_rail[tfn_pass_rail['description'].isin(['Main Line', 'Main Line And Tram',
                                                                      'Main Line And Rapid Transport System'])]
-    tfn_pass_rail.to_file(RAIL_OUT / "TfN OS Passenger Rail" / "tfn_pass_rail_links.shp")
+    write_to_file(tfn_pass_rail, RAIL_OUT / "TfN OS Passenger Rail" / "tfn_pass_rail_links.shp")
 
 def clean_freight_rail(tfn_rail_links):
     tfn_freight_rail = tfn_rail_links[tfn_rail_links['railwayuse'].isin(['Freight And Passenger', 'Freight'])]
-    tfn_freight_rail.to_file(RAIL_OUT / "TfN OS Freight Rail" / "tfn_freight_rail_links.shp")
+    write_to_file(tfn_freight_rail, RAIL_OUT / "TfN OS Freight Rail" / "tfn_freight_rail_links.shp")
 
 ### OTHER
 
@@ -327,7 +302,7 @@ def clean_bus_stops(path, boundary):
     bus_stops_gdf = bus_stops_gdf[['stop_id', 'stop_name', 'geometry']]  # Filter out columns
     bus_stops_gdf = bus_stops_gdf.drop_duplicates(subset=['stop_id', 'geometry'])  # Remove duplicate rows
     tfn_bus_stops = clip_to_boundary(bus_stops_gdf, boundary)  # Clip to TfN boundary
-    tfn_bus_stops.to_file(OTHER_OUT / "TfN Bus Stops" / "tfn_bus_stops.shp")
+    write_to_file(tfn_bus_stops, OTHER_OUT / "TfN Bus Stops" / "tfn_bus_stops.shp")
 
 def clean_petrol_stations(path, boundary):
     '''Function to clean POI data to get petrol stations ready for analysis'''
@@ -336,7 +311,7 @@ def clean_petrol_stations(path, boundary):
     petrol_stations = petrol_stations[['id', 'geometry']]
     petrol_stations = petrol_stations.drop_duplicates(subset=['id', 'geometry'])
     tfn_petrol = clip_to_boundary(petrol_stations, boundary)
-    tfn_petrol.to_file(OTHER_OUT / "TfN Petrol Stations" / "tfn_petrol_stations.shp")
+    write_to_file(tfn_petrol, OTHER_OUT / "TfN Petrol Stations" / "tfn_petrol_stations.shp")
 
 def read_os_mm_node_network(path):
     os_mm_net_node = gpd.read_file(path, layer="mrn_ntwk_transportnode")
@@ -354,26 +329,26 @@ def clean_train_stations(os_mm_net_node, boundary):
         ]
     train_stations.drop(columns=['os_nodetype'], inplace=True)
     tfn_train_stations = clip_to_boundary(train_stations, boundary)
-    tfn_train_stations.to_file(OTHER_OUT / "TfN OS Train Stations" / "tfn_train_stations.shp")
+    write_to_file(tfn_train_stations, OTHER_OUT / "TfN OS Train Stations" / "tfn_train_stations.shp")
 
 def clean_tram_stations(os_mm_net_node, boundary):
     tram_stations = os_mm_net_node[os_mm_net_node['os_nodetype'].str.contains('Tram Station', case=False, na=False)]
     tram_stations.drop(columns=['os_nodetype'], inplace=True)
     tfn_tram_stations = clip_to_boundary(tram_stations, boundary)
-    tfn_tram_stations.to_file(OTHER_OUT / "TfN OS Tram Stations" / "tfn_tram_stations.shp")
+    write_to_file(tfn_tram_stations, OTHER_OUT / "TfN OS Tram Stations" / "tfn_tram_stations.shp")
 
 def clean_metro_stations(os_mm_net_node, boundary):
     metro_stations = os_mm_net_node[
         os_mm_net_node['os_nodetype'].str.contains('Underground System', case=False, na=False)]
     metro_stations.drop(columns=['os_nodetype'], inplace=True)
     tfn_metro_stations = clip_to_boundary(metro_stations, boundary)
-    tfn_metro_stations.to_file(OTHER_OUT / "TfN OS Metro Stations" / "tfn_metro_stations.shp")
+    write_to_file(tfn_metro_stations, OTHER_OUT / "TfN OS Metro Stations" / "tfn_metro_stations.shp")
 
 def clean_ferry_terminals(os_mm_net_node, boundary):
     ferry_stations = os_mm_net_node[os_mm_net_node['os_nodetype'].str.contains('Ferry', case=False, na=False)]
     ferry_stations.drop(columns=['os_nodetype'], inplace=True)
     tfn_ferry_stations = clip_to_boundary(ferry_stations, boundary)
-    tfn_ferry_stations.to_file(OTHER_OUT / "TfN OS Ferry Stations" / "tfn_ferry_stations.shp")
+    write_to_file(tfn_ferry_stations, OTHER_OUT / "TfN OS Ferry Stations" / "tfn_ferry_stations.shp")
 
 def clean_bus_coach_stations(os_mm_net_node, boundary):
     bus_coach_stations = os_mm_net_node[
@@ -382,18 +357,18 @@ def clean_bus_coach_stations(os_mm_net_node, boundary):
         ]
     bus_coach_stations.drop(columns=['os_nodetype'], inplace=True)
     tfn_bus_coach_stations = clip_to_boundary(bus_coach_stations, boundary)
-    tfn_bus_coach_stations.to_file(OTHER_OUT / "TfN OS Bus Coach Stations" / "tfn_bus_coach_stations.shp")
+    write_to_file(tfn_bus_coach_stations, OTHER_OUT / "TfN OS Bus Coach Stations" / "tfn_bus_coach_stations.shp")
 
 def clean_tram_network(tfn_rail_links):
     tfn_tram_links = tfn_rail_links[tfn_rail_links['railwayuse'].isin(['Freight And Passenger', 'Passenger'])]
     tfn_tram_links = tfn_tram_links[tfn_tram_links['description'].isin(['Tram', 'Main Line And Tram'])]
-    tfn_tram_links.to_file(OTHER_OUT / "TfN OS Tram Links" / "tfn_os_tram_links.shp")
+    write_to_file(tfn_tram_links, OTHER_OUT / "TfN OS Tram Links" / "tfn_os_tram_links.shp")
 
 def clean_rapid_transport_network(tfn_rail_links):
     tfn_rapid_transport = tfn_rail_links[tfn_rail_links['railwayuse'].isin(['Freight And Passenger', 'Passenger'])]
     tfn_rapid_transport = tfn_rapid_transport[tfn_rapid_transport['description'].isin(
         ['Rapid Transport System', 'Main Line And Rapid Transport System'])]
-    tfn_rapid_transport.to_file(OTHER_OUT / "TfN Rapid Transport" / "tfn_rapid_transport_links.shp")
+    write_to_file(tfn_rapid_transport, OTHER_OUT / "TfN Rapid Transport" / "tfn_rapid_transport_links.shp")
 
 def clean_charging_points(path, boundary):
     chg_pts = pd.read_csv(path)
@@ -406,7 +381,7 @@ def clean_charging_points(path, boundary):
     chg_pts_gdf = chg_pts_gdf[~chg_pts_gdf.geometry.is_empty]
     chg_pts_gdf = chg_pts_gdf[chg_pts_gdf.geometry.notnull()]
     tfn_chg_pts = clip_to_boundary(chg_pts_gdf, boundary)
-    tfn_chg_pts.to_file(OTHER_OUT / "TfN Charging Points" / "tfn_chg_pts.shp")
+    write_to_file(tfn_chg_pts, OTHER_OUT / "TfN Charging Points" / "tfn_chg_pts.shp")
 
 def clean_ncn(path, boundary):
     ncn = gpd.read_file(path)
@@ -417,7 +392,7 @@ def clean_ncn(path, boundary):
                         'Quality', 'Lighting', 'RoadClass']
     ncn[ncn_cols_replace] = ncn[ncn_cols_replace].replace(0, 'N/A')
     tfn_ncn = clip_to_boundary(ncn, boundary)
-    tfn_ncn.to_file(OTHER_OUT / "TfN NCN" / "tfn_ncn.shp")
+    write_to_file(tfn_ncn, OTHER_OUT / "TfN NCN" / "tfn_ncn.shp")
 
 ## HAZARDS
 
@@ -466,7 +441,8 @@ def clean_temp_max(path, boundary):
     temp_max['tasmax_s_f'] = temp_max['tasmax_s_b'] + temp_max['tasmax_s_f']
     tfn_temp_max = clip_to_boundary(temp_max, boundary)
     tfn_temp_max = explode_to_polygons(tfn_temp_max)
-    tfn_temp_max.to_file(EXTREME_WEATHER_OUT / "TfN Summer Max Temperature Change Projections" / "tfn_temp_max.shp")
+    write_to_file(tfn_temp_max,
+                  EXTREME_WEATHER_OUT / "TfN Summer Max Temperature Change Projections" / "tfn_temp_max.shp")
 
 def clean_temp_min(path, boundary):
     temp_min = gpd.read_file(path)
@@ -476,7 +452,8 @@ def clean_temp_min(path, boundary):
     temp_min['tasmin_w_f'] = temp_min['tasmin_w_b'] + temp_min['tasmin_w_f']
     tfn_temp_min = clip_to_boundary(temp_min, boundary)
     tfn_temp_min = explode_to_polygons(tfn_temp_min)
-    tfn_temp_min.to_file(EXTREME_WEATHER_OUT / "TfN Winter Min Temperature Change Projections" / "tfn_temp_min.shp")
+    write_to_file(tfn_temp_min,
+                  EXTREME_WEATHER_OUT / "TfN Winter Min Temperature Change Projections" / "tfn_temp_min.shp")
 
 def clean_summer_precip(path, boundary):
     precip_sum = gpd.read_file(path)
@@ -487,7 +464,8 @@ def clean_summer_precip(path, boundary):
     precip_sum.drop(columns=['pr_s_pct_f'], inplace=True)
     tfn_precip_sum = clip_to_boundary(precip_sum, boundary)
     tfn_precip_sum = explode_to_polygons(tfn_precip_sum)
-    tfn_precip_sum.to_file(EXTREME_WEATHER_OUT / "TfN Summer Precipitation Change Projections" / "tfn_precip_sum.shp")
+    write_to_file(tfn_precip_sum,
+                  EXTREME_WEATHER_OUT / "TfN Summer Precipitation Change Projections" / "tfn_precip_sum.shp")
 
 def clean_winter_precip(path, boundary):
     precip_win = gpd.read_file(path)
@@ -498,13 +476,14 @@ def clean_winter_precip(path, boundary):
     precip_win.drop(columns=['pr_w_pct_f'], inplace=True)
     tfn_precip_win = clip_to_boundary(precip_win, boundary)
     tfn_precip_win = explode_to_polygons(tfn_precip_win)
-    tfn_precip_win.to_file(EXTREME_WEATHER_OUT / "TfN Winter Precipitation Change Projections" / "tfn_precip_win.shp")
+    write_to_file(tfn_precip_win,
+                  EXTREME_WEATHER_OUT / "TfN Winter Precipitation Change Projections" / "tfn_precip_win.shp")
 
 def clean_rain_days(path, boundary):
     rain_days = gpd.read_file(path)
     tfn_rain_days = clip_to_boundary(rain_days, boundary)
     tfn_rain_days = explode_to_polygons(tfn_rain_days)
-    tfn_rain_days.to_file(EXTREME_WEATHER_OUT / "TfN 10mm Rain Days 1991-2020" / "tfn_rain_days.shp")
+    write_to_file(tfn_rain_days, EXTREME_WEATHER_OUT / "TfN 10mm Rain Days 1991-2020" / "tfn_rain_days.shp")
 
 def clean_drought_index(path, boundary):
     drought_index = gpd.read_file(path)
@@ -512,7 +491,7 @@ def clean_drought_index(path, boundary):
     drought_index.rename(columns={'DSI12_ba_4': 'dsi_base', 'DSI12_40_m': 'dsi_future'}, inplace=True)
     tfn_drought = clip_to_boundary(drought_index, boundary)
     tfn_drought = explode_to_polygons(tfn_drought)
-    tfn_drought.to_file(EXTREME_WEATHER_OUT / "TfN Drought Severity Index" / "tfn_drought_index.shp")
+    write_to_file(tfn_drought, EXTREME_WEATHER_OUT / "TfN Drought Severity Index" / "tfn_drought_index.shp")
 
 def clean_hot_summer_days(path, boundary):
     hot_days = gpd.read_file(path)
@@ -521,7 +500,7 @@ def clean_hot_summer_days(path, boundary):
     hot_days.rename(columns={'HSD_base_4': 'hsd_base', 'HSD_40_med': 'hsd_future'}, inplace=True)
     tfn_hot_days = clip_to_boundary(hot_days, boundary)
     tfn_hot_days = explode_to_polygons(tfn_hot_days)
-    tfn_hot_days.to_file(EXTREME_WEATHER_OUT / "TfN Hot Summer Days Projections" / "tfn_hot_days.shp")
+    write_to_file(tfn_hot_days, EXTREME_WEATHER_OUT / "TfN Hot Summer Days Projections" / "tfn_hot_days.shp")
 
 def clean_extreme_summer_days(path, boundary):
     extr_days = gpd.read_file(path)
@@ -530,7 +509,7 @@ def clean_extreme_summer_days(path, boundary):
     extr_days.rename(columns={'ESD_base_4': 'esd_base','ESD_40_med': 'esd_future'}, inplace=True)
     tfn_extr_days = clip_to_boundary(extr_days, boundary)
     tfn_extr_days = explode_to_polygons(tfn_extr_days)
-    tfn_extr_days.to_file(EXTREME_WEATHER_OUT / "TfN Extreme Summer Days Projections" / "tfn_extr_days.shp")
+    write_to_file(tfn_extr_days, EXTREME_WEATHER_OUT / "TfN Extreme Summer Days Projections" / "tfn_extr_days.shp")
 
 def clean_frost_days(path, boundary):
     frost_days = gpd.read_file(path)
@@ -539,7 +518,7 @@ def clean_frost_days(path, boundary):
     frost_days.rename(columns={'FrostDay_3': 'frost_d_b', 'FrostDa_18': 'frost_d_f'}, inplace=True)
     tfn_frost_days = clip_to_boundary(frost_days, boundary)
     tfn_frost_days = explode_to_polygons(tfn_frost_days)
-    tfn_frost_days.to_file(EXTREME_WEATHER_IN / "TfN Frost Days Projections" / "tfn_frost_days.shp")
+    write_to_file(tfn_frost_days, EXTREME_WEATHER_IN / "TfN Frost Days Projections" / "tfn_frost_days.shp")
 
 def clean_icing_days(path, boundary):
     ice_days = gpd.read_file(path)
@@ -548,7 +527,7 @@ def clean_icing_days(path, boundary):
     ice_days.rename(columns={'IcingDay_3': 'ice_d_b','IcingDa_18': 'ice_d_f'}, inplace=True)
     tfn_ice_days = clip_to_boundary(ice_days, boundary)
     tfn_ice_days = explode_to_polygons(tfn_ice_days)
-    tfn_ice_days.to_file(EXTREME_WEATHER_OUT / "TfN Icing Days Projections" / "tfn_ice_days.shp")
+    write_to_file(tfn_ice_days, EXTREME_WEATHER_OUT / "TfN Icing Days Projections" / "tfn_ice_days.shp")
 
 def clean_wind_speed(path, boundary):
     windspd_c = xr.open_dataset(path / "wsgmax10m_rcp85_land-cpm_uk_5km_01_day_20701201-20801130.nc").to_dataframe()
@@ -576,7 +555,7 @@ def clean_wind_speed(path, boundary):
     windspd_combined = windspd_combined[['p95_c', 'p99_c', 'avg_excd_c','p95_f', 'p99_f', 'avg_excd_f','geometry']]
     tfn_windspd = clip_to_boundary(windspd_combined, boundary)
     tfn_windspd = explode_to_polygons(tfn_windspd)
-    tfn_windspd.to_file(EXTREME_WEATHER_OUT / "TfN Wind Speed Projections" / "tfn_windspd.shp")
+    write_to_file(tfn_windspd, EXTREME_WEATHER_OUT / "TfN Wind Speed Projections" / "tfn_windspd.shp")
 
 def clean_wind_driven_rain(path, boundary):
     wdr = gpd.read_file(path)
@@ -596,7 +575,7 @@ def clean_wind_driven_rain(path, boundary):
     wdr_agg = gpd.GeoDataFrame(wdr_agg, geometry='geometry', crs='EPSG:3857')
     tfn_wdr = clip_to_boundary(wdr_agg, boundary)
     tfn_wdr = explode_to_polygons(tfn_wdr)
-    tfn_wdr.to_file(EXTREME_WEATHER_OUT / "TfN Wind Driven Rain Index" / "tfn_wdr.shp")
+    write_to_file(tfn_wdr, EXTREME_WEATHER_OUT / "TfN Wind Driven Rain Index" / "tfn_wdr.shp")
 
 ### FLOODING
 
@@ -715,7 +694,7 @@ def clean_flood(file_name, flood_type, version, boundary, out_path, cc, code_num
     flood_data = pd.concat(gdfs, ignore_index=True)
     flood_data = extract_poly_from_geomcollection(flood_data)
     flood_data = flood_data[['Risk_band', 'geometry']]
-    flood_data.to_file(FLOODING_OUT / out_path, driver="GPKG")
+    write_to_file(flood_data, FLOODING_OUT / out_path, driver="GPKG")
 
 ### GROUND STABILITY
 
@@ -750,7 +729,7 @@ def clean_geosure(path, boundary):
         tfn_geosure[f'{code}_risk'] = matched[f'{code}_risk'] # Add the matched CLASS column to the base dataframe
 
     tfn_geosure = tfn_geosure[['cd_risk', 'cg_risk', 'ls_risk', 'rs_risk', 'ss_risk', 'sr_risk', 'geometry']]
-    tfn_geosure.to_file(GROUND_STABILITY_OUT / "TfN GeoSure" / "tfn_geosure.shp")
+    write_to_file(tfn_geosure, GROUND_STABILITY_OUT / "TfN GeoSure" / "tfn_geosure.shp")
 
 def clean_geoclimate(path, boundary):
     for year in ['2030', '2070']:
@@ -759,7 +738,7 @@ def clean_geoclimate(path, boundary):
         gdf = gdf[['ss_geo_risk', 'geometry']]
         tfn_gdf = clip_to_boundary(gdf, boundary)
         tfn_gdf = explode_to_polygons(tfn_gdf)
-        tfn_gdf.to_file(GROUND_STABILITY_OUT / "BGS Shrink Swell" / year / f"tfn_bgs_ss_{year}.shp")
+        write_to_file(tfn_gdf, GROUND_STABILITY_OUT / "BGS Shrink Swell" / year / f"tfn_bgs_ss_{year}.shp")
 
 ### COASTAL EROSION
 
@@ -774,7 +753,7 @@ def clean_giz(path, boundary):
     ncerm_giz = ncerm_giz[['smp_no', 'geometry']]
     tfn_ncerm_giz = clip_to_boundary(ncerm_giz, boundary)
     tfn_ncerm_giz = explode_to_polygons(tfn_ncerm_giz)
-    tfn_ncerm_giz.to_file(COASTAL_EROSION_OUT / "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.shp")
+    write_to_file(tfn_ncerm_giz, COASTAL_EROSION_OUT / "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.shp")
 
 def clean_ncerm(path, boundary):
     for year in ['2055', '2105']:
@@ -782,7 +761,7 @@ def clean_ncerm(path, boundary):
         gdf = gdf[['smp_name', 'geometry']]
         tfn_gdf = clip_to_boundary(gdf, boundary)
         tfn_gdf = explode_to_polygons(tfn_gdf)
-        tfn_gdf.to_file(COASTAL_EROSION_OUT / "NCERM" / f"SMP_{year}_70CC" / f"tfn_ncerm_smp_{year}_70CC.shp")
+        write_to_file(tfn_gdf, COASTAL_EROSION_OUT / "NCERM" / f"SMP_{year}_70CC" / f"tfn_ncerm_smp_{year}_70CC.shp")
 
 ## IMPACT
 
@@ -796,7 +775,7 @@ def clean_freight_demand(boundary):
     tfn_freight_network_demand = read_freight_demand(IMPACT_IN / "Freight" / "rail_freight_network_demand.gpkg", boundary)
     tfn_os_freight_network_demand = map_freight_networks(tfn_freight_network_demand,
                          INFRASTRUCTURE_OUT / "Rail" / "TfN OS Freight Rail" / "tfn_freight_rail_links.shp")
-    tfn_os_freight_network_demand.to_file(IMPACT_OUT / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
+    write_to_file(tfn_os_freight_network_demand, IMPACT_OUT / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
 
 def read_freight_demand(path, boundary):
     freight_network_demand = gpd.read_file(path)
@@ -840,8 +819,10 @@ def clean_noham_flows():
     tfn_noham_net_flows_f = merge_noham_flow_network(tfn_noham_flows_f,
                                                      ROAD_OUT / "TfN NoHAM 2023" / "tfn_noham_2048.shp")
 
-    tfn_noham_net_flows_c.to_file(IMPACT_OUT /  "TfN NoHAM Flows" / "2023" / "tfn_noham_net_flows_c.gpkg")
-    tfn_noham_net_flows_f.to_file(IMPACT_OUT / "TfN NoHAM Flows" / "2048" / "tfn_noham_net_flows_f.gpkg")
+    write_to_file(tfn_noham_net_flows_c,
+                  IMPACT_OUT /  "TfN NoHAM Flows" / "2023" / "tfn_noham_net_flows_c.gpkg", driver="GPKG")
+    write_to_file(tfn_noham_net_flows_f,
+                  IMPACT_OUT / "TfN NoHAM Flows" / "2048" / "tfn_noham_net_flows_f.gpkg", driver="GPKG")
 
 def read_noham_h5(year, time_period, user_class, noham_path, output_path, extract):
     '''Reads NoHAM h5 files and extracts the link, routes, and od's DataFrames'''
