@@ -13,6 +13,8 @@ import py7zr
 from pathlib import Path
 import zipfile
 
+from src.cvt.functional_rules import tfn_precip_sum
+
 ### FILE PATHS
 RAW_INPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "raw inputs"
 MODEL_INPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model inputs"
@@ -57,14 +59,17 @@ def clip_to_boundary(gdf, boundary):
     gdf_boundary = gpd.clip(gdf, boundary) # Clip GDF to boundary
     return gdf_boundary
 
-def write_to_file(gdf, output_path, driver=None):
+def write_to_file(gdf, output_path, driver=None, csv=False):
     '''Function to write a GeoDataFrame to a file'''
     output_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists, make one if not
 
     if gdf.empty:
         raise ValueError(f"GeoDataFrame is empty. Nothing written to {output_path}")
 
-    gdf.to_file(output_path, driver=driver)
+    if csv == True:
+        gdf.to_csv(output_path, index=False)
+    else:
+        gdf.to_file(output_path, driver=driver)
 
 def df_to_gdf(df, x_col, y_col, crs):
     '''Takes a DataFrame and converts it to a GeoDataFrame using spatial columns'''
@@ -227,12 +232,15 @@ def clean_os_roads(os_road_path, boundary):
     write_to_file(tfn_os_road, ROAD_OUT / "TfN OS Road" / "tfn_os_road.shp")
 
 def clean_noham_roads(noham_roads_path_2023, noham_roads_path_2048, boundary):
-    noham_2023 = gpd.read_file(noham_roads_path_2023)
-    noham_2048 = gpd.read_file(noham_roads_path_2048)
+    noham = {
+        '2023': gpd.read_file(noham_roads_path_2023),
+        '2048': gpd.read_file(noham_roads_path_2048)
+    }
 
-    noham = {'2023': noham_2023, '2048': noham_2048}
     for year, noham_network in noham.items():
         noham_network.drop_duplicates(subset=['link_id', 'geometry'], inplace=True)
+        noham_network[['a', 'b']] = noham_network['link_id'].str.split('_', expand=True).astype(int)
+        noham_network = noham_network[(noham_network['a'] >= 10000) & (noham_network['b'] >= 10000)]
         noham_network = noham_network[['link_id', 'geometry']]
         noham_network = noham_network[~noham_network.geometry.is_empty]
         noham_network = noham_network[noham_network.geometry.notnull()]
@@ -408,126 +416,134 @@ def clean_hazards(boundary):
 
 def clean_extreme_weather(boundary):
     '''Function to clean all extreme weather variables'''
-    clean_temp_max(f"zip://{EXTREME_WEATHER_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
+    tfn_common_grid = clean_common_grid(f"zip://{EXTREME_WEATHER_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
         "!summer_maximum_temperature_change_projections_12km.shp", boundary)
+
+    clean_temp_max(f"zip://{EXTREME_WEATHER_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
+        "!summer_maximum_temperature_change_projections_12km.shp", tfn_common_grid)
     clean_temp_min(f"zip://{EXTREME_WEATHER_IN / "Winter_Minimum_Temperature_Change___Projections_12km_grid.zip"}"
-                   "!winter_minimum_temperature_change_projections_12km.shp", boundary)
+                   "!winter_minimum_temperature_change_projections_12km.shp", tfn_common_grid)
     clean_summer_precip(f"zip://{EXTREME_WEATHER_IN / "Summer_Precipitation_Change___Projections_12km_grid.zip"}"
-                        "!summer_precipitation_change_projections_12km.shp", boundary)
+                        "!summer_precipitation_change_projections_12km.shp", tfn_common_grid)
     clean_winter_precip(f"zip://{EXTREME_WEATHER_IN / "Winter_Precipitation_Change___Projections_12km_grid.zip"}"
-                        "!winter_precipitation_change_projections_12km.shp", boundary)
+                        "!winter_precipitation_change_projections_12km.shp", tfn_common_grid)
     clean_rain_days(f"zip://{EXTREME_WEATHER_IN / "Annual_Count_of_10mm_Rain_Days_1991_2020.zip"}"
                     "!Annual_Count_of_10mm_Rain_Days_1991-2020.shp", boundary)
     clean_drought_index(f"zip://{EXTREME_WEATHER_IN / "Drought_Severity_Index_12_Month_Accumulations.zip"}"
               "!Drought_Severity_Index_12_Month_Accumulations_-_Projections.shp", boundary)
     clean_hot_summer_days(f"zip://{EXTREME_WEATHER_IN / "Annual_Count_of_Hot_Days___Projections__12km_grid.zip"}"
-                          "!annual_count_of_hot_summer_days_projections_12km.shp", boundary)
+                          "!annual_count_of_hot_summer_days_projections_12km.shp", tfn_common_grid)
     clean_extreme_summer_days(f"zip://{EXTREME_WEATHER_IN 
                                        / "Annual_Count_of_Extreme_Summer_Days_Projections_12km_Grid.zip"}"
-                              "!annual_count_of_extreme_summer_days_projections_12km.shp", boundary)
+                              "!annual_count_of_extreme_summer_days_projections_12km.shp", tfn_common_grid)
     clean_frost_days(f"zip://{EXTREME_WEATHER_IN / "Annual_Count_of_Frost_Days_Projections_12km_Grid.zip"}"
-                     "!annual_count_of_frost_days_projections_12km.shp", boundary)
+                     "!annual_count_of_frost_days_projections_12km.shp", tfn_common_grid)
     clean_icing_days(f"zip://{EXTREME_WEATHER_IN / "Annual_Count_of_Icing_Days___Projections__12km_grid.zip"}"
-                     "!annual_count_of_icing_days_projections_12km.shp", boundary)
+                     "!annual_count_of_icing_days_projections_12km.shp", tfn_common_grid)
     clean_wind_speed(EXTREME_WEATHER_IN / "CEDA_Max_Wind_Speed", boundary)
     clean_wind_driven_rain(f"zip://{EXTREME_WEATHER_IN / "Annual_Index_of_Wind_Driven_Rain_Projections_5km.zip"}"
                            "!Annual_Index_of_Wind_Driven_Rain_-_Projections_(5km).shp", boundary)
 
-def clean_temp_max(path, boundary):
+def clean_common_grid(path, boundary):
     temp_max = gpd.read_file(path)
     temp_max['grid_id'] = range(1, len(temp_max) + 1)
-    temp_max = temp_max[['grid_id', 'tasmax_s_4', 'tasmax__22', 'geometry']]
-    temp_max.rename(columns={'tasmax_s_4': 'tasmax_s_b', 'tasmax__22': 'tasmax_s_f'}, inplace=True)
-    temp_max['tasmax_s_f'] = temp_max['tasmax_s_b'] + temp_max['tasmax_s_f']
-    tfn_temp_max = clip_to_boundary(temp_max, boundary)
-    tfn_temp_max = explode_to_polygons(tfn_temp_max)
-    write_to_file(tfn_temp_max,
-                  EXTREME_WEATHER_OUT / "TfN Summer Max Temperature Change Projections" / "tfn_temp_max.shp")
 
-def clean_temp_min(path, boundary):
+    common_grid = temp_max[['grid_id', 'geometry']]
+    tfn_common_grid = clip_to_boundary(common_grid, boundary)
+    tfn_common_grid = explode_to_polygons(tfn_common_grid)
+    write_to_file(tfn_common_grid, MODEL_INPUT_PATH / "Other" / "TfN Common Grid" / "tfn_common_grid.shp")
+    return tfn_common_grid
+
+def clean_temp_max(path, grid):
+    temp_max = gpd.read_file(path)
+    temp_max['grid_id'] = range(1, len(temp_max) + 1)
+    temp_max = temp_max[['grid_id', 'tasmax_s_4', 'tasmax__22']]
+    temp_max.rename(columns={'tasmax_s_4': 'tasmax_s_c', 'tasmax__22': 'tasmax_s_f'}, inplace=True)
+    temp_max['tasmax_s_f'] = temp_max['tasmax_s_c'] + temp_max['tasmax_s_f']
+    tfn_temp_max = temp_max[temp_max['grid_id'].isin(grid['grid_id'])]
+    write_to_file(tfn_temp_max,
+                  EXTREME_WEATHER_OUT / "TfN Summer Max Temperature Change Projections" / "tfn_temp_max.csv", csv=True)
+
+def clean_temp_min(path, grid):
     temp_min = gpd.read_file(path)
     temp_min['grid_id'] = range(1, len(temp_min) + 1)
-    temp_min = temp_min[['grid_id', 'tasmin_w_4', 'tasmin__22', 'geometry']]
-    temp_min.rename(columns={'tasmin_w_4': 'tasmin_w_b', 'tasmin__22': 'tasmin_w_f'}, inplace=True)
-    temp_min['tasmin_w_f'] = temp_min['tasmin_w_b'] + temp_min['tasmin_w_f']
-    tfn_temp_min = clip_to_boundary(temp_min, boundary)
-    tfn_temp_min = explode_to_polygons(tfn_temp_min)
+    temp_min = temp_min[['grid_id', 'tasmin_w_4', 'tasmin__22']]
+    temp_min.rename(columns={'tasmin_w_4': 'tasmin_w_c', 'tasmin__22': 'tasmin_w_f'}, inplace=True)
+    temp_min['tasmin_w_f'] = temp_min['tasmin_w_c'] + temp_min['tasmin_w_f']
+    tfn_temp_min = temp_min[temp_min['grid_id'].isin(grid['grid_id'])]
     write_to_file(tfn_temp_min,
-                  EXTREME_WEATHER_OUT / "TfN Winter Min Temperature Change Projections" / "tfn_temp_min.shp")
+                  EXTREME_WEATHER_OUT / "TfN Winter Min Temperature Change Projections" / "tfn_temp_min.csv", csv=True)
 
-def clean_summer_precip(path, boundary):
+def clean_summer_precip(path, grid):
     precip_sum = gpd.read_file(path)
     precip_sum['grid_id'] = range(1, len(precip_sum) + 1)
-    precip_sum = precip_sum[['grid_id', 'pr_summe_3', 'pr_summ_21', 'geometry']]
-    precip_sum.rename(columns={'pr_summe_3': 'pr_s_base','pr_summ_21': 'pr_s_pct_f'}, inplace=True)
-    precip_sum['pr_s_f'] = precip_sum['pr_s_base'] * (1 + (precip_sum['pr_s_pct_f'] / 100))
+    precip_sum = precip_sum[['grid_id', 'pr_summe_3', 'pr_summ_21']]
+    precip_sum.rename(columns={'pr_summe_3': 'pr_s_c','pr_summ_21': 'pr_s_pct_f'}, inplace=True)
+    precip_sum['pr_s_f'] = precip_sum['pr_s_c'] * (1 + (precip_sum['pr_s_pct_f'] / 100))
     precip_sum.drop(columns=['pr_s_pct_f'], inplace=True)
-    tfn_precip_sum = clip_to_boundary(precip_sum, boundary)
-    tfn_precip_sum = explode_to_polygons(tfn_precip_sum)
+    tfn_precip_sum = precip_sum[precip_sum['grid_id'].isin(grid['grid_id'])]
     write_to_file(tfn_precip_sum,
-                  EXTREME_WEATHER_OUT / "TfN Summer Precipitation Change Projections" / "tfn_precip_sum.shp")
+                  EXTREME_WEATHER_OUT / "TfN Summer Precipitation Change Projections" / "tfn_precip_sum.csv", csv=True)
 
-def clean_winter_precip(path, boundary):
+def clean_winter_precip(path, grid):
     precip_win = gpd.read_file(path)
     precip_win['grid_id'] = range(1, len(precip_win) + 1)
-    precip_win = precip_win[['grid_id', 'pr_winte_3', 'pr_wint_21', 'geometry']]
-    precip_win.rename(columns={'pr_winte_3': 'pr_w_base','pr_wint_21': 'pr_w_pct_f',}, inplace=True)
-    precip_win['pr_w_f'] = precip_win['pr_w_base'] * (1 + (precip_win['pr_w_pct_f'] / 100))
+    precip_win = precip_win[['grid_id', 'pr_winte_3', 'pr_wint_21']]
+    precip_win.rename(columns={'pr_winte_3': 'pr_w_c','pr_wint_21': 'pr_w_pct_f',}, inplace=True)
+    precip_win['pr_w_f'] = precip_win['pr_w_c'] * (1 + (precip_win['pr_w_pct_f'] / 100))
     precip_win.drop(columns=['pr_w_pct_f'], inplace=True)
-    tfn_precip_win = clip_to_boundary(precip_win, boundary)
-    tfn_precip_win = explode_to_polygons(tfn_precip_win)
+    tfn_precip_win = precip_win[precip_win['grid_id'].isin(grid['grid_id'])]
     write_to_file(tfn_precip_win,
-                  EXTREME_WEATHER_OUT / "TfN Winter Precipitation Change Projections" / "tfn_precip_win.shp")
+                  EXTREME_WEATHER_OUT / "TfN Winter Precipitation Change Projections" / "tfn_precip_win.csv", csv=True)
 
 def clean_rain_days(path, boundary):
     rain_days = gpd.read_file(path)
     tfn_rain_days = clip_to_boundary(rain_days, boundary)
     tfn_rain_days = explode_to_polygons(tfn_rain_days)
+    tfn_rain_days.rename(columns={'Rain10mmDa': 'rain_days_c'}, inplace=True)
+    tfn_rain_days['rain_days_f'] = tfn_rain_days['rain_days_c'] # Duplicate rain days column
     write_to_file(tfn_rain_days, EXTREME_WEATHER_OUT / "TfN 10mm Rain Days 1991-2020" / "tfn_rain_days.shp")
 
 def clean_drought_index(path, boundary):
     drought_index = gpd.read_file(path)
     drought_index = drought_index[['DSI12_ba_4', 'DSI12_40_m', 'geometry']]
-    drought_index.rename(columns={'DSI12_ba_4': 'dsi_base', 'DSI12_40_m': 'dsi_future'}, inplace=True)
+    drought_index.rename(columns={'DSI12_ba_4': 'dsi_c', 'DSI12_40_m': 'dsi_f'}, inplace=True)
     tfn_drought = clip_to_boundary(drought_index, boundary)
     tfn_drought = explode_to_polygons(tfn_drought)
     write_to_file(tfn_drought, EXTREME_WEATHER_OUT / "TfN Drought Severity Index" / "tfn_drought_index.shp")
 
-def clean_hot_summer_days(path, boundary):
+def clean_hot_summer_days(path, grid):
     hot_days = gpd.read_file(path)
     hot_days['grid_id'] = range(1, len(hot_days) + 1)
-    hot_days = hot_days[['grid_id', 'HSD_base_4', 'HSD_40_med', 'geometry']]
-    hot_days.rename(columns={'HSD_base_4': 'hsd_base', 'HSD_40_med': 'hsd_future'}, inplace=True)
-    tfn_hot_days = clip_to_boundary(hot_days, boundary)
-    tfn_hot_days = explode_to_polygons(tfn_hot_days)
-    write_to_file(tfn_hot_days, EXTREME_WEATHER_OUT / "TfN Hot Summer Days Projections" / "tfn_hot_days.shp")
+    hot_days = hot_days[['grid_id', 'HSD_base_4', 'HSD_40_med']]
+    hot_days.rename(columns={'HSD_base_4': 'hsd_c', 'HSD_40_med': 'hsd_f'}, inplace=True)
+    tfn_hot_days = hot_days[hot_days['grid_id'].isin(grid['grid_id'])]
+    write_to_file(tfn_hot_days, EXTREME_WEATHER_OUT / "TfN Hot Summer Days Projections" / "tfn_hot_days.csv", csv=True)
 
-def clean_extreme_summer_days(path, boundary):
+def clean_extreme_summer_days(path, grid):
     extr_days = gpd.read_file(path)
     extr_days['grid_id'] = range(1, len(extr_days) + 1)
-    extr_days = extr_days[['grid_id', 'ESD_base_4', 'ESD_40_med', 'geometry']]
-    extr_days.rename(columns={'ESD_base_4': 'esd_base','ESD_40_med': 'esd_future'}, inplace=True)
-    tfn_extr_days = clip_to_boundary(extr_days, boundary)
-    tfn_extr_days = explode_to_polygons(tfn_extr_days)
-    write_to_file(tfn_extr_days, EXTREME_WEATHER_OUT / "TfN Extreme Summer Days Projections" / "tfn_extr_days.shp")
+    extr_days = extr_days[['grid_id', 'ESD_base_4', 'ESD_40_med']]
+    extr_days.rename(columns={'ESD_base_4': 'esd_c','ESD_40_med': 'esd_f'}, inplace=True)
+    tfn_extr_days = extr_days[extr_days['grid_id'].isin(grid['grid_id'])]
+    write_to_file(tfn_extr_days,
+                  EXTREME_WEATHER_OUT / "TfN Extreme Summer Days Projections" / "tfn_extr_days.csv", csv=True)
 
-def clean_frost_days(path, boundary):
+def clean_frost_days(path, grid):
     frost_days = gpd.read_file(path)
     frost_days['grid_id'] = range(1, len(frost_days) + 1)
-    frost_days = frost_days[['grid_id', 'FrostDay_3', 'FrostDa_18', 'geometry']]
-    frost_days.rename(columns={'FrostDay_3': 'frost_d_b', 'FrostDa_18': 'frost_d_f'}, inplace=True)
-    tfn_frost_days = clip_to_boundary(frost_days, boundary)
-    tfn_frost_days = explode_to_polygons(tfn_frost_days)
-    write_to_file(tfn_frost_days, EXTREME_WEATHER_IN / "TfN Frost Days Projections" / "tfn_frost_days.shp")
+    frost_days = frost_days[['grid_id', 'FrostDay_3', 'FrostDa_18']]
+    frost_days.rename(columns={'FrostDay_3': 'frost_d_c', 'FrostDa_18': 'frost_d_f'}, inplace=True)
+    tfn_frost_days = frost_days[frost_days['grid_id'].isin(grid['grid_id'])]
+    write_to_file(tfn_frost_days, EXTREME_WEATHER_IN / "TfN Frost Days Projections" / "tfn_frost_days.csv", csv=True)
 
-def clean_icing_days(path, boundary):
+def clean_icing_days(path, grid):
     ice_days = gpd.read_file(path)
     ice_days['grid_id'] = range(1, len(ice_days) + 1)
-    ice_days = ice_days[['grid_id', 'IcingDay_3', 'IcingDa_18', 'geometry']]
-    ice_days.rename(columns={'IcingDay_3': 'ice_d_b','IcingDa_18': 'ice_d_f'}, inplace=True)
-    tfn_ice_days = clip_to_boundary(ice_days, boundary)
-    tfn_ice_days = explode_to_polygons(tfn_ice_days)
-    write_to_file(tfn_ice_days, EXTREME_WEATHER_OUT / "TfN Icing Days Projections" / "tfn_ice_days.shp")
+    ice_days = ice_days[['grid_id', 'IcingDay_3', 'IcingDa_18']]
+    ice_days.rename(columns={'IcingDay_3': 'ice_d_c','IcingDa_18': 'ice_d_f'}, inplace=True)
+    tfn_ice_days = ice_days[ice_days['grid_id'].isin(grid['grid_id'])]
+    write_to_file(tfn_ice_days, EXTREME_WEATHER_OUT / "TfN Icing Days Projections" / "tfn_ice_days.csv", csv=True)
 
 def clean_wind_speed(path, boundary):
     windspd_c = xr.open_dataset(path / "wsgmax10m_rcp85_land-cpm_uk_5km_01_day_20701201-20801130.nc").to_dataframe()
@@ -571,7 +587,7 @@ def clean_wind_driven_rain(path, boundary):
     )
 
     wdr_agg = wdr_agg[['WDR_base_1', 'WDR_40_Med', 'geometry']]
-    wdr_agg.rename(columns={'WDR_base_1': 'wdr_base', 'WDR_40_Med': 'wdr_future'}, inplace=True)
+    wdr_agg.rename(columns={'WDR_base_1': 'wdr_c', 'WDR_40_Med': 'wdr_f'}, inplace=True)
     wdr_agg = gpd.GeoDataFrame(wdr_agg, geometry='geometry', crs='EPSG:3857')
     tfn_wdr = clip_to_boundary(wdr_agg, boundary)
     tfn_wdr = explode_to_polygons(tfn_wdr)
@@ -806,7 +822,7 @@ def clean_noham_flows():
 
     tfn_noham_flows = link_flows['2023'].merge(
         link_flows['2048'],
-        on='noham_link_name',
+        on='link_id',
         suffixes=('_c', '_f'),  # _c for current, _f for future
         how='outer'  # Keep all rows, fill missing with NA
     )
@@ -905,15 +921,15 @@ def aggregate_link_flows_year(noham_path, output_path):
                 link_demand = aggregate_link_flows(od_df, route_df, link_df)  # Get link based demand
                 link_demand = link_demand.rename(
                     columns={'abs_demand': f'{user_class}_{time_period}'})  # Rename demand column
-                link_demand['noham_link_name'] = link_demand['a'].astype(str) + '_' + link_demand['b'].astype(
+                link_demand['link_id'] = link_demand['a'].astype(str) + '_' + link_demand['b'].astype(
                     str)  # Create unique noham link id
-                link_demand = link_demand[['noham_link_name', f'{user_class}_{time_period}']]  # Keep relevant columns
+                link_demand = link_demand[['link_id', f'{user_class}_{time_period}']]  # Keep relevant columns
                 uc_dfs.append(link_demand)  # Add to list of df's
 
             # Merge all user class dataframes
             combined_uc_df = uc_dfs[0]
             for df_uc in uc_dfs[1:]:
-                combined_uc_df = combined_uc_df.merge(df_uc, on='noham_link_name', how='outer')
+                combined_uc_df = combined_uc_df.merge(df_uc, on='link_id', how='outer')
 
             # Compute total demand for all vehicles for each time period
             combined_uc_df[f'all_vehs_{time_period}'] = combined_uc_df[
@@ -925,7 +941,7 @@ def aggregate_link_flows_year(noham_path, output_path):
         # Merge all time period dataframes
         combined_ts_df = ts_dfs[0]
         for df_ts in ts_dfs[1:]:
-            combined_ts_df = combined_ts_df.merge(df_ts, on='noham_link_name', how='outer')
+            combined_ts_df = combined_ts_df.merge(df_ts, on='link_id', how='outer')
 
         # Compute totals for each user class across all time periods
         for uc in user_classes:
@@ -941,11 +957,10 @@ def aggregate_link_flows_year(noham_path, output_path):
 
 def merge_noham_flow_network(tfn_noham_flows, noham_path):
     tfn_noham_link = gpd.read_file(noham_path)
-    tfn_noham_link.rename(columns={'noham_link': 'noham_link_name'}, inplace=True)
     tfn_noham_net_flows = pd.merge(
         tfn_noham_link,
         tfn_noham_flows,
-        on='noham_link_name',
+        on='link_id',
         how='left'  # Keep all network, adding flows where available
     )
     return tfn_noham_net_flows
