@@ -214,6 +214,7 @@ def apply_functional_rules():
     extreme_weather_index()
     flooding_index(boundary)
     ground_stability_index()
+    coastal_erosion_index()
 
 
 ## HAZARDS
@@ -561,6 +562,6 @@ def coastal_erosion_index():
     tfn_coastal_erosion_risk = tfn_coastal_erosion_risk[['erosion_c', 'erosion_f', 'geometry']]
 
     write_to_file(tfn_coastal_erosion_risk,
-                  MODEL_INTERIM_OUTPUT_PATH / "TfN NCERM Risk" / "tfn_coastal_erosion_risk.shp")
+                  MODEL_INTERIM_OUTPUT_PATH / "TfN Coastal Erosion Risk" / "tfn_coastal_erosion_risk.shp")
 
 
