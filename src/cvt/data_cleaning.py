@@ -4,16 +4,13 @@
 import pandas as pd
 import geopandas as gpd
 import fiona
-from shapely.geometry import Point, Polygon, MultiPolygon, GeometryCollection, box
-from shapely import wkt
-import numpy as np
+from shapely.geometry import Point, Polygon, MultiPolygon, GeometryCollection
 import xarray as xr
 import h5py
 import py7zr
 from pathlib import Path
 import zipfile
 
-from src.cvt.functional_rules import tfn_precip_sum
 
 ### FILE PATHS
 RAW_INPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "raw inputs"
@@ -381,15 +378,14 @@ def clean_rapid_transport_network(tfn_rail_links):
 def clean_charging_points(path, boundary):
     chg_pts = pd.read_csv(path)
 
-    chg_pts["geom"] = chg_pts["geom"].apply(wkt.loads)
-    chg_pts_gdf = gpd.GeoDataFrame(chg_pts, geometry=chg_pts.geom, crs="EPSG:4326")
-    chg_pts_gdf = chg_pts_gdf[['zapmap_device_uid', 'charge_device_name', 'geometry']]
-    chg_pts_gdf.rename(columns={'zapmap_device_uid': 'zapmap_id', 'charge_device_name': 'name', })
-    chg_pts_gdf.drop_duplicates(subset=['zapmap_id', 'geometry'], inplace=True)
+    chg_pts_gdf = gpd.GeoDataFrame(chg_pts, geometry=[Point(xy) for xy in zip(chg_pts['lon'], chg_pts['lat'])], crs="EPSG:4326")
+    chg_pts_gdf = chg_pts_gdf[['identifier', 'name', 'speed', 'value', 'geometry']]
+    chg_pts_gdf.rename(columns={'identifier': 'id', 'value': 'devices'}, inplace=True)
+    chg_pts_gdf = chg_pts_gdf.drop_duplicates(subset=['geometry'])
     chg_pts_gdf = chg_pts_gdf[~chg_pts_gdf.geometry.is_empty]
     chg_pts_gdf = chg_pts_gdf[chg_pts_gdf.geometry.notnull()]
     tfn_chg_pts = clip_to_boundary(chg_pts_gdf, boundary)
-    write_to_file(tfn_chg_pts, OTHER_OUT / "TfN Charging Points" / "tfn_chg_pts.shp")
+    write_to_file(tfn_chg_pts, OTHER_OUT / "TfN EV Charging Sites" / "tfn_chg_sites.shp")
 
 def clean_ncn(path, boundary):
     ncn = gpd.read_file(path)

@@ -10,12 +10,12 @@ from sklearn.preprocessing import MinMaxScaler
 from pathlib import Path
 from functools import reduce
 
-from src.cvt.data_cleaning import clip_to_boundary, convert_point_to_grid, explode_to_polygons, read_boundary_path, \
-    tfn_drought
+from data_cleaning import read_boundary_path, explode_to_polygons, clip_to_boundary, write_to_file
 
 ### FILE PATHS
 RAW_INPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "raw inputs"
 MODEL_INPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model inputs"
+MODEL_INTERIM_OUTPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model intermim outputs"
 
 INFRASTRUCTURE_RAW_IN = RAW_INPUT_PATH / "Infrastructure"
 
@@ -24,6 +24,12 @@ OTHER_RAW_IN = INFRASTRUCTURE_RAW_IN / "Other"
 HAZARDS_MODEL_IN = MODEL_INPUT_PATH / "Hazards"
 
 EXTREME_WEATHER_MODEL_IN = HAZARDS_MODEL_IN / "Extreme Weather"
+
+FLOODING_MODEL_IN = HAZARDS_MODEL_IN / "Flooding"
+
+GROUND_STABILITY_MODEL_IN = HAZARDS_MODEL_IN / "Ground Stability"
+
+COASTAL_EROSION_MODEL_IN = HAZARDS_MODEL_IN / "Coastal Erosion"
 
 
 ### GENERAL FUNCTIONS
@@ -202,8 +208,13 @@ def overlay_normalise(gdf1, gdf2, risk_cols, combined_risk_name, weights):
 # FUNCTIONAL RULES
 
 def apply_functional_rules():
-    tfn_boundary = read_boundary_path(
+    boundary = read_boundary_path(
         OTHER_RAW_IN / "TfN Boundary" / "Transport_for_the_north_boundary_2020_generalised.shp")
+
+    extreme_weather_index()
+    flooding_index(boundary)
+    ground_stability_index()
+
 
 ## HAZARDS
 
@@ -216,6 +227,58 @@ def extreme_weather_index():
     tfn_extreme_cold = extreme_cold_index(tfn_common_grid)
     tfn_drought = drought_index()
     tfn_storm = storm_index()
+
+    tfn_extreme_weather_merge = pd.merge(
+        tfn_extreme_heat[['grid_id', 'heat_risk_c', 'heat_risk_f']],
+        tfn_extreme_cold[['grid_id', 'cold_risk_c', 'cold_risk_f', 'geometry']],
+        on='grid_id',
+        how='inner'
+    )
+
+    tfn_extreme_weather_merge = gpd.GeoDataFrame(tfn_extreme_weather_merge, geometry='geometry', crs="EPSG:3857")
+
+    tfn_extreme_weather_merge = tfn_extreme_weather_merge.to_crs("EPSG:27700")
+    tfn_drought = tfn_drought.to_crs("EPSG:27700")
+    tfn_storm = tfn_storm.to_crs("EPSG:27700")
+
+    tfn_extreme_weather_overlay = gpd.overlay(tfn_extreme_weather_merge,
+                                              tfn_drought[['drought_risk_c', 'drought_risk_f', 'geometry']],
+                                              how='union'
+                                              )
+
+    tfn_extreme_weather_overlay = gpd.overlay(tfn_extreme_weather_overlay,
+                                              tfn_storm[['storm_risk_c', 'storm_risk_f', 'geometry']],
+                                              how='union'
+                                              )
+
+    tfn_extreme_weather_overlay = filter_out_small_geometries(tfn_extreme_weather_overlay)
+
+    tfn_extreme_weather_risk = iterative_spatial_smoothing(
+        tfn_extreme_weather_overlay, ['heat_risk_c', 'heat_risk_f', 'cold_risk_c', 'cold_risk_f',
+                                      'drought_risk_c', 'drought_risk_f', 'storm_risk_c', 'storm_risk_f'])
+
+    tfn_extreme_weather_risk = explode_to_polygons(tfn_extreme_weather_risk)
+
+    tfn_extreme_weather_risk = calculate_composite_score(
+        tfn_extreme_weather_risk,
+        {'heat risk': 0.25, 'cold risk': 0.25, 'drought risk': 0.25, 'storm risk': 0.25},
+        'extreme_weather_risk'
+    )
+
+    tfn_extreme_weather_risk = min_max_scaling_pair(
+        tfn_extreme_weather_risk, ('extreme_weather_risk_c', 'extreme_weather_risk_f'))
+
+    tfn_extreme_weather_risk = gpd.GeoDataFrame(tfn_extreme_weather_risk, geometry='geometry')
+
+    write_to_file(tfn_extreme_weather_risk,
+                  MODEL_INTERIM_OUTPUT_PATH / "TfN Extreme Weather Risk" / "tfn_extreme_weather_risk.shp")
+
+def filter_out_small_geometries(gdf):
+    gdf['area'] = gdf.geometry.area
+    threshold = gdf['area'].median() * 0.035 # Threshold: 3.5% of median
+    gdf = gdf[gdf['area'] > threshold] # Filter out tiny geometries
+    gdf.drop(columns=['area'], inplace=True)
+    return gdf
 
 
 #### EXTREME HEAT
@@ -245,7 +308,7 @@ def extreme_heat_index(common_grid):
 
     return tfn_extreme_heat
 
-### EXTREME COLD
+#### EXTREME COLD
 
 def extreme_cold_index(common_grid):
     tfn_temp_min = pd.read_csv(
@@ -270,7 +333,7 @@ def extreme_cold_index(common_grid):
 
     return tfn_extreme_cold
 
-### DROUGHT
+#### DROUGHT
 
 def drought_index():
     tfn_drought = gpd.read_file(EXTREME_WEATHER_MODEL_IN / "TfN Drought Severity Index" / "tfn_drought_index.shp")
@@ -302,7 +365,7 @@ def drought_index():
 
     return tfn_drought_risk
 
-### STORMS
+#### STORMS
 
 def storm_index():
     tfn_precip_win = gpd.read_file(
@@ -360,3 +423,144 @@ def wind_risk_scaled(speed_mps):
         return (speed_mps - 13.4) / (20.1 - 13.4) # Scale to 0 - 1
     else:
         return 1 + (speed_mps - 20.1) / (25 - 20.1) # Scale beyond 1
+
+### FLOODING
+
+def flooding_index(boundary):
+    flood_grid = create_flood_grid(1000, boundary)
+
+    risk_score_map = {'Unavailable': 0, 'Very low': 0, 'Low': 1, 'Medium': 2, 'High': 3}
+
+    tfn_flood_risk_c, tfn_flood_risk_f = upscale_to_grid(risk_score_map, flood_grid)
+
+    tfn_flood_risk = pd.merge(tfn_flood_risk_c[['FID', 'rofrs_risk_c', 'rofsw_risk_c']],
+                              tfn_flood_risk_f, on='FID', how='left')
+
+    tfn_flood_risk = min_max_scaling_pair(
+        tfn_flood_risk, [('rofrs_risk_c', 'rofrs_risk_f'),('rofsw_risk_c', 'rofsw_risk_f')])
+
+    tfn_flood_risk = calculate_composite_score(tfn_flood_risk, {'rofrs_risk': 0.5, 'rofsw_risk': 0.5}, 'flood_risk')
+
+    tfn_flood_risk = min_max_scaling_pair(tfn_flood_risk, [('flood_risk_c', 'flood_risk_f')])
+
+    write_to_file(tfn_flood_risk, MODEL_INTERIM_OUTPUT_PATH / "TfN Flood Risk" / "tfn_flood_risk.gpkg", "GPKG")
+
+def create_flood_grid(size_m, boundary):
+    bounds = boundary.total_bounds
+    grid = create_grid(bounds, size_m)
+    flood_grid = clip_to_boundary(grid, boundary)
+    write_to_file(flood_grid, MODEL_INTERIM_OUTPUT_PATH / "Other" / "flood_grid.shp")
+    return flood_grid
+
+def process_flood_layer(flood_grid, file_path, risk_column, risk_score_map):
+    layer = gpd.read_file(file_path)
+    layer[risk_column] = layer['Risk_band'].map(risk_score_map)
+    return area_weighted_flood_assignment(flood_grid, layer, risk_column)
+
+def upscale_to_grid(risk_score_map, flood_grid):
+    scenarios = {
+        "current": [("TfN RoFRS", "tfn_rofrs.gpkg", "rofrs_risk_c"),
+                    ("TfN RoFSW", "tfn_rofsw.gpkg", "rofsw_risk_c")],
+        "forecast": [("TfN RoFRS_CC", "tfn_rofrs_cc.gpkg", "rofrs_risk_f"),
+                   ("TfN RoFSW CC", "tfn_rofsw_cc.gpkg", "rofsw_risk_f")]
+    }
+
+    results = []
+    for scenario, layers in scenarios.items():
+        result = flood_grid
+        for folder, file, risk_col in layers:
+            result = process_flood_layer(result, FLOODING_MODEL_IN / folder / file, risk_col, risk_score_map)
+
+        write_to_file(
+            result, MODEL_INTERIM_OUTPUT_PATH / "TfN Flood Risk" / f"tfn_flood_risk_{scenario[0]}.gpkg", "GPKG")
+        results.append(result)
+
+    return results[0], results[1]
+
+### GROUND STABILITY
+
+def ground_stability_index():
+    tfn_geosure = gpd.read_file(GROUND_STABILITY_MODEL_IN / "TfN Geosure" / "tfn_geosure.shp")
+    tfn_geosure = tfn_geosure.to_crs("EPSG:27700")
+
+    risk_scores = {  # Map risk scores to normalised values (0-100)
+        'Probable': 100,
+        'Possible': 66,
+        'Improbable': 33,
+        'Unavailable': 50  # Assign neutral value
+    }
+
+    tfn_ss = {}
+    ground_stability = {}
+    for year, tp in {'2030': 'c', '2070': 'f'}.items():
+        tfn_ss[year] = gpd.read_file(GROUND_STABILITY_MODEL_IN / "BGS Shrink Swell" / year / f"tfn_bgs_ss_{year}.shp")
+        tfn_ss[year]['ss_geo_risk'] = tfn_ss[year]['ss_geo_ris'].map(risk_scores)
+        tfn_ss[year] = tfn_ss[year][['ss_geo_risk', 'geometry']]
+        tfn_ss[year] = tfn_ss[year].to_crs("EPSG:27700")
+        ground_stability[tp] = gpd.overlay(tfn_geosure, tfn_ss[year], how='union')
+        ground_stability[tp] = ground_stability[tp].rename(
+            columns={col: f"{col}_{tp}" for col in ground_stability[tp].columns if col != 'geometry'}
+        )
+        ground_stability[tp] = ground_stability[tp].to_crs("EPSG:27700")
+
+    tfn_ground_stability = gpd.overlay(ground_stability['c'], ground_stability['f'], how='union')
+
+    tfn_ground_stability = explode_to_polygons(tfn_ground_stability)
+
+    risk_cols = ['cd_risk_c', 'cg_risk_c', 'ls_risk_c', 'rs_risk_c', 'ss_risk_c', 'sr_risk_c', 'ss_geo_risk_c',
+                 'cd_risk_f', 'cg_risk_f', 'ls_risk_f', 'rs_risk_f', 'ss_risk_f', 'sr_risk_f', 'ss_geo_risk_f']
+
+    for col in risk_cols:
+        tfn_ground_stability[col] = pd.to_numeric(tfn_ground_stability[col], errors='coerce')
+
+    tfn_ground_stability = iterative_spatial_smoothing(tfn_ground_stability, risk_cols)
+
+    tfn_ground_stability = min_max_scaling_pair(tfn_ground_stability,
+                                                [('cd_risk_c', 'cd_risk_f'),
+                                                ('cg_risk_c', 'cg_risk_f'),
+                                                ('ls_risk_c', 'ls_risk_f'),
+                                                ('rs_risk_c', 'rs_risk_f'),
+                                                ('ss_risk_c', 'ss_risk_f'),
+                                                ('sr_risk_c', 'sr_risk_f'),
+                                                ('ss_geo_risk_c', 'ss_geo_risk_f'),
+                                                ])
+
+    tfn_ground_stability = calculate_composite_score(
+        tfn_ground_stability,
+        {'ss_geo_risk': 0.40, 'ls_risk': 0.10, 'ss_risk': 0.10, 'cg_risk': 0.10,
+         'cd_risk': 0.10, 'rs_risk': 0.10, 'sr_risk': 0.10}, 'ground_stability_risk')
+
+    tfn_ground_stability = min_max_scaling_pair(
+        tfn_ground_stability, [('ground_stability_risk_c', 'ground_stability_risk_f')])
+
+    write_to_file(tfn_ground_stability,
+                  MODEL_INTERIM_OUTPUT_PATH / "TfN Ground Stability Risk" / "tfn_ground_stability_risk.gpkg", "GPKG")
+
+### COASTAL EROSION
+
+def coastal_erosion_index():
+    tfn_ncerm_giz = gpd.read_file(COASTAL_EROSION_MODEL_IN / "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.shp")
+    tfn_ncerm_giz['risk_giz'] = 1
+
+    tfn_ncerm = {}
+    tfn_erosion_risk = {}
+    for year, tp in {'2055': 'c', '2105': 'f'}.items():
+        tfn_ncerm[year] = (
+            gpd.read_file(COASTAL_EROSION_MODEL_IN / "NCERM" / f"SMP_{year}_70CC" / f"tfn_ncerm_smp_{year}_70CC.shp"))
+        tfn_ncerm[year]['risk_erosion'] = 1
+        tfn_erosion_risk[tp] = overlay_normalise(
+            tfn_ncerm_giz, tfn_ncerm[year], ['risk_erosion', 'risk_giz'],
+            'erosion', {'risk_erosion': 0.9, 'risk_giz': 0.1})
+        tfn_erosion_risk[tp].rename(
+            columns={'erosion': f'erosion_{tp}'}, inplace=True)
+
+    tfn_coastal_erosion_risk = gpd.overlay(tfn_erosion_risk['c'], tfn_erosion_risk['f'], how="union")
+
+    tfn_coastal_erosion_risk = tfn_coastal_erosion_risk.fillna(0)
+    tfn_coastal_erosion_risk = gpd.GeoDataFrame(tfn_coastal_erosion_risk, geometry='geometry')
+    tfn_coastal_erosion_risk = tfn_coastal_erosion_risk[['erosion_c', 'erosion_f', 'geometry']]
+
+    write_to_file(tfn_coastal_erosion_risk,
+                  MODEL_INTERIM_OUTPUT_PATH / "TfN NCERM Risk" / "tfn_coastal_erosion_risk.shp")
+
+
