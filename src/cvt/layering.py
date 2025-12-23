@@ -1,23 +1,11 @@
-import os
-
 import geopandas as gpd
 import pandas as pd
 
 import numpy as np
 
-import matplotlib.pyplot as plt
-import contextily as ctx
-
-from matplotlib.colors import ListedColormap, BoundaryNorm
-import matplotlib.patches as mpatches
-
 from pathlib import Path
 
-from sklearn.preprocessing import MinMaxScaler
-
 from data_cleaning import write_to_file
-from functional_rules import min_max_scaling_pair
-
 
 # FILE PATHS
 
@@ -107,7 +95,21 @@ def split_csv_shapefile(gdf, id_col, folder, filename):
 def layering():
     hazard_layers = read_hazard_layers()
 
-    risk_cols = [col for col in hazard_layers.keys.columns] # Extract all columns with 'risk' in title
+    risk_cols = [
+        # Extreme Weather risk columns
+        'heat_risk', 'cold_risk', 'drought_risk', 'storm_risk', 'extreme_weather_risk',
+
+        # Flooding risk columns
+        'rofrs_risk', 'rofsw_risk', 'flood_risk',
+
+        # Ground Stability risk columns
+        'collapsible_deposits_risk', 'compressible_ground_risk', 'landslides_risk', 'running_sand_risk',
+        'shrink_swell_risk',
+        'soluble_rocks_risk', 'shrink_swell_geoclimate_risk', 'ground_stability_risk',
+
+        # Coastal Erosion risk columns
+        'erosion_risk'
+    ]
 
     impact_weights = {
         'demand': 0.5,  # Weight demand as half of impact score
@@ -165,6 +167,7 @@ def infrastructure_layering(hazard_layers, risk_cols):
 
 def get_road_risk(hazard_layers, risk_cols):
     os_open_road_risk(hazard_layers, risk_cols)
+    noham_road_risk(hazard_layers, risk_cols)
 
 #### OS Open Roads
 
@@ -184,153 +187,32 @@ def os_open_road_risk(hazard_layers, risk_cols):
     split_csv_shapefile(tfn_os_road_risk, 'id', 'OS Roads', 'tfn_os_road_risk')
 
 def noham_road_risk(hazard_layers, risk_cols):
-    tfn_noham_c = gpd.read_file(IMPACT_IN_PATH / "TfN NoHAM Flows" / "2023" / "tfn_noham_net_flows_c.gpkg")
-    tfn_noham_f = gpd.read_file(IMPACT_IN_PATH / "TfN NoHAM Flows" / "2048" / "tfn_noham_net_flows_f.gpkg")
+    tfn_noham = {}
+    tfn_noham_risk = {}
+    for tp in ['c', 'f']:
+        tfn_noham[tp] = gpd.read_file(
+            MODEL_INTERIM_OUTPUT_PATH / "Impact" / "TfN NoHAM Flows" / f"tfn_noham_net_flows_{tp}.gpkg")
+        tfn_noham_risk[tp] = infrastructure_risk_overlay(tfn_noham[tp], hazard_layers)
+        other_tp = 'f' if tp == 'c' else 'c'
+        drop_cols = [col for col in tfn_noham_risk[tp].columns if col.endswith(f'_{other_tp}')]
+        tfn_noham_risk[tp].drop(columns=drop_cols, inplace=True)
+        tfn_noham_risk[tp].drop_duplicates(subset=['geometry'], inplace=True)
+        tfn_noham_risk[tp].columns = [col.replace(f'_{tp}', '') for col in tfn_noham_risk[tp].columns]
+        if tp == 'c':
+            tfn_noham_risk[tp]['current_or_forecast'] = 'Current'
+        else:
+            tfn_noham_risk[tp]['current_or_forecast'] = 'Forecast'
 
-    tfn_noham_risk_c = infrastructure_risk_overlay(tfn_noham_c, hazard_layers)
-    tfn_noham_risk_f = infrastructure_risk_overlay(tfn_noham_f, hazard_layers)
+    # Concatenate
+    tfn_noham_risk = pd.concat([tfn_noham_risk['c'], tfn_noham_risk['f']], ignore_index=True)
 
-    user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
+    cols_to_round = [col for col in tfn_noham_risk.columns if col not in ['link_id', 'geometry']]
+    tfn_noham_risk[cols_to_round] = tfn_noham_risk[cols_to_round].round(1)
+    tfn_noham_risk = tfn_noham_risk.to_crs(epsg=27700)
+    tfn_noham_risk.rename(columns={'link_id': 'id'}, inplace=True)
+    tfn_noham_risk.rename(columns={col: f"{col}_score" for col in cols_to_round}, inplace=True)
 
-    # Normalise user class totals together
-    uc_total_cols = [f"{uc}_total" for uc in user_classes]
-
-    # Combine current and future values for global min/max
-    combined_values = np.vstack([
-        tfn_noham_risk_c[uc_total_cols].values,
-        tfn_noham_risk_f[uc_total_cols].values
-    ])
-
-    scaler = MinMaxScaler(feature_range=(0, 100))
-    scaled_values = scaler.fit_transform(combined_values)
-
-    # Assign scaled values to dataframe
-    scaled_c = scaler.transform(tfn_noham_risk_c[uc_total_cols].values)
-    scaled_f = scaler.transform(tfn_noham_risk_f[uc_total_cols].values)
-
-    # Assign scaled values back with proper column names
-    tfn_noham_risk_c[[f"{uc}_demand_c" for uc in user_classes]] = scaled_c
-    tfn_noham_risk_f[[f"{uc}_demand_f" for uc in user_classes]] = scaled_f
-
-    # Normalise all vehicles total separately
-    combined_values = np.vstack([
-        tfn_noham_risk_c['all_vehs_total'].values.reshape(-1, 1),
-        tfn_noham_risk_f['all_vehs_total'].values.reshape(-1, 1)
-    ])
-
-    scaler = MinMaxScaler(feature_range=(0, 100))
-    scaled_values = scaler.fit_transform(combined_values)
-
-    # Assign scaled values to dataframe
-    scaled_c = scaler.transform(tfn_noham_risk_c['all_vehs_total'].values.reshape(-1, 1))
-    scaled_f = scaler.transform(tfn_noham_risk_f['all_vehs_total'].values.reshape(-1, 1))
-
-    # Assign scaled values back with proper column names
-    tfn_noham_risk_c['demand_c'] = scaled_c
-    tfn_noham_risk_f['demand_f'] = scaled_f
-
-    # Calculate impact metric for each user class
-    for uc in user_classes:
-        tfn_noham_risk_c[f'{uc}_impact_c'] = (
-                tfn_noham_risk_c[f'{uc}_demand_c'] * impact_weights['demand'] +
-                tfn_noham_risk_c['flood_risk_c'] * impact_weights['flood'] +
-                tfn_noham_risk_c['extreme_weather_risk_c'] * impact_weights['extreme_weather'] +
-                tfn_noham_risk_c['ground_stability_risk_c'] * impact_weights['ground_stability'] +
-                tfn_noham_risk_c['erosion_risk_c'] * impact_weights['erosion']
-        )
-
-        tfn_noham_risk_f[f'{uc}_impact_f'] = (
-                tfn_noham_risk_f[f'{uc}_demand_f'] * impact_weights['demand'] +
-                tfn_noham_risk_f['flood_risk_f'] * impact_weights['flood'] +
-                tfn_noham_risk_f['extreme_weather_risk_f'] * impact_weights['extreme_weather'] +
-                tfn_noham_risk_f['ground_stability_risk_f'] * impact_weights['ground_stability'] +
-                tfn_noham_risk_f['erosion_risk_f'] * impact_weights['erosion']
-        )
-
-        tfn_noham_risk_c['impact_c'] = (
-                tfn_noham_risk_c['demand_c'] * impact_weights['demand'] +
-                tfn_noham_risk_c['flood_risk_c'] * impact_weights['flood'] +
-                tfn_noham_risk_c['extreme_weather_risk_c'] * impact_weights['extreme_weather'] +
-                tfn_noham_risk_c['ground_stability_risk_c'] * impact_weights['ground_stability'] +
-                tfn_noham_risk_c['erosion_risk_c'] * impact_weights['erosion']
-        )
-
-        tfn_noham_risk_f['impact_f'] = (
-                tfn_noham_risk_f['demand_f'] * impact_weights['demand'] +
-                tfn_noham_risk_f['flood_risk_f'] * impact_weights['flood'] +
-                tfn_noham_risk_f['extreme_weather_risk_f'] * impact_weights['extreme_weather'] +
-                tfn_noham_risk_f['ground_stability_risk_f'] * impact_weights['ground_stability'] +
-                tfn_noham_risk_f['erosion_risk_f'] * impact_weights['erosion']
-        )
-
-        impact_cols_c = [f"{uc}_impact_c" for uc in user_classes] + ['impact_c']
-        impact_cols_f = [f"{uc}_impact_f" for uc in user_classes] + ['impact_f']
-
-        combined_values = np.vstack([
-            tfn_noham_risk_c[impact_cols_c].values,
-            tfn_noham_risk_f[impact_cols_f].values
-        ])
-
-        scaler = MinMaxScaler(feature_range=(0, 100))
-        scaler.fit(combined_values)
-
-        scaled_c = scaler.transform(tfn_noham_risk_c[impact_cols_c].values)
-        scaled_f = scaler.transform(tfn_noham_risk_f[impact_cols_f].values)
-
-        tfn_noham_risk_c[impact_cols_c] = scaled_c
-        tfn_noham_risk_f[impact_cols_f] = scaled_f
-
-        cols_to_round = [col for col in tfn_noham_risk_c.columns if col not in ['link_id', 'geometry']]
-        tfn_noham_risk_c[cols_to_round] = tfn_noham_risk_c[cols_to_round].round(1)
-
-        # Drop all raw demand and future hazards
-        tfn_noham_risk_c.drop(
-            columns=['uc1_total', 'uc2_total', 'uc3_total', 'uc4_total', 'uc5_total', 'all_vehs_total',
-                     'uc1_demand_c', 'uc2_demand_c', 'uc3_demand_c', 'uc4_demand_c', 'uc5_demand_c', 'demand_c',
-                     'heat_risk_f', 'cold_risk_f', 'drought_risk_f', 'storm_risk_f', 'extreme_weather_risk_f',
-                     'rofrs_risk_f', 'rofsw_risk_f', 'flood_risk_f', 'collapsible_deposits_risk_f',
-                     'compressible_ground_risk_f',
-                     'landslides_risk_f', 'running_sand_risk_f', 'shrink_swell_risk_f', 'soluble_rocks_risk_f',
-                     'shrink_swell_geoclimate_risk_f', 'ground_stability_risk_f', 'erosion_risk_f'], inplace=True)
-
-        tfn_noham_risk_c.drop_duplicates(subset=['geometry'], inplace=True)
-
-        tfn_noham_risk_c = tfn_noham_risk_c.to_crs(epsg=27700)
-
-        cols_to_round = [col for col in tfn_noham_risk_f.columns if col not in ['link_id', 'geometry']]
-        tfn_noham_risk_f[cols_to_round] = tfn_noham_risk_f[cols_to_round].round(1)
-
-        # Drop all raw demand and future hazards
-        tfn_noham_risk_f.drop(
-            columns=['uc1_total', 'uc2_total', 'uc3_total', 'uc4_total', 'uc5_total', 'all_vehs_total',
-                     'uc1_demand_f', 'uc2_demand_f', 'uc3_demand_f', 'uc4_demand_f', 'uc5_demand_f', 'demand_f',
-                     'heat_risk_c', 'cold_risk_c', 'drought_risk_c', 'storm_risk_c', 'extreme_weather_risk_c',
-                     'rofrs_risk_c', 'rofsw_risk_c', 'flood_risk_c', 'collapsible_deposits_risk_c',
-                     'compressible_ground_risk_c',
-                     'landslides_risk_c', 'running_sand_risk_c', 'shrink_swell_risk_c', 'soluble_rocks_risk_c',
-                     'shrink_swell_geoclimate_risk_c', 'ground_stability_risk_c', 'erosion_risk_c'], inplace=True)
-
-        tfn_noham_risk_f.drop_duplicates(subset=['geometry'], inplace=True)
-
-        tfn_noham_risk_f = tfn_noham_risk_f.to_crs(epsg=27700)
-
-        # Remove suffixes from risk columns
-        tfn_noham_risk_c.columns = [col.replace('_c', '') for col in tfn_noham_risk_c.columns]
-        tfn_noham_risk_f.columns = [col.replace('_f', '') for col in tfn_noham_risk_f.columns]
-
-        # Add scenario column
-        tfn_noham_risk_c['current_or_forecast'] = 'Current'
-        tfn_noham_risk_f['current_or_forecast'] = 'Forecast'
-
-        # Concatenate
-        tfn_noham_risk = pd.concat([tfn_noham_risk_c, tfn_noham_risk_f], ignore_index=True)
-
-        tfn_noham_risk = tfn_noham_risk[['link_id', 'current_or_forecast', 'geometry'] + risk_cols]
-
-        tfn_noham_risk.rename(columns={'link_id': 'id'}, inplace=True)
-        tfn_noham_risk.rename(columns={col: f"{col}_score" for col in risk_cols + ['impact']}, inplace=True)
-
-        split_csv_shapefile(tfn_noham_risk, 'id', 'NoHAM', 'tfn_noham_risk')
+    split_csv_shapefile(tfn_noham_risk, 'id', 'NoHAM', 'tfn_noham_risk')
 
 
 

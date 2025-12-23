@@ -5,7 +5,7 @@ to each hazard dataset in order to classify the raw data into actionable risk fa
 import pandas as pd
 import geopandas as gpd
 import numpy as np
-from shapely.geometry import Polygon, box
+from shapely.geometry import box
 from sklearn.preprocessing import MinMaxScaler
 from pathlib import Path
 from functools import reduce
@@ -30,6 +30,8 @@ FLOODING_MODEL_IN = HAZARDS_MODEL_IN / "Flooding"
 GROUND_STABILITY_MODEL_IN = HAZARDS_MODEL_IN / "Ground Stability"
 
 COASTAL_EROSION_MODEL_IN = HAZARDS_MODEL_IN / "Coastal Erosion"
+
+IMPACT_IN_PATH = MODEL_INPUT_PATH / "Impact"
 
 
 ### GENERAL FUNCTIONS
@@ -208,6 +210,14 @@ def overlay_normalise(gdf1, gdf2, risk_cols, combined_risk_name, weights):
 # FUNCTIONAL RULES
 
 def apply_functional_rules():
+    impact_weights = {
+        'demand': 0.5,  # Weight demand as half of impact score
+        'flood': 0.125,  # Weight hazards as 0.125 each to make up half
+        'extreme_weather': 0.125,
+        'ground_stability': 0.125,
+        'erosion': 0.125
+    }
+
     boundary = read_boundary_path(
         OTHER_RAW_IN / "TfN Boundary" / "Transport_for_the_north_boundary_2020_generalised.shp")
 
@@ -215,6 +225,9 @@ def apply_functional_rules():
     flooding_index(boundary)
     ground_stability_index()
     coastal_erosion_index()
+
+    noham_impact_index(impact_weights)
+    freight_impact_index(impact_weights)
 
 
 ## HAZARDS
@@ -563,5 +576,119 @@ def coastal_erosion_index():
 
     write_to_file(tfn_coastal_erosion_risk,
                   MODEL_INTERIM_OUTPUT_PATH / "TfN Coastal Erosion Risk" / "tfn_coastal_erosion_risk.shp")
+
+## IMPACT
+
+### NOHAM
+
+def noham_impact_index(impact_weights):
+    tfn_noham_c = gpd.read_file(IMPACT_IN_PATH / "TfN NoHAM Flows" / "2023" / "tfn_noham_net_flows_c.gpkg")
+    tfn_noham_f = gpd.read_file(IMPACT_IN_PATH / "TfN NoHAM Flows" / "2048" / "tfn_noham_net_flows_f.gpkg")
+
+    user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
+
+    # Normalise user class demand together
+    tfn_noham_c, tfn_noham_f = normalise_uc_demand(tfn_noham_c, tfn_noham_f, user_classes)
+
+    # Normalise total demand separately
+    tfn_noham_c, tfn_noham_f = normalise_total_col(tfn_noham_c, tfn_noham_f, 'all_vehs_total', 'demand')
+
+    # Calculate impact scores
+    tfn_noham_c, tfn_noham_f = calculate_noham_impact(tfn_noham_c, tfn_noham_f, user_classes, impact_weights)
+
+    impact_cols_c = [f"{uc}_impact_c" for uc in user_classes] + ['impact_c']
+    impact_cols_f = [f"{uc}_impact_f" for uc in user_classes] + ['impact_f']
+
+    tfn_noham_c, tfn_noham_f = normalise_total_cols(tfn_noham_c, tfn_noham_f, impact_cols_c, impact_cols_f)
+
+    tfn_noham_c = tfn_noham_c[['link_id', 'geometry'] + impact_cols_c]
+    tfn_noham_f = tfn_noham_f[['link_id', 'geometry'] + impact_cols_f]
+
+    write_to_file(tfn_noham_c, MODEL_INTERIM_OUTPUT_PATH / "TfN NoHAM Flows" / "tfn_noham_c.gpkg", "GPKG")
+    write_to_file(tfn_noham_f, MODEL_INTERIM_OUTPUT_PATH / "TfN NoHAM Flows" / "tfn_noham_f.gpkg", "GPKG")
+
+def normalise_uc_demand(df_c, df_f, user_classes):
+    uc_total_cols = [f"{uc}_total" for uc in user_classes]
+    combined_values = np.vstack([df_c[uc_total_cols].values, df_f[uc_total_cols].values])
+    scaler = MinMaxScaler(feature_range=(0, 100))
+    scaler.fit(combined_values)
+    for df, suffix in [(df_c, 'c'), (df_f, 'f')]:
+        scaled = scaler.transform(df[uc_total_cols].values)
+        df[[f"{uc}_demand_{suffix}" for uc in user_classes]] = scaled
+    return df_c, df_f
+
+def normalise_total_col(df_c, df_f, old_column, new_column):
+    # Normalise all vehicles total separately
+    combined_values = np.vstack(
+        [df_c[old_column].values.reshape(-1, 1),df_f[old_column].values.reshape(-1, 1)])
+    scaler = MinMaxScaler(feature_range=(0, 100))
+    scaler.fit(combined_values)
+    for df, suffix in [(df_c, 'c'), (df_f, 'f')]:
+        scaled = scaler.transform(df[old_column].values.reshape(-1, 1))
+        df[f'{new_column}_{suffix}'] = scaled
+    return df_c, df_f
+
+def normalise_total_cols(df_c, df_f, cols_c, cols_f):
+    combined_values = np.vstack([df_c[cols_c].values, df_f[cols_f].values])
+    scaler = MinMaxScaler(feature_range=(0, 100))
+    scaler.fit(combined_values)
+    for df, cols in [(df_c, cols_c), (df_f, cols_f)]:
+        scaled = scaler.transform(df[cols].values)
+        df[cols] = scaled
+    return df_c, df_f
+
+def calculate_noham_impact(df_c, df_f, user_classes, impact_weights):
+    # Calculate impact metric for each user class
+    for uc in user_classes:
+        for df, tp in [(df_c, 'c'), (df_f, 'f')]:
+            df[f'{uc}_impact_{tp}'] = (
+                df[f'{uc}_demand_{tp}'] * impact_weights['demand'] +
+                df[f'flood_risk_{tp}'] * impact_weights['flood'] +
+                df[f'extreme_weather_risk_{tp}'] * impact_weights['extreme_weather'] +
+                df[f'ground_stability_risk_{tp}'] * impact_weights['ground_stability'] +
+                df[f'erosion_risk_{tp}'] * impact_weights['erosion']
+            )
+
+    for df, tp in [(df_c, 'c'), (df_f, 'f')]:
+        df[f'impact_{tp}'] = (
+            df[f'demand_{tp}'] * impact_weights['demand'] +
+            df[f'flood_risk_{tp}'] * impact_weights['flood'] +
+            df[f'extreme_weather_risk_{tp}'] * impact_weights['extreme_weather'] +
+            df[f'ground_stability_risk_{tp}'] * impact_weights['ground_stability'] +
+            df[f'erosion_risk_{tp}'] * impact_weights['erosion']
+        )
+
+    return df_c, df_f
+
+### FREIGHT RAIL
+
+def freight_impact_index(impact_weights):
+    tfn_freight_network_demand = gpd.read_file(IMPACT_IN_PATH / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
+
+    tfn_freight_network_demand = min_max_scaling_pair(
+        tfn_freight_network_demand, [('2022_23_total', '2050_51 sc2_total')])
+
+    tfn_freight_network_demand.rename(
+        columns={'2022_23_total': 'demand_c','2050_51 sc2_total': 'demand_f'}, inplace=True)
+
+    tfn_freight_network_impact = calculate_freight_impact(tfn_freight_network_demand, impact_weights)
+
+    tfn_freight_network_impact = min_max_scaling_pair(tfn_freight_network_impact, [('impact_c', 'impact_f')])
+
+    write_to_file(
+        tfn_freight_network_impact, MODEL_INTERIM_OUTPUT_PATH / "TfN Freight Flows" / "tfn_freight_network_impact.gpkg")
+
+def calculate_freight_impact(df, impact_weights):
+    for tp in ['c', 'f']:
+        df[f'impact_{tp}'] = (
+            df[f'demand_{tp}'] * impact_weights['demand'] +
+            df[f'flood_risk_{tp}'] * impact_weights['flood'] +
+            df[f'extreme_weather_risk_{tp}'] * impact_weights['extreme_weather'] +
+            df[f'ground_stability_risk_{tp}'] * impact_weights['ground_stability'] +
+            df[f'erosion_risk_{tp}'] * impact_weights['erosion']
+        )
+
+    return df
+
 
 
