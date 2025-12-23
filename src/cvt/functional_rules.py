@@ -1,5 +1,7 @@
-'''This script is for applying functional rules
-to each hazard dataset in order to classify the raw data into actionable risk factors'''
+'''
+This script is for applying functional rules
+to each hazard dataset in order to classify the raw data into actionable risk factors
+'''
 
 ### LOAD LIBRARIES
 import pandas as pd
@@ -7,31 +9,14 @@ import geopandas as gpd
 import numpy as np
 from shapely.geometry import box
 from sklearn.preprocessing import MinMaxScaler
-from pathlib import Path
 from functools import reduce
 
-from data_cleaning import read_boundary_path, explode_to_polygons, clip_to_boundary, write_to_file
+from data_cleaning import explode_to_polygons, clip_to_boundary, write_to_file
 
-### FILE PATHS
-RAW_INPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "raw inputs"
-MODEL_INPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model inputs"
-MODEL_INTERIM_OUTPUT_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model intermim outputs"
-
-INFRASTRUCTURE_RAW_IN = RAW_INPUT_PATH / "Infrastructure"
-
-OTHER_RAW_IN = INFRASTRUCTURE_RAW_IN / "Other"
-
-HAZARDS_MODEL_IN = MODEL_INPUT_PATH / "Hazards"
-
-EXTREME_WEATHER_MODEL_IN = HAZARDS_MODEL_IN / "Extreme Weather"
-
-FLOODING_MODEL_IN = HAZARDS_MODEL_IN / "Flooding"
-
-GROUND_STABILITY_MODEL_IN = HAZARDS_MODEL_IN / "Ground Stability"
-
-COASTAL_EROSION_MODEL_IN = HAZARDS_MODEL_IN / "Coastal Erosion"
-
-IMPACT_IN_PATH = MODEL_INPUT_PATH / "Impact"
+from file_paths import (MODEL_INPUT, MODEL_INTERIM_OUTPUT,
+                        EXTREME_WEATHER_MODEL_IN, FLOODING_MODEL_IN, GROUND_STABILITY_MODEL_IN, COASTAL_EROSION_MODEL_IN,
+                        IMPACT_MODEL_IN
+                        )
 
 
 ### GENERAL FUNCTIONS
@@ -209,7 +194,7 @@ def overlay_normalise(gdf1, gdf2, risk_cols, combined_risk_name, weights):
 
 # FUNCTIONAL RULES
 
-def apply_functional_rules():
+def apply_functional_rules(boundary_path):
     impact_weights = {
         'demand': 0.5,  # Weight demand as half of impact score
         'flood': 0.125,  # Weight hazards as 0.125 each to make up half
@@ -218,8 +203,7 @@ def apply_functional_rules():
         'erosion': 0.125
     }
 
-    boundary = read_boundary_path(
-        OTHER_RAW_IN / "TfN Boundary" / "Transport_for_the_north_boundary_2020_generalised.shp")
+    boundary = gpd.read_file(boundary_path)
 
     extreme_weather_index()
     flooding_index(boundary)
@@ -235,7 +219,7 @@ def apply_functional_rules():
 ### EXTREME WEATHER
 
 def extreme_weather_index():
-    tfn_common_grid = gpd.read_file(MODEL_INPUT_PATH / "Other" / "TfN Common Grid" / "tfn_common_grid.shp")
+    tfn_common_grid = gpd.read_file(MODEL_INPUT / "Other" / "TfN Common Grid" / "tfn_common_grid.shp")
 
     tfn_extreme_heat = extreme_heat_index(tfn_common_grid)
     tfn_extreme_cold = extreme_cold_index(tfn_common_grid)
@@ -285,7 +269,7 @@ def extreme_weather_index():
     tfn_extreme_weather_risk = gpd.GeoDataFrame(tfn_extreme_weather_risk, geometry='geometry')
 
     write_to_file(tfn_extreme_weather_risk,
-                  MODEL_INTERIM_OUTPUT_PATH / "TfN Extreme Weather Risk" / "tfn_extreme_weather_risk.shp")
+                  MODEL_INTERIM_OUTPUT / "TfN Extreme Weather Risk" / "tfn_extreme_weather_risk.shp")
 
 def filter_out_small_geometries(gdf):
     gdf['area'] = gdf.geometry.area
@@ -421,7 +405,7 @@ def storm_index():
 
 
     tfn_storm_risk = calculate_composite_score(
-        tfn_storm_risk, {'wind_spd_risk': 0.3,'avg_excd': 0.2,'pr_w': 0.15,'rain_days': 0.15, 'wdr': 0.2})
+        tfn_storm_risk, {'wind_spd_risk': 0.3,'avg_excd': 0.2,'pr_w': 0.15,'rain_days': 0.15, 'wdr': 0.2}, 'storm_risk')
 
     tfn_storm_risk = min_max_scaling_pair(tfn_storm_risk, [('storm_risk_c', 'storm_risk_f')])
 
@@ -457,13 +441,13 @@ def flooding_index(boundary):
 
     tfn_flood_risk = min_max_scaling_pair(tfn_flood_risk, [('flood_risk_c', 'flood_risk_f')])
 
-    write_to_file(tfn_flood_risk, MODEL_INTERIM_OUTPUT_PATH / "TfN Flood Risk" / "tfn_flood_risk.gpkg", "GPKG")
+    write_to_file(tfn_flood_risk, MODEL_INTERIM_OUTPUT / "TfN Flood Risk" / "tfn_flood_risk.gpkg", "GPKG")
 
 def create_flood_grid(size_m, boundary):
     bounds = boundary.total_bounds
     grid = create_grid(bounds, size_m)
     flood_grid = clip_to_boundary(grid, boundary)
-    write_to_file(flood_grid, MODEL_INTERIM_OUTPUT_PATH / "Other" / "flood_grid.shp")
+    write_to_file(flood_grid, MODEL_INTERIM_OUTPUT / "Other" / "flood_grid.shp")
     return flood_grid
 
 def process_flood_layer(flood_grid, file_path, risk_column, risk_score_map):
@@ -486,7 +470,7 @@ def upscale_to_grid(risk_score_map, flood_grid):
             result = process_flood_layer(result, FLOODING_MODEL_IN / folder / file, risk_col, risk_score_map)
 
         write_to_file(
-            result, MODEL_INTERIM_OUTPUT_PATH / "TfN Flood Risk" / f"tfn_flood_risk_{scenario[0]}.gpkg", "GPKG")
+            result, MODEL_INTERIM_OUTPUT / "TfN Flood Risk" / f"tfn_flood_risk_{scenario[0]}.gpkg", "GPKG")
         results.append(result)
 
     return results[0], results[1]
@@ -548,7 +532,7 @@ def ground_stability_index():
         tfn_ground_stability, [('ground_stability_risk_c', 'ground_stability_risk_f')])
 
     write_to_file(tfn_ground_stability,
-                  MODEL_INTERIM_OUTPUT_PATH / "TfN Ground Stability Risk" / "tfn_ground_stability_risk.gpkg", "GPKG")
+                  MODEL_INTERIM_OUTPUT / "TfN Ground Stability Risk" / "tfn_ground_stability_risk.gpkg", "GPKG")
 
 ### COASTAL EROSION
 
@@ -575,15 +559,15 @@ def coastal_erosion_index():
     tfn_coastal_erosion_risk = tfn_coastal_erosion_risk[['erosion_c', 'erosion_f', 'geometry']]
 
     write_to_file(tfn_coastal_erosion_risk,
-                  MODEL_INTERIM_OUTPUT_PATH / "TfN Coastal Erosion Risk" / "tfn_coastal_erosion_risk.shp")
+                  MODEL_INTERIM_OUTPUT / "TfN Coastal Erosion Risk" / "tfn_coastal_erosion_risk.shp")
 
 ## IMPACT
 
 ### NOHAM
 
 def noham_impact_index(impact_weights):
-    tfn_noham_c = gpd.read_file(IMPACT_IN_PATH / "TfN NoHAM Flows" / "2023" / "tfn_noham_net_flows_c.gpkg")
-    tfn_noham_f = gpd.read_file(IMPACT_IN_PATH / "TfN NoHAM Flows" / "2048" / "tfn_noham_net_flows_f.gpkg")
+    tfn_noham_c = gpd.read_file(IMPACT_MODEL_IN / "TfN NoHAM Flows" / "2023" / "tfn_noham_net_flows_c.gpkg")
+    tfn_noham_f = gpd.read_file(IMPACT_MODEL_IN / "TfN NoHAM Flows" / "2048" / "tfn_noham_net_flows_f.gpkg")
 
     user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
 
@@ -604,8 +588,8 @@ def noham_impact_index(impact_weights):
     tfn_noham_c = tfn_noham_c[['link_id', 'geometry'] + impact_cols_c]
     tfn_noham_f = tfn_noham_f[['link_id', 'geometry'] + impact_cols_f]
 
-    write_to_file(tfn_noham_c, MODEL_INTERIM_OUTPUT_PATH / "TfN NoHAM Flows" / "tfn_noham_c.gpkg", "GPKG")
-    write_to_file(tfn_noham_f, MODEL_INTERIM_OUTPUT_PATH / "TfN NoHAM Flows" / "tfn_noham_f.gpkg", "GPKG")
+    write_to_file(tfn_noham_c, MODEL_INTERIM_OUTPUT / "TfN NoHAM Flows" / "tfn_noham_c.gpkg", "GPKG")
+    write_to_file(tfn_noham_f, MODEL_INTERIM_OUTPUT / "TfN NoHAM Flows" / "tfn_noham_f.gpkg", "GPKG")
 
 def normalise_uc_demand(df_c, df_f, user_classes):
     uc_total_cols = [f"{uc}_total" for uc in user_classes]
@@ -663,7 +647,7 @@ def calculate_noham_impact(df_c, df_f, user_classes, impact_weights):
 ### FREIGHT RAIL
 
 def freight_impact_index(impact_weights):
-    tfn_freight_network_demand = gpd.read_file(IMPACT_IN_PATH / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
+    tfn_freight_network_demand = gpd.read_file(IMPACT_MODEL_IN / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
 
     tfn_freight_network_demand = min_max_scaling_pair(
         tfn_freight_network_demand, [('2022_23_total', '2050_51 sc2_total')])
@@ -676,7 +660,7 @@ def freight_impact_index(impact_weights):
     tfn_freight_network_impact = min_max_scaling_pair(tfn_freight_network_impact, [('impact_c', 'impact_f')])
 
     write_to_file(
-        tfn_freight_network_impact, MODEL_INTERIM_OUTPUT_PATH / "TfN Freight Flows" / "tfn_freight_network_impact.gpkg")
+        tfn_freight_network_impact, MODEL_INTERIM_OUTPUT / "TfN Freight Flows" / "tfn_freight_network_impact.gpkg")
 
 def calculate_freight_impact(df, impact_weights):
     for tp in ['c', 'f']:
