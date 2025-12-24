@@ -1,3 +1,7 @@
+"""
+Main script, which runs the entire model
+"""
+
 from data_cleaning import data_cleaning
 from functional_rules import apply_functional_rules
 from layering import layering
@@ -16,6 +20,7 @@ def main():
     run_functional_rules = False
     run_layering = False
 
+    # Path to STB boundary
     boundary_path = RAW_INPUT / "Other" / "TfN Boundary" / "Transport_for_the_north_boundary_2020_generalised.shp"
 
     # Run data cleaning
@@ -34,6 +39,6 @@ def main():
 if __name__ == "__main__":
     log = logging.getLogger('__main__')
     log.setLevel(logging.DEBUG)
-    details = ToolDetails("cvt", "1.0.0")
+    details = ToolDetails("cvt", "1.0.0", full_version=None)
     with LogHelper(__package__, details, log_file=LOG_PATH):
         main()

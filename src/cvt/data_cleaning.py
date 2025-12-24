@@ -1,4 +1,6 @@
-'''This script will take raw input data and clean it ready for model input'''
+"""
+Cleans raw input data to prepare it for input into the model
+"""
 
 ### LOAD LIBRARIES
 import pandas as pd
@@ -659,6 +661,7 @@ def extract_gdb_file(code, number, flood_data, version, cc):
         return None
 
 def read_gdb(code, number, file_name, flood_data, version, cc):
+    """Reads first layer of flood gdb file"""
     base_path = FLOODING_RAW_IN / flood_data / code
 
     if cc == True:
@@ -694,6 +697,7 @@ def extract_flood_data(code_number_map):
             extract_gdb_file(code, number, "RoFSW", "v202509", False)
 
 def clean_flood(file_name, flood_type, version, boundary, out_path, cc, code_number_map):
+    """Reads and cleans flood data, then writes to file"""
     gdfs = []
     for code in code_number_map.keys():
         for number in code_number_map[code]:
@@ -711,10 +715,12 @@ def clean_flood(file_name, flood_type, version, boundary, out_path, cc, code_num
 ### GROUND STABILITY
 
 def clean_ground_stability(boundary):
+    """Cleans ground stability data ready for analysis"""
     clean_geosure(f"zip://{GROUND_STABILITY_RAW_IN / "GeoSureHexGrids.zip"}!/GeoSureHexGrids/Data", boundary)
     clean_geoclimate(GROUND_STABILITY_RAW_IN / "GeoClimateUKCP18OpenData" / "GeoclimateUKCP18_Open", boundary)
 
 def clean_geosure(path, boundary):
+    """Cleans GeoSureHexGrids data, merges by nearest centroids, then writes to file"""
     geosure_layers = {
         'cd': gpd.read_file(path + "/GB_Hex_5km_GS_CollapsibleDeposits_v8.shp"),
         'cg': gpd.read_file(path + "/GB_Hex_5km_GS_CompressibleGround_v8.shp"),
@@ -744,6 +750,7 @@ def clean_geosure(path, boundary):
     write_to_file(tfn_geosure, GROUND_STABILITY_MODEL_IN / "TfN GeoSure" / "tfn_geosure.shp")
 
 def clean_geoclimate(path, boundary):
+    """Reads and cleans GeoClimate Shrink-Swell data, then writes to file"""
     for year in ['2030', '2070']:
         gdf = gpd.read_file(path / f"GeoClimateUKCP18_ShrinkSwell_{year}_Average_Open.shp")
         gdf.rename(columns={'CLASS': 'ss_geo_risk'}, inplace=True)
@@ -755,12 +762,14 @@ def clean_geoclimate(path, boundary):
 ### COASTAL EROSION
 
 def clean_coastal_erosion(boundary):
+    """Cleans coastal erosion data ready for analysis"""
     clean_giz(f"zip://{COASTAL_EROSION_RAW_IN / "National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.shp.zip"}"
               "!NCERM_Ground_Instability_Zone.shp", boundary)
     clean_ncerm(f"zip://{COASTAL_EROSION_RAW_IN / "National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.shp.zip"}!",
                 boundary)
 
 def clean_giz(path, boundary):
+    """Cleans Ground Instability Zones data from NCERM, then writes to file"""
     ncerm_giz = gpd.read_file(path)
     ncerm_giz = ncerm_giz[['smp_no', 'geometry']]
     tfn_ncerm_giz = clip_to_boundary(ncerm_giz, boundary)
@@ -768,6 +777,7 @@ def clean_giz(path, boundary):
     write_to_file(tfn_ncerm_giz, COASTAL_EROSION_MODEL_IN / "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.shp")
 
 def clean_ncerm(path, boundary):
+    """Cleans erosion data from NCERM for 2055, and 2105, then writes to file"""
     for year in ['2055', '2105']:
         gdf = gpd.read_file(path + f"NCERM_SMP_{year}_70CC.shp")
         gdf = gdf[['smp_name', 'geometry']]
@@ -778,24 +788,28 @@ def clean_ncerm(path, boundary):
 ## IMPACT
 
 def clean_impact(boundary):
+    """Cleans impact datasets ready for analysis"""
     clean_freight_demand(boundary)
     clean_noham_flows()
 
 ### FREIGHT
 
 def clean_freight_demand(boundary):
+    """Cleans freight demand data ready for analysis"""
     tfn_freight_network_demand = read_freight_demand(IMPACT_RAW_IN / "Freight" / "rail_freight_network_demand.gpkg", boundary)
     tfn_os_freight_network_demand = map_freight_networks(tfn_freight_network_demand,
                          RAIL_MODEL_IN / "TfN OS Freight Rail" / "tfn_freight_rail_links.shp")
     write_to_file(tfn_os_freight_network_demand, IMPACT_MODEL_IN / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
 
 def read_freight_demand(path, boundary):
+    """Reads and cleans freight demand data, and returns as GeoDataFrame"""
     freight_network_demand = gpd.read_file(path)
     freight_network_demand = freight_network_demand[['dij_id', '2022_23_total', '2050_51 sc2_total', 'geometry']]
     tfn_freight_network_demand = clip_to_boundary(freight_network_demand, boundary)
     return tfn_freight_network_demand
 
 def map_freight_networks(tfn_freight_network_demand, os_path):
+    """Maps freight demand data onto the OS freight network using nearest spatial join, then cleans and returns"""
     tfn_os_freight_rail = gpd.read_file(os_path)
     tfn_os_freight_rail = tfn_os_freight_rail.to_crs(tfn_freight_network_demand.crs)
     tfn_os_freight_network_demand = gpd.sjoin_nearest(
@@ -813,15 +827,9 @@ def map_freight_networks(tfn_freight_network_demand, os_path):
 ### NoHAM
 
 def clean_noham_flows():
+    """Cleans NoHAM flows data, aggregates link flows by year, merges with the network, then write to file"""
     link_flows = aggregate_link_flows_year(IMPACT_RAW_IN / "NoHAM Link Flows" / "input h5s.7z",
                               IMPACT_RAW_IN / "NoHAM Link Flows" / "h5 files")
-
-    tfn_noham_flows = link_flows['2023'].merge(
-        link_flows['2048'],
-        on='link_id',
-        suffixes=('_c', '_f'),  # _c for current, _f for future
-        how='outer'  # Keep all rows, fill missing with NA
-    )
 
     tfn_noham_flows_c = link_flows['2023']
     tfn_noham_flows_f = link_flows['2048']
@@ -837,7 +845,7 @@ def clean_noham_flows():
                   IMPACT_MODEL_IN / "TfN NoHAM Flows" / "2048" / "tfn_noham_net_flows_f.gpkg", driver="GPKG")
 
 def read_noham_h5(year, time_period, user_class, noham_path, output_path, extract):
-    '''Reads NoHAM h5 files and extracts the link, routes, and od's DataFrames'''
+    """Reads NoHAM h5 files and extracts the link, routes, and od's DataFrames"""
     if extract == True:
         with py7zr.SevenZipFile(noham_path, mode='r') as archive:
             archive.extract(
@@ -884,7 +892,7 @@ def read_noham_h5(year, time_period, user_class, noham_path, output_path, extrac
     return od_df, route_df, link_df
 
 def aggregate_link_flows(ods, routes, links):
-    '''Takes NoHAM ODs, Routes, and Links to create aggregated link flows DataFrame'''
+    """Takes NoHAM od's, routes, and links to create aggregated link flows DataFrame"""
     # Flatten OD and Route data
     od_flat = ods.reset_index()[['route', 'abs_demand']]
     route_flat = routes.reset_index()[['route', 'link_id']]
@@ -900,6 +908,7 @@ def aggregate_link_flows(ods, routes, links):
     return link_flows
 
 def aggregate_link_flows_year(noham_path, output_path):
+    """Aggregates link flows for each year, time period, and user class"""
     years = ["2023", "2048"]
     time_periods = ["TS1", "TS2", "TS3"]
     user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
@@ -952,6 +961,7 @@ def aggregate_link_flows_year(noham_path, output_path):
         return link_flows
 
 def merge_noham_flow_network(tfn_noham_flows, noham_path):
+    """Merges NoHAM flows onto road network, then returns as GeoDataFrame"""
     tfn_noham_link = gpd.read_file(noham_path)
     tfn_noham_net_flows = pd.merge(
         tfn_noham_link,

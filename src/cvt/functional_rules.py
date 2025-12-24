@@ -1,7 +1,6 @@
-'''
-This script is for applying functional rules
-to each hazard dataset in order to classify the raw data into actionable risk factors
-'''
+"""
+Apply functional rules to hazard and impact datasets, and normalise, in order to classify into actionable risk factors
+"""
 
 ### LOAD LIBRARIES
 import pandas as pd
@@ -22,6 +21,7 @@ from file_paths import (MODEL_INPUT, MODEL_INTERIM_OUTPUT,
 ### GENERAL FUNCTIONS
 
 def spatial_smooth_zero_grids(gdf, variables):
+    """Applies spatial smoothing to GeoDataFrame on given variables"""
     neighbours = gpd.sjoin(gdf, gdf, how='left',predicate='touches') # Find neighbouring grids
 
     # Calculate the average value of the neighbouring grids
@@ -37,6 +37,7 @@ def spatial_smooth_zero_grids(gdf, variables):
     return gdf
 
 def iterative_spatial_smoothing(gdf, variables, max_iterations=10):
+    """Iteratively applies spatial smoothing to GeoDataFrame on given variables"""
     prev_na_count = None
 
     for i in range(max_iterations):
@@ -74,7 +75,7 @@ def iterative_spatial_smoothing(gdf, variables, max_iterations=10):
     return gdf
 
 def create_grid(bounds, cell_size):
-    '''Takes bounds and a cell size and returns a grid of the given size within the bounds'''
+    """Takes bounds and a cell size and returns a grid of the given size within the bounds"""
     xmin, ymin, xmax, ymax = bounds
     rows = int(np.ceil((ymax - ymin) / cell_size))
     cols = int(np.ceil((xmax - xmin) / cell_size))
@@ -89,12 +90,14 @@ def create_grid(bounds, cell_size):
     return gpd.GeoDataFrame(geometry=grid_cells, crs="EPSG:27700")
 
 def merge_on_key(dfs, grid, key):
+    """Merges a list of dataframes into a single dataframe on a given common key, then merges onto a common grid"""
     merged = reduce(lambda left, right: pd.merge(left, right, on=key), dfs)
     merged_df = pd.merge(merged, grid, on=key)
     merged_gdf = gpd.GeoDataFrame(merged_df, geometry='geometry', crs=grid.crs)
     return merged_gdf
 
 def calculate_risk_threshold(df, base_col, output_col, threshold, invert=False):
+    """Calculates risk level of a given column based on a threshold"""
     for tp in ['c', 'f']:
         col_name = f'{base_col}_{tp}'
         out_name = f'{output_col}_{tp}'
@@ -107,6 +110,7 @@ def calculate_risk_threshold(df, base_col, output_col, threshold, invert=False):
         return df
 
 def calculate_composite_score(df, weights, output_col):
+    """Calculates composite score given a dataframe with variables and corresponding weights"""
     # Compute composite scores
     w = pd.Series(weights, dtype=float)
 
@@ -118,6 +122,7 @@ def calculate_composite_score(df, weights, output_col):
     return df
 
 def min_max_scaling_pair(gdf, pairs, feature_range=(0,100)):
+    """Takes a list of paired variables, and normalises them between 0 and 100 using Min-Max scaling"""
     # Use min-max scaling on the column pairs
     for col_c, col_f in pairs:
         # Combine both columns into one array for global min/max
@@ -133,6 +138,7 @@ def min_max_scaling_pair(gdf, pairs, feature_range=(0,100)):
     return gdf
 
 def area_weighted_flood_assignment(grid, flood_gdf, risk_column):
+    """Assigns flood risk to grid squares using an area-weighted average"""
     # Spatial join to find intersecting polygons
     flood_risk_join = gpd.sjoin(
         grid,
@@ -171,6 +177,7 @@ def area_weighted_flood_assignment(grid, flood_gdf, risk_column):
     return grid
 
 def overlay_normalise(gdf1, gdf2, risk_cols, combined_risk_name, weights):
+    """Overlays two GeoDataFrames, then normalises and calculates a combined risk score"""
     # Overlay two gdf's
     gdf1 = gdf1.to_crs(gdf2.crs)
     composite_gdf = gpd.overlay(gdf2, gdf1, how="union")
@@ -195,6 +202,7 @@ def overlay_normalise(gdf1, gdf2, risk_cols, combined_risk_name, weights):
 # FUNCTIONAL RULES
 
 def apply_functional_rules(boundary_path):
+    """Applies functional rules to model input data"""
     impact_weights = {
         'demand': 0.5,  # Weight demand as half of impact score
         'flood': 0.125,  # Weight hazards as 0.125 each to make up half
@@ -210,15 +218,12 @@ def apply_functional_rules(boundary_path):
     ground_stability_index()
     coastal_erosion_index()
 
-    noham_impact_index(impact_weights)
-    freight_impact_index(impact_weights)
-
-
 ## HAZARDS
 
 ### EXTREME WEATHER
 
 def extreme_weather_index():
+    """Combines extreme heat, extreme cold, drought and storm indexes into a single index"""
     tfn_common_grid = gpd.read_file(MODEL_INPUT / "Other" / "TfN Common Grid" / "tfn_common_grid.shp")
 
     tfn_extreme_heat = extreme_heat_index(tfn_common_grid)
@@ -249,7 +254,7 @@ def extreme_weather_index():
                                               how='union'
                                               )
 
-    tfn_extreme_weather_overlay = filter_out_small_geometries(tfn_extreme_weather_overlay)
+    tfn_extreme_weather_overlay = filter_out_small_geometries(tfn_extreme_weather_overlay, 0.035)
 
     tfn_extreme_weather_risk = iterative_spatial_smoothing(
         tfn_extreme_weather_overlay, ['heat_risk_c', 'heat_risk_f', 'cold_risk_c', 'cold_risk_f',
@@ -271,17 +276,18 @@ def extreme_weather_index():
     write_to_file(tfn_extreme_weather_risk,
                   MODEL_INTERIM_OUTPUT / "TfN Extreme Weather Risk" / "tfn_extreme_weather_risk.shp")
 
-def filter_out_small_geometries(gdf):
+def filter_out_small_geometries(gdf, pct_of_median):
+    """Filters out geometries that have an area less than a given percentage of the median area"""
     gdf['area'] = gdf.geometry.area
-    threshold = gdf['area'].median() * 0.035 # Threshold: 3.5% of median
+    threshold = gdf['area'].median() * pct_of_median # Threshold: 3.5% of median
     gdf = gdf[gdf['area'] > threshold] # Filter out tiny geometries
     gdf.drop(columns=['area'], inplace=True)
     return gdf
 
-
 #### EXTREME HEAT
 
 def extreme_heat_index(common_grid):
+    """Combines several datasets into a single extreme heat index by merging on their common grid"""
     tfn_temp_max = pd.read_csv(
         EXTREME_WEATHER_MODEL_IN / "TfN Summer Max Temperature Change Projections" / "tfn_temp_max.csv")
     tfn_hsd = pd.read_csv(EXTREME_WEATHER_MODEL_IN / "TfN Hot Summer Days Projections" / "tfn_hot_days.csv")
@@ -294,7 +300,7 @@ def extreme_heat_index(common_grid):
 
     tfn_extreme_heat = min_max_scaling_pair(
         tfn_extreme_heat,
-        [('tasmax_risk_c', 'tasmax_risk_f'), ('hsd_c', 'hsd_future'),('esd_c', 'esd_future')]
+        [('tasmax_risk_c', 'tasmax_risk_f'), ('hsd_c', 'hsd_f'),('esd_c', 'esd_f')]
     )
 
     tfn_extreme_heat = calculate_composite_score(
@@ -309,6 +315,7 @@ def extreme_heat_index(common_grid):
 #### EXTREME COLD
 
 def extreme_cold_index(common_grid):
+    """Combines several datasets into a single extreme cold index by merging on their common grid"""
     tfn_temp_min = pd.read_csv(
         EXTREME_WEATHER_MODEL_IN / "TfN Winter Min Temperature Change Projections" / "tfn_temp_min.csv")
     tfn_frost = pd.read_csv(EXTREME_WEATHER_MODEL_IN / "TfN Frost Days Projections" / "tfn_frost_days.csv")
@@ -334,6 +341,8 @@ def extreme_cold_index(common_grid):
 #### DROUGHT
 
 def drought_index():
+    """Combines several datasets into a single drought index using a spatial overlay and spatial smoothing, before
+    normalising and calculating the composite score"""
     tfn_drought = gpd.read_file(EXTREME_WEATHER_MODEL_IN / "TfN Drought Severity Index" / "tfn_drought_index.shp")
     tfn_precip_sum = gpd.read_file(
         EXTREME_WEATHER_MODEL_IN / "TfN Summer Precipitation Change Projections" / "tfn_precip_sum.shp")
@@ -366,6 +375,8 @@ def drought_index():
 #### STORMS
 
 def storm_index():
+    """Combines several datasets into a single storm index using a spatial overlay and spatial smoothing, before
+    normalising and calculating the composite score"""
     tfn_precip_win = gpd.read_file(
         EXTREME_WEATHER_MODEL_IN / "TfN Winter Precipitation Change Projections" / "tfn_precip_win.shp")
     tfn_rain_days = gpd.read_file(EXTREME_WEATHER_MODEL_IN / "TfN 10mm Rain Days 1991-2020" / "tfn_rain_days.shp")
@@ -384,17 +395,13 @@ def storm_index():
     tfn_storm_overlay = tfn_storm_overlay[['rain_days_c', 'rain_days_f','pr_w_c', 'pr_w_f','p99_c', 'p99_f','avg_excd_c',
                                            'avg_excd_f','wdr_c', 'wdr_f','geometry']]
 
-    tfn_storm_overlay['area'] = tfn_storm_overlay.geometry.area
-    threshold = tfn_storm_overlay['area'].median() * 0.01  # Threshold: 1% of median
-    tfn_storm_overlay = tfn_storm_overlay[tfn_storm_overlay['area'] > threshold]  # Filter out tiny geometries
+    tfn_storm_overlay = filter_out_small_geometries(tfn_storm_overlay, 0.01)
 
     tfn_storm_overlay = iterative_spatial_smoothing(
         tfn_storm_overlay,
         ['rain_days_c', 'rain_days_f', 'pr_w_c', 'pr_w_f', 'p99_c', 'p99_f','avg_excd_c', 'avg_excd_f', 'wdr_c', 'wdr_f'])
 
-    tfn_storm_overlay = explode_to_polygons(tfn_storm_overlay)
-
-    tfn_storm_risk = tfn_storm_overlay.drop(columns=['area'])
+    tfn_storm_risk = explode_to_polygons(tfn_storm_overlay)
 
     tfn_storm_risk['wind_spd_risk_c'] = tfn_storm_risk['p99_c'].apply(wind_risk_scaled)
     tfn_storm_risk['wind_spd_risk_f'] = tfn_storm_risk['p99_f'].apply(wind_risk_scaled)
@@ -415,6 +422,7 @@ def storm_index():
 
 
 def wind_risk_scaled(speed_mps):
+    """Calculates a wind risk value given a wind speed, based on classification rule"""
     if speed_mps < 13.4: # Below 30 mph
         return 0
     elif speed_mps <= 20.1: # between 30 and 45 mph
@@ -425,10 +433,11 @@ def wind_risk_scaled(speed_mps):
 ### FLOODING
 
 def flooding_index(boundary):
-    flood_grid = create_flood_grid(1000, boundary)
-
+    """Combines RoFRS and RoFSW indexes into a single risk index by upscaling them to a common grid, normalising, and
+    calculating a composite risk score"""
     risk_score_map = {'Unavailable': 0, 'Very low': 0, 'Low': 1, 'Medium': 2, 'High': 3}
 
+    flood_grid = create_flood_grid(1000, boundary)
     tfn_flood_risk_c, tfn_flood_risk_f = upscale_to_grid(risk_score_map, flood_grid)
 
     tfn_flood_risk = pd.merge(tfn_flood_risk_c[['FID', 'rofrs_risk_c', 'rofsw_risk_c']],
@@ -444,6 +453,7 @@ def flooding_index(boundary):
     write_to_file(tfn_flood_risk, MODEL_INTERIM_OUTPUT / "TfN Flood Risk" / "tfn_flood_risk.gpkg", "GPKG")
 
 def create_flood_grid(size_m, boundary):
+    """Creates a grid of a given size in metres, within a given boundary"""
     bounds = boundary.total_bounds
     grid = create_grid(bounds, size_m)
     flood_grid = clip_to_boundary(grid, boundary)
@@ -451,11 +461,13 @@ def create_flood_grid(size_m, boundary):
     return flood_grid
 
 def process_flood_layer(flood_grid, file_path, risk_column, risk_score_map):
+    """Reads a flood layer, assigns its risk, and returns its area-weighted flood risk GeoDataFrame"""
     layer = gpd.read_file(file_path)
     layer[risk_column] = layer['Risk_band'].map(risk_score_map)
     return area_weighted_flood_assignment(flood_grid, layer, risk_column)
 
 def upscale_to_grid(risk_score_map, flood_grid):
+    """Upscales each flood layer to the common grid and writes to file"""
     scenarios = {
         "current": [("TfN RoFRS", "tfn_rofrs.gpkg", "rofrs_risk_c"),
                     ("TfN RoFSW", "tfn_rofsw.gpkg", "rofsw_risk_c")],
@@ -478,15 +490,18 @@ def upscale_to_grid(risk_score_map, flood_grid):
 ### GROUND STABILITY
 
 def ground_stability_index():
-    tfn_geosure = gpd.read_file(GROUND_STABILITY_MODEL_IN / "TfN Geosure" / "tfn_geosure.shp")
-    tfn_geosure = tfn_geosure.to_crs("EPSG:27700")
-
+    """Combines GeoSure and GeoClimate ground stability risk into a single index, using a spatial overlay, before
+    normalising and calculating a composite risk score"""
     risk_scores = {  # Map risk scores to normalised values (0-100)
         'Probable': 100,
         'Possible': 66,
         'Improbable': 33,
         'Unavailable': 50  # Assign neutral value
     }
+
+
+    tfn_geosure = gpd.read_file(GROUND_STABILITY_MODEL_IN / "TfN Geosure" / "tfn_geosure.shp")
+    tfn_geosure = tfn_geosure.to_crs("EPSG:27700")
 
     tfn_ss = {}
     ground_stability = {}
@@ -537,6 +552,8 @@ def ground_stability_index():
 ### COASTAL EROSION
 
 def coastal_erosion_index():
+    """Combines erosion and ground instability risk from NCERM into a single index using a spatial overlay, before
+    normalising and calculating a composite risk score"""
     tfn_ncerm_giz = gpd.read_file(COASTAL_EROSION_MODEL_IN / "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.shp")
     tfn_ncerm_giz['risk_giz'] = 1
 
@@ -561,118 +578,6 @@ def coastal_erosion_index():
     write_to_file(tfn_coastal_erosion_risk,
                   MODEL_INTERIM_OUTPUT / "TfN Coastal Erosion Risk" / "tfn_coastal_erosion_risk.shp")
 
-## IMPACT
-
-### NOHAM
-
-def noham_impact_index(impact_weights):
-    tfn_noham_c = gpd.read_file(IMPACT_MODEL_IN / "TfN NoHAM Flows" / "2023" / "tfn_noham_net_flows_c.gpkg")
-    tfn_noham_f = gpd.read_file(IMPACT_MODEL_IN / "TfN NoHAM Flows" / "2048" / "tfn_noham_net_flows_f.gpkg")
-
-    user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
-
-    # Normalise user class demand together
-    tfn_noham_c, tfn_noham_f = normalise_uc_demand(tfn_noham_c, tfn_noham_f, user_classes)
-
-    # Normalise total demand separately
-    tfn_noham_c, tfn_noham_f = normalise_total_col(tfn_noham_c, tfn_noham_f, 'all_vehs_total', 'demand')
-
-    # Calculate impact scores
-    tfn_noham_c, tfn_noham_f = calculate_noham_impact(tfn_noham_c, tfn_noham_f, user_classes, impact_weights)
-
-    impact_cols_c = [f"{uc}_impact_c" for uc in user_classes] + ['impact_c']
-    impact_cols_f = [f"{uc}_impact_f" for uc in user_classes] + ['impact_f']
-
-    tfn_noham_c, tfn_noham_f = normalise_total_cols(tfn_noham_c, tfn_noham_f, impact_cols_c, impact_cols_f)
-
-    tfn_noham_c = tfn_noham_c[['link_id', 'geometry'] + impact_cols_c]
-    tfn_noham_f = tfn_noham_f[['link_id', 'geometry'] + impact_cols_f]
-
-    write_to_file(tfn_noham_c, MODEL_INTERIM_OUTPUT / "TfN NoHAM Flows" / "tfn_noham_c.gpkg", "GPKG")
-    write_to_file(tfn_noham_f, MODEL_INTERIM_OUTPUT / "TfN NoHAM Flows" / "tfn_noham_f.gpkg", "GPKG")
-
-def normalise_uc_demand(df_c, df_f, user_classes):
-    uc_total_cols = [f"{uc}_total" for uc in user_classes]
-    combined_values = np.vstack([df_c[uc_total_cols].values, df_f[uc_total_cols].values])
-    scaler = MinMaxScaler(feature_range=(0, 100))
-    scaler.fit(combined_values)
-    for df, suffix in [(df_c, 'c'), (df_f, 'f')]:
-        scaled = scaler.transform(df[uc_total_cols].values)
-        df[[f"{uc}_demand_{suffix}" for uc in user_classes]] = scaled
-    return df_c, df_f
-
-def normalise_total_col(df_c, df_f, old_column, new_column):
-    # Normalise all vehicles total separately
-    combined_values = np.vstack(
-        [df_c[old_column].values.reshape(-1, 1),df_f[old_column].values.reshape(-1, 1)])
-    scaler = MinMaxScaler(feature_range=(0, 100))
-    scaler.fit(combined_values)
-    for df, suffix in [(df_c, 'c'), (df_f, 'f')]:
-        scaled = scaler.transform(df[old_column].values.reshape(-1, 1))
-        df[f'{new_column}_{suffix}'] = scaled
-    return df_c, df_f
-
-def normalise_total_cols(df_c, df_f, cols_c, cols_f):
-    combined_values = np.vstack([df_c[cols_c].values, df_f[cols_f].values])
-    scaler = MinMaxScaler(feature_range=(0, 100))
-    scaler.fit(combined_values)
-    for df, cols in [(df_c, cols_c), (df_f, cols_f)]:
-        scaled = scaler.transform(df[cols].values)
-        df[cols] = scaled
-    return df_c, df_f
-
-def calculate_noham_impact(df_c, df_f, user_classes, impact_weights):
-    # Calculate impact metric for each user class
-    for uc in user_classes:
-        for df, tp in [(df_c, 'c'), (df_f, 'f')]:
-            df[f'{uc}_impact_{tp}'] = (
-                df[f'{uc}_demand_{tp}'] * impact_weights['demand'] +
-                df[f'flood_risk_{tp}'] * impact_weights['flood'] +
-                df[f'extreme_weather_risk_{tp}'] * impact_weights['extreme_weather'] +
-                df[f'ground_stability_risk_{tp}'] * impact_weights['ground_stability'] +
-                df[f'erosion_risk_{tp}'] * impact_weights['erosion']
-            )
-
-    for df, tp in [(df_c, 'c'), (df_f, 'f')]:
-        df[f'impact_{tp}'] = (
-            df[f'demand_{tp}'] * impact_weights['demand'] +
-            df[f'flood_risk_{tp}'] * impact_weights['flood'] +
-            df[f'extreme_weather_risk_{tp}'] * impact_weights['extreme_weather'] +
-            df[f'ground_stability_risk_{tp}'] * impact_weights['ground_stability'] +
-            df[f'erosion_risk_{tp}'] * impact_weights['erosion']
-        )
-
-    return df_c, df_f
-
-### FREIGHT RAIL
-
-def freight_impact_index(impact_weights):
-    tfn_freight_network_demand = gpd.read_file(IMPACT_MODEL_IN / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
-
-    tfn_freight_network_demand = min_max_scaling_pair(
-        tfn_freight_network_demand, [('2022_23_total', '2050_51 sc2_total')])
-
-    tfn_freight_network_demand.rename(
-        columns={'2022_23_total': 'demand_c','2050_51 sc2_total': 'demand_f'}, inplace=True)
-
-    tfn_freight_network_impact = calculate_freight_impact(tfn_freight_network_demand, impact_weights)
-
-    tfn_freight_network_impact = min_max_scaling_pair(tfn_freight_network_impact, [('impact_c', 'impact_f')])
-
-    write_to_file(
-        tfn_freight_network_impact, MODEL_INTERIM_OUTPUT / "TfN Freight Flows" / "tfn_freight_network_impact.gpkg")
-
-def calculate_freight_impact(df, impact_weights):
-    for tp in ['c', 'f']:
-        df[f'impact_{tp}'] = (
-            df[f'demand_{tp}'] * impact_weights['demand'] +
-            df[f'flood_risk_{tp}'] * impact_weights['flood'] +
-            df[f'extreme_weather_risk_{tp}'] * impact_weights['extreme_weather'] +
-            df[f'ground_stability_risk_{tp}'] * impact_weights['ground_stability'] +
-            df[f'erosion_risk_{tp}'] * impact_weights['erosion']
-        )
-
-    return df
 
 
 
