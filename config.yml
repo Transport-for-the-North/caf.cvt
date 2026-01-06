@@ -1,0 +1,10 @@
+# Climate Vulnerability Tool Config File
+
+# Model Section Switches
+run_data_cleaning: True
+run_functional_rules: False
+run_layering: False
+
+# STB Boundary Path
+boundary_path: Path("D:/") / "Climate Vulnerability Tool" / "Data" / "raw inputs" / "Other" / "TfN Boundary" / 
+  "Transport_for_the_north_boundary_2020_generalised.shp"

@@ -390,40 +390,40 @@ def clean_ncn(path, boundary):
 
 def clean_hazards(boundary):
     """Cleans hazard data ready for analysis"""
-    clean_extreme_weather(boundary)
+    #clean_extreme_weather(boundary)
     clean_flooding(boundary)
-    clean_ground_stability(boundary)
-    clean_coastal_erosion(boundary)
+    #clean_ground_stability(boundary)
+    #clean_coastal_erosion(boundary)
 
 ### EXTREME WEATHER
 
 def clean_extreme_weather(boundary):
     """Clean all extreme weather datasets ready for analysis"""
-    # tfn_common_grid = clean_common_grid(
-    #     f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
-    #     "!summer_maximum_temperature_change_projections_12km.shp", boundary)
-    #
-    # clean_temp_max(f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
-    #     "!summer_maximum_temperature_change_projections_12km.shp", tfn_common_grid)
-    # clean_temp_min(f"zip://{EXTREME_WEATHER_RAW_IN / "Winter_Minimum_Temperature_Change___Projections_12km_grid.zip"}"
-    #                "!winter_minimum_temperature_change_projections_12km.shp", tfn_common_grid)
-    # clean_summer_precip(f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Precipitation_Change___Projections_12km_grid.zip"}"
-    #                     "!summer_precipitation_change_projections_12km.shp", tfn_common_grid)
-    # clean_winter_precip(f"zip://{EXTREME_WEATHER_RAW_IN / "Winter_Precipitation_Change___Projections_12km_grid.zip"}"
-    #                     "!winter_precipitation_change_projections_12km.shp", tfn_common_grid)
-    # clean_rain_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_10mm_Rain_Days_1991_2020.zip"}"
-    #                 "!Annual_Count_of_10mm_Rain_Days_1991-2020.shp", boundary)
-    # clean_drought_index(f"zip://{EXTREME_WEATHER_RAW_IN / "Drought_Severity_Index_12_Month_Accumulations.zip"}"
-    #           "!Drought_Severity_Index_12_Month_Accumulations_-_Projections.shp", boundary)
-    # clean_hot_summer_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Hot_Days___Projections__12km_grid.zip"}"
-    #                       "!annual_count_of_hot_summer_days_projections_12km.shp", tfn_common_grid)
-    # clean_extreme_summer_days(f"zip://{EXTREME_WEATHER_RAW_IN
-    #                                    / "Annual_Count_of_Extreme_Summer_Days_Projections_12km_Grid.zip"}"
-    #                           "!annual_count_of_extreme_summer_days_projections_12km.shp", tfn_common_grid)
-    # clean_frost_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Frost_Days_Projections_12km_Grid.zip"}"
-    #                  "!annual_count_of_frost_days_projections_12km.shp", tfn_common_grid)
-    # clean_icing_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Icing_Days___Projections__12km_grid.zip"}"
-    #                  "!annual_count_of_icing_days_projections_12km.shp", tfn_common_grid)
+    tfn_common_grid = clean_common_grid(
+         f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
+         "!summer_maximum_temperature_change_projections_12km.shp", boundary)
+
+    clean_temp_max(f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
+         "!summer_maximum_temperature_change_projections_12km.shp", tfn_common_grid)
+    clean_temp_min(f"zip://{EXTREME_WEATHER_RAW_IN / "Winter_Minimum_Temperature_Change___Projections_12km_grid.zip"}"
+                    "!winter_minimum_temperature_change_projections_12km.shp", tfn_common_grid)
+    clean_summer_precip(f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Precipitation_Change___Projections_12km_grid.zip"}"
+                         "!summer_precipitation_change_projections_12km.shp", tfn_common_grid)
+    clean_winter_precip(f"zip://{EXTREME_WEATHER_RAW_IN / "Winter_Precipitation_Change___Projections_12km_grid.zip"}"
+                         "!winter_precipitation_change_projections_12km.shp", tfn_common_grid)
+    clean_rain_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_10mm_Rain_Days_1991_2020.zip"}"
+                     "!Annual_Count_of_10mm_Rain_Days_1991-2020.shp", boundary)
+    clean_drought_index(f"zip://{EXTREME_WEATHER_RAW_IN / "Drought_Severity_Index_12_Month_Accumulations.zip"}"
+               "!Drought_Severity_Index_12_Month_Accumulations_-_Projections.shp", boundary)
+    clean_hot_summer_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Hot_Days___Projections__12km_grid.zip"}"
+                           "!annual_count_of_hot_summer_days_projections_12km.shp", tfn_common_grid)
+    clean_extreme_summer_days(f"zip://{EXTREME_WEATHER_RAW_IN
+                                        / "Annual_Count_of_Extreme_Summer_Days_Projections_12km_Grid.zip"}"
+                               "!annual_count_of_extreme_summer_days_projections_12km.shp", tfn_common_grid)
+    clean_frost_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Frost_Days_Projections_12km_Grid.zip"}"
+                      "!annual_count_of_frost_days_projections_12km.shp", tfn_common_grid)
+    clean_icing_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Icing_Days___Projections__12km_grid.zip"}"
+                      "!annual_count_of_icing_days_projections_12km.shp", tfn_common_grid)
     clean_wind_speed(EXTREME_WEATHER_RAW_IN / "CEDA_Max_Wind_Speed", boundary)
     clean_wind_driven_rain(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Index_of_Wind_Driven_Rain_Projections_5km.zip"}"
                            "!Annual_Index_of_Wind_Driven_Rain_-_Projections_(5km).shp", boundary)
@@ -485,7 +485,8 @@ def clean_winter_precip(path, grid):
     precip_win.drop(columns=['pr_w_pct_f'], inplace=True)
     tfn_precip_win = precip_win[precip_win['grid_id'].isin(grid['grid_id'])]
     write_to_file(tfn_precip_win,
-                  EXTREME_WEATHER_MODEL_IN / "TfN Winter Precipitation Change Projections" / "tfn_precip_win.csv", csv=True)
+                  EXTREME_WEATHER_MODEL_IN / "TfN Winter Precipitation Change Projections" / "tfn_precip_win.csv",
+                  csv=True)
 
 def clean_rain_days(path, boundary):
     """Reads and cleans 10mm rain days observations, then writes to file"""
@@ -512,7 +513,8 @@ def clean_hot_summer_days(path, grid):
     hot_days = hot_days[['grid_id', 'HSD_base_4', 'HSD_40_med']]
     hot_days.rename(columns={'HSD_base_4': 'hsd_c', 'HSD_40_med': 'hsd_f'}, inplace=True)
     tfn_hot_days = hot_days[hot_days['grid_id'].isin(grid['grid_id'])]
-    write_to_file(tfn_hot_days, EXTREME_WEATHER_MODEL_IN / "TfN Hot Summer Days Projections" / "tfn_hot_days.csv", csv=True)
+    write_to_file(tfn_hot_days, EXTREME_WEATHER_MODEL_IN / "TfN Hot Summer Days Projections" / "tfn_hot_days.csv",
+                  csv=True)
 
 def clean_extreme_summer_days(path, grid):
     """Reads and cleans extreme summer days projections, then writes to file"""
@@ -531,7 +533,8 @@ def clean_frost_days(path, grid):
     frost_days = frost_days[['grid_id', 'FrostDay_3', 'FrostDa_18']]
     frost_days.rename(columns={'FrostDay_3': 'frost_d_c', 'FrostDa_18': 'frost_d_f'}, inplace=True)
     tfn_frost_days = frost_days[frost_days['grid_id'].isin(grid['grid_id'])]
-    write_to_file(tfn_frost_days, EXTREME_WEATHER_MODEL_IN / "TfN Frost Days Projections" / "tfn_frost_days.csv", csv=True)
+    write_to_file(tfn_frost_days, EXTREME_WEATHER_MODEL_IN / "TfN Frost Days Projections" / "tfn_frost_days.csv",
+                  csv=True)
 
 def clean_icing_days(path, grid):
     """Reads and cleans icing days projections, then writes to file"""
@@ -555,7 +558,7 @@ def clean_wind_speed(path, boundary):
     windspd_combined['geometry'] = [convert_point_to_grid(x, y, 2500)
         for x, y in zip(windspd_combined['projection_x_coordinate'], windspd_combined['projection_y_coordinate'])]
     windspd_combined = gpd.GeoDataFrame(windspd_combined, geometry='geometry', crs="EPSG:27700")
-    windspd_combined = windspd_combined[['p95_c', 'p99_c', 'avg_excd_c','p95_f', 'p99_f', 'avg_excd_f','geometry']]
+    windspd_combined = windspd_combined[['p99_c', 'avg_excd_c', 'p99_f', 'avg_excd_f','geometry']]
     tfn_windspd = clip_to_boundary(windspd_combined, boundary)
     tfn_windspd = explode_to_polygons(tfn_windspd)
     write_to_file(tfn_windspd, EXTREME_WEATHER_MODEL_IN / "TfN Wind Speed Projections" / "tfn_windspd.shp")
@@ -772,8 +775,8 @@ def clean_coastal_erosion(boundary):
     """Cleans coastal erosion data ready for analysis"""
     clean_giz(f"zip://{COASTAL_EROSION_RAW_IN / "National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.shp.zip"}"
               "!NCERM_Ground_Instability_Zone.shp", boundary)
-    clean_ncerm(f"zip://{COASTAL_EROSION_RAW_IN / "National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.shp.zip"}!",
-                boundary)
+    clean_ncerm(f"zip://{COASTAL_EROSION_RAW_IN / "National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.shp.zip"}!"
+                ,boundary)
 
 def clean_giz(path, boundary):
     """Cleans Ground Instability Zones data from NCERM, then writes to file"""
@@ -790,7 +793,8 @@ def clean_ncerm(path, boundary):
         gdf = gdf[['smp_name', 'geometry']]
         tfn_gdf = clip_to_boundary(gdf, boundary)
         tfn_gdf = explode_to_polygons(tfn_gdf)
-        write_to_file(tfn_gdf, COASTAL_EROSION_MODEL_IN / "NCERM" / f"SMP_{year}_70CC" / f"tfn_ncerm_smp_{year}_70CC.shp")
+        write_to_file(tfn_gdf,
+                      COASTAL_EROSION_MODEL_IN / "NCERM" / f"SMP_{year}_70CC" / f"tfn_ncerm_smp_{year}_70CC.shp")
 
 ## IMPACT
 
@@ -803,10 +807,12 @@ def clean_impact(boundary):
 
 def clean_freight_demand(boundary):
     """Cleans freight demand data ready for analysis"""
-    tfn_freight_network_demand = read_freight_demand(IMPACT_RAW_IN / "Freight" / "rail_freight_network_demand.gpkg", boundary)
+    tfn_freight_network_demand = read_freight_demand(IMPACT_RAW_IN / "Freight" / "rail_freight_network_demand.gpkg",
+                                                     boundary)
     tfn_os_freight_network_demand = map_freight_networks(tfn_freight_network_demand,
                          RAIL_MODEL_IN / "TfN OS Freight Rail" / "tfn_freight_rail_links.shp")
-    write_to_file(tfn_os_freight_network_demand, IMPACT_MODEL_IN / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
+    write_to_file(tfn_os_freight_network_demand,
+                  IMPACT_MODEL_IN / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
 
 def read_freight_demand(path, boundary):
     """Reads and cleans freight demand data, and returns as GeoDataFrame"""
@@ -965,7 +971,7 @@ def aggregate_link_flows_year(noham_path, output_path):
         # Add to data dictionary
         link_flows[year] = combined_ts_df
 
-        return link_flows
+    return link_flows
 
 def merge_noham_flow_network(tfn_noham_flows, noham_path):
     """Merges NoHAM flows onto road network, then returns as GeoDataFrame"""
