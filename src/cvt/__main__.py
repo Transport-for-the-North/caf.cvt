@@ -36,6 +36,7 @@ def main():
         layering()
 
 
+# Run model, use logging
 if __name__ == "__main__":
     log = logging.getLogger('__main__')
     log.setLevel(logging.DEBUG)

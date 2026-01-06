@@ -326,9 +326,9 @@ def passenger_rail_risk(hazard_layers, risk_cols):
     tfn_rail_network_risk = prepare_model_output(
         gdf=tfn_rail_network_risk,
         drop_cols=['geometry_l', 'gauge', 'direction', 'operationa', 'name1_text', 'startnode', 'endnode', 'rgn17cd'],
-        desc_cols=['description', 'structure', 'physical_level', 'railway_use', 'track_representation'],
-        rename_map={'osid': 'id', 'descriptio': 'description', 'physicalle': 'physical_level',
-                    'railwayuse': 'railway_use', 'trackrepre': 'track_representation'},
+        desc_cols=['desc', 'structure', 'phys_level', 'rail_use', 'track_rep'],
+        rename_map={'osid': 'id', 'desc': 'description', 'phys_level': 'physical_level',
+                    'rail_use': 'railway_use', 'track_rep': 'track_representation'},
         risk_cols_order=risk_cols
     )
 
@@ -349,9 +349,9 @@ def freight_rail_risk(hazard_layers, risk_cols, impact_weights):
         gdf=tfn_freight_network_risk,
         drop_cols=['geometry_l', 'gauge', 'direction', 'operationa', 'name1_text', 'startnode', 'endnode', 'rgn17cd',
                    'dij_id', 'distance', 'demand_c', 'demand_f'],
-        desc_cols=['description', 'structure', 'physical_level', 'railway_use', 'track_representation'],
-        rename_map={'osid': 'id', 'descriptio': 'description', 'physicalle': 'physical_level',
-                    'railwayuse': 'railway_use', 'trackrepre': 'track_representation'},
+        desc_cols=['desc', 'structure', 'phys_level', 'rail_use', 'track_rep'],
+        rename_map={'osid': 'id', 'desc': 'description', 'phys_level': 'physical_level',
+                    'rail_use': 'railway_use', 'track_rep': 'track_representation'},
         risk_cols_order=risk_cols + ['impact']
     )
 
@@ -615,9 +615,9 @@ def tram_network_risk(hazard_layers, risk_cols):
     tfn_tram_risk = prepare_model_output(
         gdf=tfn_tram_risk,
         drop_cols=['geometry_l', 'gauge', 'direction', 'operationa', 'startnode', 'endnode', 'rgn17cd'],
-        desc_cols=['description', 'structure', 'physical_level', 'railway_use', 'track_representation', 'name'],
-        rename_map={'osid': 'id', 'descriptio': 'description', 'physicalle': 'physical_level',
-                    'railwayuse': 'railway_use', 'trackrepre': 'track_representation', 'name1_text': 'name'},
+        desc_cols=['desc', 'structure', 'phys_level', 'rail_use', 'track_rep', 'name'],
+        rename_map={'osid': 'id', 'desc': 'description', 'phys_level': 'physical_level',
+                    'rail_use': 'railway_use', 'track_rep': 'track_representation', 'name1_text': 'name'},
         risk_cols_order=risk_cols,
     )
 
@@ -635,8 +635,8 @@ def rapid_transport_network_risk(hazard_layers, risk_cols):
         gdf=tfn_rapid_transport_risk,
         drop_cols=['geometry_l', 'gauge', 'direction', 'operationa', 'startnode', 'endnode', 'rgn17cd'],
         desc_cols=['description', 'structure', 'physical_level', 'railway_use', 'track_representation', 'name'],
-        rename_map={'osid': 'id', 'descriptio': 'description', 'physicalle': 'physical_level',
-                    'railwayuse': 'railway_use', 'trackrepre': 'track_representation', 'name1_text': 'name'},
+        rename_map={'osid': 'id', 'desc': 'description', 'phys_level': 'physical_level',
+                    'rail_use': 'railway_use', 'track_rep': 'track_representation', 'name1_text': 'name'},
         risk_cols_order=risk_cols,
     )
 

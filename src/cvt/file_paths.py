@@ -7,11 +7,14 @@ from pathlib import Path
 # Log Path
 LOG_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Logging" / "cvt.log"
 
-# Base Paths
-RAW_INPUT = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "raw inputs"
-MODEL_INPUT = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model inputs"
-MODEL_INTERIM_OUTPUT = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model interim outputs"
-MODEL_OUTPUT = Path("D:/") / "Climate Vulnerability Tool" / "Data" / "model outputs"
+# Data Path
+DATA_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data"
+
+# Input/Output Paths
+RAW_INPUT = DATA_PATH / "raw inputs"
+MODEL_INPUT = DATA_PATH / "model inputs"
+MODEL_INTERIM_OUTPUT = DATA_PATH / "model interim outputs"
+MODEL_OUTPUT = DATA_PATH / "model outputs"
 
 # Infrastructure
 INFRASTRUCTURE_RAW_IN = RAW_INPUT / "Infrastructure"
@@ -26,9 +29,9 @@ RAIL_MODEL_IN = INFRASTRUCTURE_MODEL_IN / "Rail"
 OTHER_MODEL_IN = INFRASTRUCTURE_MODEL_IN / "Other"
 
 # Hazards
-HAZARD_RAW_IN = RAW_INPUT / "Hazard"
-HAZARD_MODEL_IN = MODEL_INPUT / "Hazard"
-HAZARD_INTERIM_OUT = MODEL_INTERIM_OUTPUT / "Hazard"
+HAZARD_RAW_IN = RAW_INPUT / "Hazards"
+HAZARD_MODEL_IN = MODEL_INPUT / "Hazards"
+HAZARD_INTERIM_OUT = MODEL_INTERIM_OUTPUT / "Hazards"
 
 EXTREME_WEATHER_RAW_IN = HAZARD_RAW_IN / "Extreme Weather"
 FLOODING_RAW_IN = HAZARD_RAW_IN / "Flooding"

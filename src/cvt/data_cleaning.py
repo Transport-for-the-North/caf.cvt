@@ -10,7 +10,7 @@ from shapely.geometry import Point, Polygon, MultiPolygon, GeometryCollection
 import xarray as xr
 import h5py
 import py7zr
-import zipfile
+from zipfile import ZipFile
 
 from file_paths import (ROAD_RAW_IN, ROAD_MODEL_IN, RAIL_RAW_IN, RAIL_MODEL_IN, OTHER_RAW_IN, OTHER_MODEL_IN,
                         EXTREME_WEATHER_RAW_IN, EXTREME_WEATHER_MODEL_IN, FLOODING_RAW_IN, FLOODING_MODEL_IN,
@@ -26,6 +26,7 @@ def clip_to_boundary(gdf, boundary):
     boundary = boundary.to_crs(gdf.crs) # Match CRS
     gdf_boundary = gpd.clip(gdf, boundary) # Clip GDF to boundary
     return gdf_boundary
+
 
 def write_to_file(df, output_path, driver=None, csv=False):
     """Write data to file, creating directory if necessary"""
@@ -86,13 +87,13 @@ def explode_to_polygons(gdf, id_col='grid_id'):
         original_id = row[id_col] if id_col in row else idx  # fallback to index if no ID
         if geom.geom_type == 'Polygon':
             new_row = row.copy()
-            new_row[id_col] = f"{original_id}_0"
+            new_row['part'] = 0
             rows.append(new_row)
         elif geom.geom_type == 'MultiPolygon':
             for i, poly in enumerate(geom.geoms):
                 new_row = row.copy()
                 new_row.geometry = poly
-                new_row[id_col] = f"{original_id}_{i}"
+                new_row['part'] = i
                 rows.append(new_row)
         elif geom.geom_type == 'GeometryCollection':
             poly_count = 0
@@ -100,7 +101,7 @@ def explode_to_polygons(gdf, id_col='grid_id'):
                 if part.geom_type == 'Polygon':
                     new_row = row.copy()
                     new_row.geometry = part
-                    new_row[id_col] = f"{original_id}_{poly_count}"
+                    new_row['part'] = poly_count
                     rows.append(new_row)
                     poly_count += 1
     return gpd.GeoDataFrame(rows, crs=gdf.crs).reset_index(drop=True)
@@ -165,7 +166,7 @@ def data_cleaning(boundary_path):
     """Clean all input datasets ready for analysis"""
     boundary = gpd.read_file(boundary_path)
 
-    clean_infrastructure(boundary)
+    #clean_infrastructure(boundary)
     clean_hazards(boundary)
     clean_impact(boundary)
 
@@ -237,19 +238,21 @@ def get_rail_links(boundary, os_rail_path):
     tfn_rail_links[['description', 'structure', 'physicallevel', 'railwayuse', 'trackrepresentation']] = (
         tfn_rail_links[['description', 'structure', 'physicallevel', 'railwayuse', 'trackrepresentation']]
         .replace(0,'N/A'))
+    tfn_rail_links.rename(columns={'description': 'desc', 'physicallevel': 'phys_level', 'railwayuse': 'rail_use',
+                                   'trackrepresentation': 'track_rep'}, inplace=True)
     tfn_rail_links = clip_to_boundary(tfn_rail_links, boundary)
     return tfn_rail_links
 
 def clean_passenger_rail(tfn_rail_links):
     """Filters OS rail data to passenger rail network, then writes to file"""
-    tfn_pass_rail = tfn_rail_links[tfn_rail_links['railwayuse'].isin(['Freight And Passenger', 'Passenger'])]
-    tfn_pass_rail = tfn_pass_rail[tfn_pass_rail['description'].isin(['Main Line', 'Main Line And Tram',
+    tfn_pass_rail = tfn_rail_links[tfn_rail_links['rail_use'].isin(['Freight And Passenger', 'Passenger'])]
+    tfn_pass_rail = tfn_pass_rail[tfn_pass_rail['desc'].isin(['Main Line', 'Main Line And Tram',
                                                                      'Main Line And Rapid Transport System'])]
     write_to_file(tfn_pass_rail, RAIL_MODEL_IN / "TfN OS Passenger Rail" / "tfn_pass_rail_links.shp")
 
 def clean_freight_rail(tfn_rail_links):
     """Filters OS rail data to freight rail network, then writes to file"""
-    tfn_freight_rail = tfn_rail_links[tfn_rail_links['railwayuse'].isin(['Freight And Passenger', 'Freight'])]
+    tfn_freight_rail = tfn_rail_links[tfn_rail_links['rail_use'].isin(['Freight And Passenger', 'Freight'])]
     write_to_file(tfn_freight_rail, RAIL_MODEL_IN / "TfN OS Freight Rail" / "tfn_freight_rail_links.shp")
 
 ### OTHER
@@ -258,7 +261,7 @@ def clean_other(boundary, rail_links):
     """Cleans all other datasets ready for analysis"""
     clean_bus_stops(OTHER_RAW_IN / "Bus Stops", boundary)
     clean_petrol_stations(f"zip://{OTHER_RAW_IN / "poi_uk.zip"}!poi_uk.gpkg", boundary)
-    clean_charging_points(OTHER_RAW_IN / "Zap Map Data - full data set Oct 25.csv", boundary)
+    clean_charging_sites(OTHER_RAW_IN / "ZapMap Site Devices.csv", boundary)
     clean_ncn(OTHER_RAW_IN / "NCN Sustrans" / "National_Cycle_Network_Public.shp", boundary)
 
     os_mm_net_node = read_os_mm_node_network(
@@ -348,21 +351,22 @@ def clean_bus_coach_stations(os_mm_net_node, boundary):
 
 def clean_tram_network(tfn_rail_links):
     """Filters OS rail links for tram network, then writes to file"""
-    tfn_tram_links = tfn_rail_links[tfn_rail_links['railwayuse'].isin(['Freight And Passenger', 'Passenger'])]
-    tfn_tram_links = tfn_tram_links[tfn_tram_links['description'].isin(['Tram', 'Main Line And Tram'])]
-    write_to_file(tfn_tram_links, OTHER_MODEL_IN / "TfN OS Tram Links" / "tfn_os_tram_links.shp")
+    tfn_tram_links = tfn_rail_links[tfn_rail_links['rail_use'].isin(['Freight And Passenger', 'Passenger'])]
+    tfn_tram_links = tfn_tram_links[tfn_tram_links['desc'].isin(['Tram', 'Main Line And Tram'])]
+    write_to_file(tfn_tram_links, OTHER_MODEL_IN / "TfN OS Tram Network" / "tfn_os_tram_links.shp")
 
 def clean_rapid_transport_network(tfn_rail_links):
     """Filters OS rail links for rapid transport network, then writes to file"""
-    tfn_rapid_transport = tfn_rail_links[tfn_rail_links['railwayuse'].isin(['Freight And Passenger', 'Passenger'])]
-    tfn_rapid_transport = tfn_rapid_transport[tfn_rapid_transport['description'].isin(
+    tfn_rapid_transport = tfn_rail_links[tfn_rail_links['rail_use'].isin(['Freight And Passenger', 'Passenger'])]
+    tfn_rapid_transport = tfn_rapid_transport[tfn_rapid_transport['desc'].isin(
         ['Rapid Transport System', 'Main Line And Rapid Transport System'])]
-    write_to_file(tfn_rapid_transport, OTHER_MODEL_IN / "TfN Rapid Transport" / "tfn_rapid_transport_links.shp")
+    write_to_file(tfn_rapid_transport, OTHER_MODEL_IN / "TfN Rapid Transport Network" / "tfn_rapid_transport_links.shp")
 
-def clean_charging_points(path, boundary):
+def clean_charging_sites(path, boundary):
     """Reads and cleans ZapMap charging sites data, then writes to file"""
     chg_sites = pd.read_csv(path)
-    chg_sites_gdf = gpd.GeoDataFrame(chg_sites, geometry=[Point(xy) for xy in zip(chg_sites['lon'], chg_sites['lat'])], crs="EPSG:4326")
+    chg_sites_gdf = gpd.GeoDataFrame(chg_sites, geometry=[Point(xy) for xy in zip(chg_sites['lon'], chg_sites['lat'])],
+                                     crs="EPSG:4326")
     chg_sites_gdf = chg_sites_gdf[['identifier', 'name', 'speed', 'value', 'geometry']]
     chg_sites_gdf.rename(columns={'identifier': 'id', 'value': 'devices'}, inplace=True)
     chg_sites_gdf = chg_sites_gdf.drop_duplicates(subset=['geometry'])
@@ -395,30 +399,31 @@ def clean_hazards(boundary):
 
 def clean_extreme_weather(boundary):
     """Clean all extreme weather datasets ready for analysis"""
-    tfn_common_grid = clean_common_grid(f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
-        "!summer_maximum_temperature_change_projections_12km.shp", boundary)
-
-    clean_temp_max(f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
-        "!summer_maximum_temperature_change_projections_12km.shp", tfn_common_grid)
-    clean_temp_min(f"zip://{EXTREME_WEATHER_RAW_IN / "Winter_Minimum_Temperature_Change___Projections_12km_grid.zip"}"
-                   "!winter_minimum_temperature_change_projections_12km.shp", tfn_common_grid)
-    clean_summer_precip(f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Precipitation_Change___Projections_12km_grid.zip"}"
-                        "!summer_precipitation_change_projections_12km.shp", tfn_common_grid)
-    clean_winter_precip(f"zip://{EXTREME_WEATHER_RAW_IN / "Winter_Precipitation_Change___Projections_12km_grid.zip"}"
-                        "!winter_precipitation_change_projections_12km.shp", tfn_common_grid)
-    clean_rain_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_10mm_Rain_Days_1991_2020.zip"}"
-                    "!Annual_Count_of_10mm_Rain_Days_1991-2020.shp", boundary)
-    clean_drought_index(f"zip://{EXTREME_WEATHER_RAW_IN / "Drought_Severity_Index_12_Month_Accumulations.zip"}"
-              "!Drought_Severity_Index_12_Month_Accumulations_-_Projections.shp", boundary)
-    clean_hot_summer_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Hot_Days___Projections__12km_grid.zip"}"
-                          "!annual_count_of_hot_summer_days_projections_12km.shp", tfn_common_grid)
-    clean_extreme_summer_days(f"zip://{EXTREME_WEATHER_RAW_IN 
-                                       / "Annual_Count_of_Extreme_Summer_Days_Projections_12km_Grid.zip"}"
-                              "!annual_count_of_extreme_summer_days_projections_12km.shp", tfn_common_grid)
-    clean_frost_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Frost_Days_Projections_12km_Grid.zip"}"
-                     "!annual_count_of_frost_days_projections_12km.shp", tfn_common_grid)
-    clean_icing_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Icing_Days___Projections__12km_grid.zip"}"
-                     "!annual_count_of_icing_days_projections_12km.shp", tfn_common_grid)
+    # tfn_common_grid = clean_common_grid(
+    #     f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
+    #     "!summer_maximum_temperature_change_projections_12km.shp", boundary)
+    #
+    # clean_temp_max(f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Maximum_Temperature_Change___Projections_12km_grid.zip"}"
+    #     "!summer_maximum_temperature_change_projections_12km.shp", tfn_common_grid)
+    # clean_temp_min(f"zip://{EXTREME_WEATHER_RAW_IN / "Winter_Minimum_Temperature_Change___Projections_12km_grid.zip"}"
+    #                "!winter_minimum_temperature_change_projections_12km.shp", tfn_common_grid)
+    # clean_summer_precip(f"zip://{EXTREME_WEATHER_RAW_IN / "Summer_Precipitation_Change___Projections_12km_grid.zip"}"
+    #                     "!summer_precipitation_change_projections_12km.shp", tfn_common_grid)
+    # clean_winter_precip(f"zip://{EXTREME_WEATHER_RAW_IN / "Winter_Precipitation_Change___Projections_12km_grid.zip"}"
+    #                     "!winter_precipitation_change_projections_12km.shp", tfn_common_grid)
+    # clean_rain_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_10mm_Rain_Days_1991_2020.zip"}"
+    #                 "!Annual_Count_of_10mm_Rain_Days_1991-2020.shp", boundary)
+    # clean_drought_index(f"zip://{EXTREME_WEATHER_RAW_IN / "Drought_Severity_Index_12_Month_Accumulations.zip"}"
+    #           "!Drought_Severity_Index_12_Month_Accumulations_-_Projections.shp", boundary)
+    # clean_hot_summer_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Hot_Days___Projections__12km_grid.zip"}"
+    #                       "!annual_count_of_hot_summer_days_projections_12km.shp", tfn_common_grid)
+    # clean_extreme_summer_days(f"zip://{EXTREME_WEATHER_RAW_IN
+    #                                    / "Annual_Count_of_Extreme_Summer_Days_Projections_12km_Grid.zip"}"
+    #                           "!annual_count_of_extreme_summer_days_projections_12km.shp", tfn_common_grid)
+    # clean_frost_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Frost_Days_Projections_12km_Grid.zip"}"
+    #                  "!annual_count_of_frost_days_projections_12km.shp", tfn_common_grid)
+    # clean_icing_days(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Count_of_Icing_Days___Projections__12km_grid.zip"}"
+    #                  "!annual_count_of_icing_days_projections_12km.shp", tfn_common_grid)
     clean_wind_speed(EXTREME_WEATHER_RAW_IN / "CEDA_Max_Wind_Speed", boundary)
     clean_wind_driven_rain(f"zip://{EXTREME_WEATHER_RAW_IN / "Annual_Index_of_Wind_Driven_Rain_Projections_5km.zip"}"
                            "!Annual_Index_of_Wind_Driven_Rain_-_Projections_(5km).shp", boundary)
@@ -427,7 +432,6 @@ def clean_common_grid(path, boundary):
     """Creates and prepares common grid DataFrame for variables on same 12km British National Grid"""
     temp_max = gpd.read_file(path)
     temp_max['grid_id'] = range(1, len(temp_max) + 1)
-
     common_grid = temp_max[['grid_id', 'geometry']]
     tfn_common_grid = clip_to_boundary(common_grid, boundary)
     tfn_common_grid = explode_to_polygons(tfn_common_grid)
@@ -538,26 +542,15 @@ def clean_icing_days(path, grid):
     tfn_ice_days = ice_days[ice_days['grid_id'].isin(grid['grid_id'])]
     write_to_file(tfn_ice_days, EXTREME_WEATHER_MODEL_IN / "TfN Icing Days Projections" / "tfn_ice_days.csv", csv=True)
 
+
 def clean_wind_speed(path, boundary):
     """Reads wind speed projections, calculates exceedance and percentiles, cleans, then writes to file"""
-    windspd_c = xr.open_dataset(path / "wsgmax10m_rcp85_land-cpm_uk_5km_01_day_20701201-20801130.nc").to_dataframe()
-    windspd_f = xr.open_dataset(path / "wsgmax10m_rcp85_land-cpm_uk_5km_01_day_19901201-20001130.nc").to_dataframe()
+    windspd_c_combined = read_wind_speed_reduce(path / "wsgmax10m_rcp85_land-cpm_uk_5km_01_day_20701201-20801130.nc",
+                                                'c')
+    windspd_f_combined = read_wind_speed_reduce(path / "wsgmax10m_rcp85_land-cpm_uk_5km_01_day_19901201-20001130.nc",
+                                                'f')
 
-    exc_c = calculate_exceedance(20, windspd_c, 'wsgmax10m', 'c')
-    exc_f = calculate_exceedance(20, windspd_f, 'wsgmax10m', 'f')
-    pct_c = calculate_percentile(windspd_c, [0.95, 0.99], 'wsgmax10m')
-    pct_f = calculate_percentile(windspd_f, [0.95, 0.99], 'wsgmax10m')
-
-    pct_c.columns = ['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude', 'p95_c', 'p99_c']
-    pct_f.columns = ['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude', 'p95_f','p99_f']
-
-    def merge_and_fill(df1, df2, fill_col):
-        return pd.merge(df1, df2, on=['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude'],
-                        how='outer').fillna({fill_col: 0})
-
-    windspd_c_combined = merge_and_fill(pct_c, exc_c, 'avg_excd_c')
-    windspd_f_combined = merge_and_fill(pct_f, exc_f, 'avg_excd_f')
-    windspd_combined = merge_and_fill(windspd_c_combined, windspd_f_combined, 'avg_excd_f')
+    windspd_combined = windspd_merge_and_fill(windspd_c_combined, windspd_f_combined, 'avg_excd_f')
 
     windspd_combined['geometry'] = [convert_point_to_grid(x, y, 2500)
         for x, y in zip(windspd_combined['projection_x_coordinate'], windspd_combined['projection_y_coordinate'])]
@@ -566,6 +559,20 @@ def clean_wind_speed(path, boundary):
     tfn_windspd = clip_to_boundary(windspd_combined, boundary)
     tfn_windspd = explode_to_polygons(tfn_windspd)
     write_to_file(tfn_windspd, EXTREME_WEATHER_MODEL_IN / "TfN Wind Speed Projections" / "tfn_windspd.shp")
+
+def read_wind_speed_reduce(xr_path, tp):
+    """Reads wind speed projections, calculates exceedance and percentile measures and returns a reduced dataframe"""
+    windspd = xr.open_dataset(xr_path).to_dataframe()
+    exc = calculate_exceedance(20, windspd, 'wsgmax10m', tp)
+    pct = calculate_percentile(windspd, [0.99], 'wsgmax10m')
+    pct.columns = ['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude', f'p99_{tp}']
+    windspd_combined = windspd_merge_and_fill(pct, exc, f'avg_excd_{tp}')
+    return windspd_combined
+
+def windspd_merge_and_fill(df1, df2, fill_col):
+    """Merges two dataframes on common coordinates, filling a given column with 0 values"""
+    return pd.merge(df1, df2, on=['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude'],
+                    how='outer').fillna({fill_col: 0})
 
 def clean_wind_driven_rain(path, boundary):
     """Reads and cleans wind driven rain index data, then writes to file"""
@@ -639,7 +646,7 @@ def extract_gdb_file(code, number, flood_data, version, cc):
           return None
 
         # Extract the contents
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        with ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(extract_to)
 
         # Check if GDB folder exists
