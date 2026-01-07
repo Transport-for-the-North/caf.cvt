@@ -12,38 +12,94 @@ from pathlib import Path
 from caf.toolkit.log_helpers import LogHelper, ToolDetails
 import caf.toolkit as ctk
 
-def main(conf):
+def main():
     """Run Climate Vulnerability Tool"""
 
     # Run data cleaning
-    if conf.run_data_cleaning:
-        data_cleaning(conf.boundary_path)
+    if cfg.run_data_cleaning:
+        data_cleaning()
 
     # Run functional rules
-    if conf.run_functional_rules:
-        apply_functional_rules(conf.boundary_path)
+    if cfg.run_functional_rules:
+        apply_functional_rules()
 
     # Run layering
-    if conf.run_layering:
+    if cfg.run_layering:
         layering()
 
-# Set up config
-class Config(ctk.BaseConfig):
-    run_data_cleaning: bool = True
-    run_functional_rules: bool = True
-    run_layering: bool = True
+### CONFIG SET UP
 
+# --- simple zip + internal path structure ---
+class ZipFileEntry(ctk.BaseConfig):
+    zip_path: Path
+    internal_path: str
+
+# ---- main config ----
+class Config(ctk.BaseConfig):
+    # switches
+    run_data_cleaning: bool
+    run_functional_rules: bool
+    run_layering: bool
+    flood_extract: bool
+    noham_extract: bool
+
+    # basic paths
+    root: Path
+    raw_input: Path
+    model_input: Path
+    model_interim_output: Path
+    model_output: Path
+    log_path: Path
     boundary_path: Path
 
-    flood_extract: bool = False
-
+    # infra
     os_road: Path
     noham_2023: Path
     noham_2048: Path
+    tfn_rail_links: Path
 
+    bus_stops_ne: Path
+    bus_stops_nw: Path
+    bus_stops_ys: Path
+    ncn_sustrans: Path
+    os_mmrn: Path
+    poi_uk: ZipFileEntry
+    zapmap: Path
+
+    # coastal erosion
+    ce_zip_path: Path
+    giz: str
+    smp: dict
+
+    # extreme weather
+    wind_spd_current: Path
+    wind_spd_forecast: Path
+
+    rain_days: ZipFileEntry
+    extreme_summer_days: ZipFileEntry
+    frost_days: ZipFileEntry
+    hot_days: ZipFileEntry
+    icing_days: ZipFileEntry
+    wdr_index: ZipFileEntry
+    drought_index: ZipFileEntry
+    max_temp_summer: ZipFileEntry
+    precip_summer: ZipFileEntry
+    min_temp_winter: ZipFileEntry
+    precip_winter: ZipFileEntry
+
+    # flooding
+    flood_path: Path
+
+    # ground stability
+    geo_shrink_swell: dict
+    geosure: dict
+
+    # impact
+    freight_demand: Path
+    noham_demand: dict
 
 config_path = Path("../../config.yml")
-config = Config.load_yaml(config_path)
+cfg = Config.load_yaml(config_path)
 
 
 # Run model, use logging
@@ -52,4 +108,4 @@ if __name__ == "__main__":
     log.setLevel(logging.DEBUG)
     details = ToolDetails("cvt", "1.0.0", full_version=None)
     with LogHelper(__package__, details, log_file=LOG_PATH):
-        main(config)
+        main()
