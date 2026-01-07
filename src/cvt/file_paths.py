@@ -5,7 +5,7 @@ Specify input and output folder paths
 from pathlib import Path
 
 # Log Path
-LOG_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Logging" / "cvt.log"
+LOG_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Model" / "Logging" / "cvt.log"
 
 # Data Path
 DATA_PATH = Path("D:/") / "Climate Vulnerability Tool" / "Data"

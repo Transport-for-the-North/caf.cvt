@@ -1,10 +1,71 @@
 # Climate Vulnerability Tool Config File
 
 # Model Section Switches
-run_data_cleaning: True
-run_functional_rules: False
-run_layering: False
+run_data_cleaning: true
+run_functional_rules: false
+run_layering: false
+
+# Flood data processing
+flood_extract: False
+
+####### FILE PATHS #########
+
+data:
+  root: "D:/Climate Vulnerability Tool/Data"
+  raw_input: "D:/Climate Vulnerability Tool/Data/raw inputs"
+  model_input: "D:/Climate Vulnerability Tool/Data/model inputs"
+  model_interim_output: "D:/Climate Vulnerability Tool/Data/model interim outputs"
+  model_output: "D:/Climate Vulnerability Tool/Data/model outputs"
+
+# Logging
+log_path: "D:/Climate Vulnerability Tool/Model/Logging/cvt.log"
 
 # STB Boundary Path
-boundary_path: Path("D:/") / "Climate Vulnerability Tool" / "Data" / "raw inputs" / "Other" / "TfN Boundary" / 
-  "Transport_for_the_north_boundary_2020_generalised.shp"
+boundary_path: "D:/Climate Vulnerability Tool/Data/raw inputs/Other/TfN Boundary/
+  Transport_for_the_north_boundary_2020_generalised.shp"
+
+# Infrastructure
+
+## Road
+os_road: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/TfN OS Open Roads/os_open_gb_road_links_tfn.shp"
+noham_2023: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2023/NoHAM_Decarb_DM_Core_2023_carbon.shp"
+noham_2048: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2048/NoHAM_Decarb_DM_Core_2048_carbon.shp"
+
+## Rail
+tfn_rail_links: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/TfN_Area_tfn_ntwk_railwaylink.gpkg"
+
+## Other
+bus_stops_ne: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ne.csv"
+bus_stops_nw: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_nw.csv"
+bus_stops_ys: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ys.csv"
+ncn_sustrans: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/NCN Sustrans/National_Cycle_Network_Public.shp"
+os_mmrn: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/OS Multi-Modal Routing Network/OSMulti-modalRoutingNetwork.gpkg"
+poi_uk:
+  zip_path: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/poi_uk.zip"
+  internal_path: "poi_uk.gpkg"
+zapmap: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/ZapMap/ZapMap Site Devices"
+
+# Hazards
+
+## Coastal Erosion
+ce_zip_path: "D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Coastal Erosion/National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.shp.zip"
+giz: "NCERM_Ground_Instability_Zone.shp"
+smp_2055: "NCERM_SMP_2055_70CC.shp"
+smp_2105: "NCERM_SMP_2105_70CC.shp"
+
+## Extreme Weather
+wind_spd_current: "D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/CEDA_Max_Wind_Speed/wsgmax10m_rcp85_land-cpm_uk_5km_01_day_19901201-20001130.nc"
+wind_spd_forecast: "D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/CEDA_Max_Wind_Speed/wsgmax10m_rcp85_land-cpm_uk_5km_01_day_20701201-20801130.nc"
+rain_days:
+  zip_path: "D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_10mm_Rain_Days_1991_2020.zip"
+  internal_path: "Annual_Count_of_10mm_Rain_Days_1991_2020.shp"
+extreme_summer_days:
+  zip_path: "D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Extreme_Summer_Days_Projections_12km_Grid.zip"
+  internal_path: "annual_count_of_extreme_summer_days_projections_12km.shp"
+frost_days:
+  zip_path: "D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Frost_Days_Projections_12km_Grid.zip"
+  internal_path: "annual_count_of_frost_days_projections_12km.shp"
+
+
+
+

@@ -621,10 +621,10 @@ def clean_flooding(boundary):
     if extract:
         extract_flood_data(code_number_map)
 
-    clean_flood("RoFRS", "RoFRS", "v202501", boundary,
-                 "TfN RoFRS CC/tfn_rofrs_cc.gpkg", True, code_number_map)
-    clean_flood("RoFRS", "RoFRS", "v202501", boundary,
-                 "TfN RoFRS/tfn_rofrs.gpkg", False, code_number_map)
+    #clean_flood("RoFRS", "RoFRS", "v202501", boundary,
+     #            "TfN RoFRS CC/tfn_rofrs_cc.gpkg", True, code_number_map)
+    #clean_flood("RoFRS", "RoFRS", "v202501", boundary,
+     #            "TfN RoFRS/tfn_rofrs.gpkg", False, code_number_map)
     clean_flood("RoFSW CC", "RoFSW", "v202509", boundary,
                 "TfN RoFSW CC/tfn_rofsw_cc.gpkg", True, code_number_map)
     clean_flood("RoFSW", "RoFSW", "v202509", boundary,
@@ -672,9 +672,9 @@ def extract_gdb_file(code, number, flood_data, version, cc):
 
 def read_gdb(code, number, file_name, flood_data, version, cc):
     """Reads first layer of flood gdb file"""
-    base_path = FLOODING_RAW_IN / flood_data / code
+    base_path = FLOODING_RAW_IN / file_name / code
 
-    if cc == True:
+    if cc:
         gdb_path = base_path / f"{flood_data}_Climate_Change_01_{code}{number}_{version}.gdb"
     else:
         gdb_path = base_path / f"{flood_data}_{code}{number}_{version}.gdb"

@@ -5,7 +5,7 @@ Main script, which runs the entire model
 from data_cleaning import data_cleaning
 from functional_rules import apply_functional_rules
 from layering import layering
-from file_paths import RAW_INPUT, LOG_PATH
+from file_paths import LOG_PATH
 
 import logging
 from pathlib import Path
@@ -35,7 +35,15 @@ class Config(ctk.BaseConfig):
 
     boundary_path: Path
 
-config = Config.load_yaml(Path("config.yml"))
+    flood_extract: bool = False
+
+    os_road: Path
+    noham_2023: Path
+    noham_2048: Path
+
+
+config_path = Path("../../config.yml")
+config = Config.load_yaml(config_path)
 
 
 # Run model, use logging
