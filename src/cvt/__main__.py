@@ -1,11 +1,9 @@
 """
-Main script, which runs the entire model
+Main script
 """
-
 from data_cleaning import data_cleaning
 from functional_rules import apply_functional_rules
 from layering import layering
-from file_paths import LOG_PATH
 
 import logging
 from pathlib import Path
@@ -16,96 +14,139 @@ def main():
     """Run Climate Vulnerability Tool"""
 
     # Run data cleaning
-    if cfg.run_data_cleaning:
-        data_cleaning()
+    if cfg.switches.run_data_cleaning:
+        data_cleaning(cfg)
 
     # Run functional rules
-    if cfg.run_functional_rules:
-        apply_functional_rules()
+    if cfg.switches.run_functional_rules:
+        apply_functional_rules(cfg)
 
     # Run layering
-    if cfg.run_layering:
-        layering()
+    if cfg.switches.run_layering:
+        layering(cfg)
 
 ### CONFIG SET UP
 
-# --- simple zip + internal path structure ---
-class ZipFileEntry(ctk.BaseConfig):
-    zip_path: Path
-    internal_path: str
+def get_config():
+    """Defines structured config classes, then reads and returns config"""
 
-# ---- main config ----
-class Config(ctk.BaseConfig):
-    # switches
-    run_data_cleaning: bool
-    run_functional_rules: bool
-    run_layering: bool
-    flood_extract: bool
-    noham_extract: bool
+    class ZipFileEntry(ctk.BaseConfig):
+        zip_path: Path
+        internal_path: str | None = None
+        output_path: Path | None = None
 
-    # basic paths
-    root: Path
-    raw_input: Path
-    model_input: Path
-    model_interim_output: Path
-    model_output: Path
-    log_path: Path
-    boundary_path: Path
+    # -------------------------
+    # CATEGORY CONFIG CLASSES
+    # -------------------------
 
-    # infra
-    os_road: Path
-    noham_2023: Path
-    noham_2048: Path
-    tfn_rail_links: Path
+    class PathConfig(ctk.BaseConfig):
+        root: Path
+        raw_input: Path
+        model_input: Path
+        model_interim_output: Path
+        model_output: Path
+        log_path: Path
+        boundary_path: Path
 
-    bus_stops_ne: Path
-    bus_stops_nw: Path
-    bus_stops_ys: Path
-    ncn_sustrans: Path
-    os_mmrn: Path
-    poi_uk: ZipFileEntry
-    zapmap: Path
+    class Road(ctk.BaseConfig):
+        os_road: Path
+        noham_2023: Path
+        noham_2048: Path
 
-    # coastal erosion
-    ce_zip_path: Path
-    giz: str
-    smp: dict
+    class Rail(ctk.BaseConfig):
+        tfn_rail_links: Path
 
-    # extreme weather
-    wind_spd_current: Path
-    wind_spd_forecast: Path
+    class BusStops(ctk.BaseConfig):
+        ne: Path
+        nw: Path
+        ys: Path
 
-    rain_days: ZipFileEntry
-    extreme_summer_days: ZipFileEntry
-    frost_days: ZipFileEntry
-    hot_days: ZipFileEntry
-    icing_days: ZipFileEntry
-    wdr_index: ZipFileEntry
-    drought_index: ZipFileEntry
-    max_temp_summer: ZipFileEntry
-    precip_summer: ZipFileEntry
-    min_temp_winter: ZipFileEntry
-    precip_winter: ZipFileEntry
+    class Other(ctk.BaseConfig):
+        bus_stops: BusStops
+        ncn_sustrans: Path
+        os_mmrn: Path
+        poi_uk: ZipFileEntry
+        zapmap: Path
 
-    # flooding
-    flood_path: Path
+    class InfrastructureConfig(ctk.BaseConfig):
+        road: Road
+        rail: Rail
+        other: Other
 
-    # ground stability
-    geo_shrink_swell: dict
-    geosure: dict
+    class CoastalErosion(ctk.BaseConfig):
+        zip_path: Path
+        giz: str
+        smp: dict
 
-    # impact
-    freight_demand: Path
-    noham_demand: dict
+    class ExtremeWeather(ctk.BaseConfig):
+        wind_spd_current: Path
+        wind_spd_forecast: Path
+        rain_days: ZipFileEntry
+        extreme_summer_days: ZipFileEntry
+        frost_days: ZipFileEntry
+        hot_days: ZipFileEntry
+        icing_days: ZipFileEntry
+        wdr_index: ZipFileEntry
+        drought_index: ZipFileEntry
+        max_temp_summer: ZipFileEntry
+        precip_summer: ZipFileEntry
+        min_temp_winter: ZipFileEntry
+        precip_winter: ZipFileEntry
 
-config_path = Path("../../config.yml")
-cfg = Config.load_yaml(config_path)
+    class Flooding(ctk.BaseConfig):
+        flood_path: Path
 
+    class GeoSure(ctk.BaseConfig):
+        zip_path: Path
+        collapsible_deposits: Path
+        compressible_ground: Path
+        landslides: Path
+        running_sand: Path
+        shrink_swell: Path
+        soluble_rocks: Path
+
+    class GroundStability(ctk.BaseConfig):
+        geo_shrink_swell: dict
+        geosure: GeoSure
+
+    class HazardsConfig(ctk.BaseConfig):
+        coastal_erosion: CoastalErosion
+        extreme_weather: ExtremeWeather
+        flooding: Flooding
+        ground_stability: GroundStability
+
+    class ImpactConfig(ctk.BaseConfig):
+        freight_demand: Path
+        noham_demand: ZipFileEntry
+
+    class SwitchConfig(ctk.BaseConfig):
+        run_data_cleaning: bool = False
+        run_functional_rules: bool = False
+        run_layering: bool = False
+        flood_zip_extract: bool = False
+        noham_zip_extract: bool = False
+        create_flood_grid: bool = False
+
+    # -------------------------
+    # MAIN CONFIG
+    # -------------------------
+
+    class Config(ctk.BaseConfig):
+        switches: SwitchConfig
+        paths: PathConfig
+        infrastructure: InfrastructureConfig
+        hazards: HazardsConfig
+        impact: ImpactConfig
+
+    cfg = Config.load_yaml(Path("../../config.yml"))
+    return cfg
+
+cfg = get_config()
 
 # Run model, use logging
 if __name__ == "__main__":
     log = logging.getLogger('__main__')
     log.setLevel(logging.DEBUG)
     details = ToolDetails("cvt", "1.0.0", full_version=None)
-    with LogHelper(__package__, details, log_file=LOG_PATH):
+    with LogHelper(__package__, details, log_file=cfg.paths.log_path):
         main()

@@ -12,8 +12,6 @@ from functools import reduce
 
 from data_cleaning import explode_to_polygons, clip_to_boundary, write_to_file
 
-from __main__ import cfg
-
 
 ### GENERAL FUNCTIONS
 
@@ -88,8 +86,8 @@ def create_grid(bounds, cell_size):
 
 def merge_on_key(dfs, grid, key):
     """Merges a list of dataframes into a single dataframe on a given common key, then merges onto a common grid"""
-    merged = reduce(lambda left, right: pd.merge(left, right, on=key), dfs)
-    merged_df = pd.merge(merged, grid, on=key)
+    merged = reduce(lambda left, right: pd.merge(left, right, on=key, how='outer'), dfs)
+    merged_df = pd.merge(merged, grid, on=key, how='left', validate='one_to_many')
     merged_gdf = gpd.GeoDataFrame(merged_df, geometry='geometry', crs=grid.crs)
     return merged_gdf
 
@@ -104,7 +102,7 @@ def calculate_risk_threshold(df, base_col, output_col, threshold, invert=False):
         else:
             df[out_name] = np.where(df[col_name] < threshold, 0, df[col_name])
 
-        return df
+    return df
 
 def calculate_composite_score(df, weights, output_col):
     """Calculates composite score given a dataframe with variables and corresponding weights"""
@@ -206,36 +204,38 @@ def filter_out_small_geometries(gdf, pct_of_median):
 
 # FUNCTIONAL RULES
 
-def apply_functional_rules():
+def apply_functional_rules(cfg):
     """Applies functional rules to model input data"""
-    boundary = gpd.read_file(cfg.boundary_path)
+    boundary = gpd.read_file(cfg.paths.boundary_path)
 
-    extreme_weather_index()
-    flooding_index(boundary, )
-    ground_stability_index()
-    coastal_erosion_index()
+    #extreme_weather_index(cfg)
+    flooding_index(cfg, boundary)
+    #ground_stability_index(cfg)
+    #coastal_erosion_index(cfg)
 
 ## HAZARDS
 
 ### EXTREME WEATHER
 
-def extreme_weather_index():
+def extreme_weather_index(cfg):
     """Combines extreme heat, extreme cold, drought and storm indexes into a single index"""
-    tfn_common_grid = gpd.read_file(cfg.model_input / "Other" / "TfN Common Grid" / "tfn_common_grid.shp")
+    tfn_common_grid = gpd.read_file(cfg.paths.model_input / "Other" / "TfN Common Grid" / "tfn_common_grid.shp")
 
-    tfn_extreme_heat = extreme_heat_index(tfn_common_grid)
-    tfn_extreme_cold = extreme_cold_index(tfn_common_grid)
-    tfn_drought = drought_index()
-    tfn_storm = storm_index()
+    tfn_extreme_heat = extreme_heat_index(cfg, tfn_common_grid)
+    tfn_extreme_cold = extreme_cold_index(cfg, tfn_common_grid)
+    tfn_drought = drought_index(cfg, tfn_common_grid)
+    tfn_storm = storm_index(cfg, tfn_common_grid)
+
 
     tfn_extreme_weather_merge = pd.merge(
-        tfn_extreme_heat[['grid_id', 'heat_risk_c', 'heat_risk_f']],
-        tfn_extreme_cold[['grid_id', 'cold_risk_c', 'cold_risk_f', 'geometry']],
-        on='grid_id',
+        tfn_extreme_heat[['grid_id', 'part', 'heat_risk_c', 'heat_risk_f']],
+        tfn_extreme_cold[['grid_id', 'part', 'cold_risk_c', 'cold_risk_f', 'geometry']],
+        on=['grid_id', 'part'],
         how='inner'
     )
 
     tfn_extreme_weather_merge = gpd.GeoDataFrame(tfn_extreme_weather_merge, geometry='geometry', crs="EPSG:3857")
+    tfn_extreme_weather_merge.drop(columns=['grid_id', 'part'], inplace=True)
 
     tfn_extreme_weather_merge = tfn_extreme_weather_merge.to_crs("EPSG:27700")
     tfn_drought = tfn_drought.to_crs("EPSG:27700")
@@ -258,35 +258,37 @@ def extreme_weather_index():
                                       'drought_risk_c', 'drought_risk_f', 'storm_risk_c', 'storm_risk_f'])
 
     tfn_extreme_weather_risk = explode_to_polygons(tfn_extreme_weather_risk)
+    tfn_extreme_weather_risk.drop(columns=['part'], inplace=True)
 
     tfn_extreme_weather_risk = calculate_composite_score(
         tfn_extreme_weather_risk,
-        {'heat risk': 0.25, 'cold risk': 0.25, 'drought risk': 0.25, 'storm risk': 0.25},
+        {'heat_risk': 0.25, 'cold_risk': 0.25, 'drought_risk': 0.25, 'storm_risk': 0.25},
         'extreme_weather_risk'
     )
 
     tfn_extreme_weather_risk = min_max_scaling_pair(
-        tfn_extreme_weather_risk, ('extreme_weather_risk_c', 'extreme_weather_risk_f'))
+        tfn_extreme_weather_risk, [('extreme_weather_risk_c', 'extreme_weather_risk_f')])
 
     tfn_extreme_weather_risk = gpd.GeoDataFrame(tfn_extreme_weather_risk, geometry='geometry')
 
     write_to_file(tfn_extreme_weather_risk,
-                  cfg.model_interim_output / "TfN Extreme Weather Risk" / "tfn_extreme_weather_risk.shp")
-
+                  cfg.paths.model_interim_output / "TfN Extreme Weather Risk" / "tfn_extreme_weather_risk.shp")
 
 #### EXTREME HEAT
 
-def extreme_heat_index(common_grid):
+def extreme_heat_index(cfg, common_grid):
     """Combines several datasets into a single extreme heat index by merging on their common grid"""
     tfn_temp_max = pd.read_csv(
-        cfg.model_input / "Hazards" / "Extreme Weather" / "TfN Summer Max Temperature Change Projections" /
+        cfg.paths.model_input / "Hazards" / "Extreme Weather" / "TfN Summer Max Temperature Change Projections" /
         "tfn_temp_max.csv")
     tfn_hsd = pd.read_csv(
-        cfg.model_input / "Hazards" / "Extreme Weather"  / "TfN Hot Summer Days Projections" / "tfn_hot_days.csv")
+        cfg.paths.model_input / "Hazards" / "Extreme Weather"  / "TfN Hot Summer Days Projections" / "tfn_hot_days.csv")
     tfn_esd = pd.read_csv(
-        cfg.model_input / "Hazards" / "Extreme Weather"  / "TfN Extreme Summer Days Projections" / "tfn_extr_days.csv")
+        cfg.paths.model_input / "Hazards" / "Extreme Weather"  / "TfN Extreme Summer Days Projections" / "tfn_extr_days.csv")
+
 
     tfn_extreme_heat = merge_on_key([tfn_temp_max, tfn_hsd, tfn_esd], common_grid, 'grid_id')
+
 
     tfn_extreme_heat = calculate_risk_threshold(
         tfn_extreme_heat, 'tasmax_s', 'tasmax_risk', 30)
@@ -307,13 +309,13 @@ def extreme_heat_index(common_grid):
 
 #### EXTREME COLD
 
-def extreme_cold_index(common_grid):
+def extreme_cold_index(cfg, common_grid):
     """Combines several datasets into a single extreme cold index by merging on their common grid"""
-    tfn_temp_min = pd.read_csv(cfg.model_input / "Hazards" / "Extreme Weather"  /
+    tfn_temp_min = pd.read_csv(cfg.paths.model_input / "Hazards" / "Extreme Weather"  /
                                "TfN Winter Min Temperature Change Projections" / "tfn_temp_min.csv")
-    tfn_frost = pd.read_csv(cfg.model_input / "Hazards" / "Extreme Weather"  / "TfN Frost Days Projections" /
+    tfn_frost = pd.read_csv(cfg.paths.model_input / "Hazards" / "Extreme Weather"  / "TfN Frost Days Projections" /
                             "tfn_frost_days.csv")
-    tfn_icing = pd.read_csv(cfg.model_input / "Hazards" / "Extreme Weather"  / "TfN Icing Days Projections" /
+    tfn_icing = pd.read_csv(cfg.paths.model_input / "Hazards" / "Extreme Weather"  / "TfN Icing Days Projections" /
                             "tfn_ice_days.csv")
 
     tfn_extreme_cold = merge_on_key([tfn_temp_min, tfn_frost, tfn_icing], common_grid, 'grid_id')
@@ -335,18 +337,22 @@ def extreme_cold_index(common_grid):
 
 #### DROUGHT
 
-def drought_index():
+def drought_index(cfg, common_grid):
     """Combines several datasets into a single drought index using a spatial overlay and spatial smoothing, before
     normalising and calculating the composite score"""
-    tfn_drought = gpd.read_file(cfg.model_input / "Hazards" / "Extreme Weather"  / "TfN Drought Severity Index" /
+    tfn_drought = gpd.read_file(cfg.paths.model_input / "Hazards" / "Extreme Weather"  / "TfN Drought Severity Index" /
                                 "tfn_drought_index.shp")
-    tfn_precip_sum = gpd.read_file(cfg.model_input / "Hazards" / "Extreme Weather"  /
-                                   "TfN Summer Precipitation Change Projections" / "tfn_precip_sum.shp")
+    tfn_precip_sum = pd.read_csv(cfg.paths.model_input / "Hazards" / "Extreme Weather" /
+                                   "TfN Summer Precipitation Change Projections" / "tfn_precip_sum.csv")
+
+    tfn_precip_sum_grid = pd.merge(tfn_precip_sum, common_grid, on='grid_id')
+    tfn_precip_sum_gdf = gpd.GeoDataFrame(tfn_precip_sum_grid, geometry='geometry', crs=common_grid.crs)
+    tfn_precip_sum_gdf = tfn_precip_sum_gdf[['pr_s_c', 'pr_s_f', 'geometry']]
 
     tfn_drought = tfn_drought.to_crs("EPSG:27700")
-    tfn_precip_sum = tfn_precip_sum.to_crs("EPSG:27700")
+    tfn_precip_sum_gdf = tfn_precip_sum_gdf.to_crs("EPSG:27700")
 
-    tfn_drought_overlay = gpd.overlay(tfn_precip_sum, tfn_drought, how='union')
+    tfn_drought_overlay = gpd.overlay(tfn_precip_sum_gdf, tfn_drought, how='union')
     tfn_drought_overlay = iterative_spatial_smoothing(tfn_drought_overlay,
                                                       ['pr_s_c', 'pr_s_f', 'dsi_c', 'dsi_f'])
 
@@ -370,49 +376,53 @@ def drought_index():
 
 #### STORMS
 
-def storm_index():
+def storm_index(cfg, common_grid):
     """Combines several datasets into a single storm index using a spatial overlay and spatial smoothing, before
     normalising and calculating the composite score"""
-    tfn_precip_win = gpd.read_file(
-        cfg.model_input / "Hazards" / "Extreme Weather"  / "TfN Winter Precipitation Change Projections" /
-        "tfn_precip_win.shp")
-    tfn_rain_days = gpd.read_file(cfg.model_input / "Hazards" / "Extreme Weather"  / "TfN 10mm Rain Days 1991-2020" /
+    tfn_precip_win = pd.read_csv(cfg.paths.model_input / "Hazards" / "Extreme Weather"  /
+                                 "TfN Winter Precipitation Change Projections" / "tfn_precip_win.csv")
+    tfn_rain_days = gpd.read_file(cfg.paths.model_input / "Hazards" / "Extreme Weather"  / "TfN 10mm Rain Days 1991-2020" /
                                   "tfn_rain_days.shp")
-    tfn_wind_spd = gpd.read_file(cfg.model_input / "Hazards" / "Extreme Weather"  / "TfN Wind Speed Projections" /
+    tfn_wind_spd = gpd.read_file(cfg.paths.model_input / "Hazards" / "Extreme Weather"  / "TfN Wind Speed Projections" /
                                  "tfn_windspd.shp")
-    tfn_wdr = gpd.read_file(cfg.model_input / "Hazards" / "Extreme Weather"  / "TfN Wind Driven Rain Index" /
+    tfn_wdr = gpd.read_file(cfg.paths.model_input / "Hazards" / "Extreme Weather"  / "TfN Wind Driven Rain Index" /
                             "tfn_wdr.shp")
+
+    tfn_precip_win_grid = pd.merge(tfn_precip_win, common_grid, on='grid_id', how='left', validate='one_to_many')
+    tfn_precip_win_gdf = gpd.GeoDataFrame(tfn_precip_win_grid, geometry='geometry', crs=common_grid.crs)
+    tfn_precip_win_gdf = tfn_precip_win_gdf[['pr_w_c', 'pr_w_f', 'geometry']]
 
     tfn_wind_spd = tfn_wind_spd.to_crs("EPSG:27700")
     tfn_rain_days = tfn_rain_days.to_crs("EPSG:27700")
-    tfn_precip_win = tfn_precip_win.to_crs("EPSG:27700")
+    tfn_precip_win_gdf = tfn_precip_win_gdf.to_crs("EPSG:27700")
     tfn_wdr = tfn_wdr.to_crs("EPSG:27700")
 
     tfn_storm_overlay = gpd.overlay(tfn_wind_spd, tfn_rain_days, how='union')
-    tfn_storm_overlay = gpd.overlay(tfn_storm_overlay, tfn_precip_win, how='union')
+    tfn_storm_overlay = gpd.overlay(tfn_storm_overlay, tfn_precip_win_gdf, how='union')
     tfn_storm_overlay = gpd.overlay(tfn_storm_overlay, tfn_wdr, how='union')
 
-    tfn_storm_overlay = tfn_storm_overlay[['rain_days_c', 'rain_days_f','pr_w_c', 'pr_w_f','p99_c', 'p99_f','avg_excd_c',
+    tfn_storm_overlay = tfn_storm_overlay[['rain_d_c', 'rain_d_f','pr_w_c', 'pr_w_f','p99_c', 'p99_f','avg_excd_c',
                                            'avg_excd_f','wdr_c', 'wdr_f','geometry']]
 
     tfn_storm_overlay = filter_out_small_geometries(tfn_storm_overlay, 0.01)
 
     tfn_storm_overlay = iterative_spatial_smoothing(
         tfn_storm_overlay,
-        ['rain_days_c', 'rain_days_f', 'pr_w_c', 'pr_w_f', 'p99_c', 'p99_f','avg_excd_c', 'avg_excd_f', 'wdr_c', 'wdr_f'])
+        ['rain_d_c', 'rain_d_f', 'pr_w_c', 'pr_w_f', 'p99_c', 'p99_f','avg_excd_c', 'avg_excd_f', 'wdr_c', 'wdr_f'])
 
     tfn_storm_risk = explode_to_polygons(tfn_storm_overlay)
+    tfn_storm_risk.drop(columns=['part'], inplace=True)
 
     tfn_storm_risk['wind_spd_risk_c'] = tfn_storm_risk['p99_c'].apply(wind_risk_scaled)
     tfn_storm_risk['wind_spd_risk_f'] = tfn_storm_risk['p99_f'].apply(wind_risk_scaled)
 
     tfn_storm_risk = min_max_scaling_pair(tfn_storm_risk,[
         ('wind_spd_risk_c', 'wind_spd_risk_f'),('pr_w_c', 'pr_w_f'),('avg_excd_c', 'avg_excd_f'),('wdr_c', 'wdr_f'),
-        ('rain_days_c', 'rain_days_f'),])
+        ('rain_d_c', 'rain_d_f'),])
 
 
     tfn_storm_risk = calculate_composite_score(
-        tfn_storm_risk, {'wind_spd_risk': 0.3,'avg_excd': 0.2,'pr_w': 0.15,'rain_days': 0.15, 'wdr': 0.2}, 'storm_risk')
+        tfn_storm_risk, {'wind_spd_risk': 0.3,'avg_excd': 0.2,'pr_w': 0.15,'rain_d': 0.15, 'wdr': 0.2}, 'storm_risk')
 
     tfn_storm_risk = min_max_scaling_pair(tfn_storm_risk, [('storm_risk_c', 'storm_risk_f')])
 
@@ -431,13 +441,17 @@ def wind_risk_scaled(speed_mps):
 
 ### FLOODING
 
-def flooding_index(boundary):
+def flooding_index(cfg, boundary):
     """Combines RoFRS and RoFSW indexes into a single risk index by upscaling them to a common grid, normalising, and
     calculating a composite risk score"""
     risk_score_map = {'Unavailable': 0, 'Very low': 0, 'Low': 1, 'Medium': 2, 'High': 3}
 
-    flood_grid = create_flood_grid(1000, boundary)
-    tfn_flood_risk_c, tfn_flood_risk_f = upscale_to_grid(risk_score_map, flood_grid)
+    if cfg.create_flood_grid:
+        flood_grid = create_flood_grid(cfg, 1000, boundary)
+    else:
+        flood_grid = gpd.read_file(cfg.paths.model_interim_output / "Other" / "flood_grid.shp")
+
+    tfn_flood_risk_c, tfn_flood_risk_f = upscale_to_grid(cfg, risk_score_map, flood_grid)
 
     tfn_flood_risk = pd.merge(tfn_flood_risk_c[['FID', 'rofrs_risk_c', 'rofsw_risk_c']],
                               tfn_flood_risk_f, on='FID', how='left')
@@ -449,14 +463,14 @@ def flooding_index(boundary):
 
     tfn_flood_risk = min_max_scaling_pair(tfn_flood_risk, [('flood_risk_c', 'flood_risk_f')])
 
-    write_to_file(tfn_flood_risk, cfg.model_interim_output / "TfN Flood Risk" / "tfn_flood_risk.gpkg", "GPKG")
+    write_to_file(tfn_flood_risk, cfg.paths.model_interim_output / "TfN Flood Risk" / "tfn_flood_risk.gpkg", "GPKG")
 
-def create_flood_grid(size_m, boundary):
+def create_flood_grid(cfg, size_m, boundary):
     """Creates a grid of a given size in metres, within a given boundary"""
     bounds = boundary.total_bounds
     grid = create_grid(bounds, size_m)
     flood_grid = clip_to_boundary(grid, boundary)
-    write_to_file(flood_grid, cfg.model_interim_output / "Other" / "flood_grid.shp")
+    write_to_file(flood_grid, cfg.paths.model_interim_output / "Other" / "flood_grid.shp")
     return flood_grid
 
 def process_flood_layer(flood_grid, file_path, risk_column, risk_score_map):
@@ -465,7 +479,7 @@ def process_flood_layer(flood_grid, file_path, risk_column, risk_score_map):
     layer[risk_column] = layer['Risk_band'].map(risk_score_map)
     return area_weighted_flood_assignment(flood_grid, layer, risk_column)
 
-def upscale_to_grid(risk_score_map, flood_grid):
+def upscale_to_grid(cfg, risk_score_map, flood_grid):
     """Upscales each flood layer to the common grid and writes to file"""
     scenarios = {
         "current": [("TfN RoFRS", "tfn_rofrs.gpkg", "rofrs_risk_c"),
@@ -478,17 +492,18 @@ def upscale_to_grid(risk_score_map, flood_grid):
     for scenario, layers in scenarios.items():
         result = flood_grid
         for folder, file, risk_col in layers:
-            result = process_flood_layer(result, cfg.model_input / "Flooding" / folder / file, risk_col, risk_score_map)
+            result = process_flood_layer(
+                result, cfg.paths.model_input / "Hazards" / "Flooding" / folder / file, risk_col, risk_score_map)
 
         write_to_file(
-            result, cfg.model_interim_output / "TfN Flood Risk" / f"tfn_flood_risk_{scenario[0]}.gpkg", "GPKG")
+            result, cfg.paths.model_interim_output / "TfN Flood Risk" / f"tfn_flood_risk_{scenario[0]}.gpkg", "GPKG")
         results.append(result)
 
     return results[0], results[1]
 
 ### GROUND STABILITY
 
-def ground_stability_index():
+def ground_stability_index(cfg):
     """Combines GeoSure and GeoClimate ground stability risk into a single index, using a spatial overlay, before
     normalising and calculating a composite risk score"""
     risk_scores = {  # Map risk scores to normalised values (0-100)
@@ -499,7 +514,7 @@ def ground_stability_index():
     }
 
 
-    tfn_geosure = gpd.read_file(cfg.model_input / "Hazards" / "Ground Stability" / "TfN Geosure" / "tfn_geosure.shp")
+    tfn_geosure = gpd.read_file(cfg.paths.model_input / "Hazards" / "Ground Stability" / "TfN Geosure" / "tfn_geosure.shp")
     tfn_geosure = tfn_geosure.to_crs("EPSG:27700")
 
     tfn_ss = {}
@@ -546,16 +561,18 @@ def ground_stability_index():
     tfn_ground_stability = min_max_scaling_pair(
         tfn_ground_stability, [('ground_stability_risk_c', 'ground_stability_risk_f')])
 
-    write_to_file(tfn_ground_stability,
-                  cfg.model_interim_output / "TfN Ground Stability Risk" / "tfn_ground_stability_risk.gpkg", "GPKG")
+    write_to_file(
+        tfn_ground_stability,
+        cfg.paths.model_interim_output / "TfN Ground Stability Risk" / "tfn_ground_stability_risk.gpkg", "GPKG"
+    )
 
 ### COASTAL EROSION
 
-def coastal_erosion_index():
+def coastal_erosion_index(cfg):
     """Combines erosion and ground instability risk from NCERM into a single index using a spatial overlay, before
     normalising and calculating a composite risk score"""
     tfn_ncerm_giz = gpd.read_file(
-        cfg.model_input / "Hazards" / "Coastal Erosion" / "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.shp")
+        cfg.paths.model_input / "Hazards" / "Coastal Erosion" / "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.shp")
     tfn_ncerm_giz['risk_giz'] = 1
 
     tfn_ncerm = {}
@@ -579,7 +596,7 @@ def coastal_erosion_index():
     tfn_coastal_erosion_risk = tfn_coastal_erosion_risk[['erosion_c', 'erosion_f', 'geometry']]
 
     write_to_file(tfn_coastal_erosion_risk,
-                  cfg.model_interim_output / "TfN Coastal Erosion Risk" / "tfn_coastal_erosion_risk.shp")
+                  cfg.paths.model_interim_output / "TfN Coastal Erosion Risk" / "tfn_coastal_erosion_risk.shp")
 
 
 
