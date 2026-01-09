@@ -167,7 +167,7 @@ def data_cleaning(cfg):
 
 def clean_infrastructure(cfg, boundary):
     """Clean all infrastructure datasets ready for analysis"""
-    tfn_rail_links = get_rail_links(boundary, cfg.rail.tfn_rail_links)
+    tfn_rail_links = get_rail_links(boundary, cfg.infrastructure.rail.tfn_rail_links)
 
     clean_roads(cfg, boundary)
     clean_rail(cfg,tfn_rail_links)
@@ -191,7 +191,8 @@ def clean_os_roads(cfg, boundary):
     os_road = os_road[~os_road.geometry.is_empty]
     os_road = os_road[os_road.geometry.notnull()]
     tfn_os_road = clip_to_boundary(os_road, boundary)
-    write_to_file(tfn_os_road, cfg.paths.model_input / "Infrastructure" / "Road" / "TfN OS Road" / "tfn_os_road.shp")
+    write_to_file(tfn_os_road, cfg.paths.model_input / "Infrastructure" / "Road" / "TfN OS Road" / "tfn_os_road.gpkg",
+                  driver="GPKG")
 
 def clean_noham_roads(cfg, boundary):
     """Reads and cleans 2023 and 2048 NoHAM network datasets, then writes to file"""
@@ -209,7 +210,8 @@ def clean_noham_roads(cfg, boundary):
         noham_network = noham_network[noham_network.geometry.notnull()]
         tfn_noham_network = clip_to_boundary(noham_network, boundary)
         write_to_file(tfn_noham_network,
-                      cfg.paths.model_input / "Infrastructure" / "Road" / f"TfN NoHAM {year}" / f"tfn_noham_{year}.shp")
+                      cfg.paths.model_input / "Infrastructure" / "Road" / f"TfN NoHAM {year}" / f"tfn_noham_{year}.gpkg",
+                      driver="GPKG")
 
 ### RAIL
 
@@ -241,13 +243,15 @@ def clean_passenger_rail(cfg, tfn_rail_links):
     tfn_pass_rail = tfn_pass_rail[tfn_pass_rail['desc'].isin(['Main Line', 'Main Line And Tram',
                                                                      'Main Line And Rapid Transport System'])]
     write_to_file(tfn_pass_rail,
-                  cfg.paths.model_input / "Infrastructure" / "Rail" / "TfN OS Passenger Rail" / "tfn_pass_rail_links.shp")
+                  cfg.paths.model_input / "Infrastructure" / "Rail" / "TfN OS Passenger Rail" /
+                  "tfn_pass_rail_links.gpkg", driver="GPKG")
 
 def clean_freight_rail(cfg, tfn_rail_links):
     """Filters OS rail data to freight rail network, then writes to file"""
     tfn_freight_rail = tfn_rail_links[tfn_rail_links['rail_use'].isin(['Freight And Passenger', 'Freight'])]
     write_to_file(tfn_freight_rail,
-                  cfg.paths.model_input / "Infrastructure" / "Rail" / "TfN OS Freight Rail" / "tfn_freight_rail_links.shp")
+                  cfg.paths.model_input / "Infrastructure" / "Rail" / "TfN OS Freight Rail" /
+                  "tfn_freight_rail_links.gpkg", driver="GPKG")
 
 ### OTHER
 
@@ -279,7 +283,7 @@ def clean_bus_stops(cfg, boundary):
     bus_stops_gdf = bus_stops_gdf.drop_duplicates(subset=['stop_id', 'geometry'])  # Remove duplicate rows
     tfn_bus_stops = clip_to_boundary(bus_stops_gdf, boundary)  # Clip to TfN boundary
     write_to_file(tfn_bus_stops, cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Bus Stops" /
-                  "tfn_bus_stops.shp")
+                  "tfn_bus_stops.gpkg", driver="GPKG")
 
 def clean_petrol_stations(cfg, boundary):
     """Reads and cleans POI data, filters for petrol stations, and writes to file"""
@@ -290,7 +294,8 @@ def clean_petrol_stations(cfg, boundary):
     petrol_stations = petrol_stations.drop_duplicates(subset=['id', 'geometry'])
     tfn_petrol = clip_to_boundary(petrol_stations, boundary)
     write_to_file(tfn_petrol,
-                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Petrol Stations" / "tfn_petrol_stations.shp")
+                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Petrol Stations" /
+                  "tfn_petrol_stations.gpkg", driver="GPKG")
 
 def read_os_mm_node_network(path):
     """Reads and cleans OS Multi-Modal Routing Network (OS MMRN) dataset to prepare for further filtering"""
@@ -311,7 +316,8 @@ def clean_train_stations(cfg, os_mm_net_node, boundary):
     train_stations.drop(columns=['os_nodetype'], inplace=True)
     tfn_train_stations = clip_to_boundary(train_stations, boundary)
     write_to_file(tfn_train_stations,
-                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Train Stations" / "tfn_train_stations.shp")
+                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Train Stations" /
+                  "tfn_train_stations.gpkg", driver="GPKG")
 
 def clean_tram_stations(cfg, os_mm_net_node, boundary):
     """Filters OS MMRN for tram stations, then clips to boundary and writes to file"""
@@ -319,7 +325,8 @@ def clean_tram_stations(cfg, os_mm_net_node, boundary):
     tram_stations.drop(columns=['os_nodetype'], inplace=True)
     tfn_tram_stations = clip_to_boundary(tram_stations, boundary)
     write_to_file(tfn_tram_stations,
-                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Tram Stations" / "tfn_tram_stations.shp")
+                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Tram Stations" /
+                  "tfn_tram_stations.gpkg", driver="GPKG")
 
 def clean_rapid_transport_stations(cfg, os_mm_net_node, boundary):
     """Filters OS MMRN for rapid transport stations, then clips to boundary and writes to file"""
@@ -329,7 +336,7 @@ def clean_rapid_transport_stations(cfg, os_mm_net_node, boundary):
     tfn_rapid_transport_stations = clip_to_boundary(rapid_transport_stations, boundary)
     write_to_file(tfn_rapid_transport_stations,
                   cfg.paths.model_input / "Infrastructure" / "Other" /
-                  "TfN OS Rapid Transport Stations" / "tfn_rapid_transport_stations.shp")
+                  "TfN OS Rapid Transport Stations" / "tfn_rapid_transport_stations.gpkg", driver="GPKG")
 
 def clean_ferry_terminals(cfg, os_mm_net_node, boundary):
     """Filters OS MMRN for ferry terminals, then clips to boundary and writes to file"""
@@ -337,7 +344,8 @@ def clean_ferry_terminals(cfg, os_mm_net_node, boundary):
     ferry_terminals.drop(columns=['os_nodetype'], inplace=True)
     tfn_ferry_terminals = clip_to_boundary(ferry_terminals, boundary)
     write_to_file(tfn_ferry_terminals,
-                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Ferry Terminals" / "tfn_ferry_terminals.shp")
+                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Ferry Terminals" /
+                  "tfn_ferry_terminals.gpkg", driver="GPKG")
 
 def clean_bus_coach_stations(cfg, os_mm_net_node, boundary):
     """Filters OS MMRN for bus and coach stations, then clips to boundary and writes to file"""
@@ -349,14 +357,15 @@ def clean_bus_coach_stations(cfg, os_mm_net_node, boundary):
     tfn_bus_coach_stations = clip_to_boundary(bus_coach_stations, boundary)
     write_to_file(tfn_bus_coach_stations,
                   cfg.paths.model_input / "Infrastructure" / "Other" /
-                  "TfN OS Bus Coach Stations" / "tfn_bus_coach_stations.shp")
+                  "TfN OS Bus Coach Stations" / "tfn_bus_coach_stations.gpkg", driver="GPKG")
 
 def clean_tram_network(cfg, tfn_rail_links):
     """Filters OS rail links for tram network, then writes to file"""
     tfn_tram_links = tfn_rail_links[tfn_rail_links['rail_use'].isin(['Freight And Passenger', 'Passenger'])]
     tfn_tram_links = tfn_tram_links[tfn_tram_links['desc'].isin(['Tram', 'Main Line And Tram'])]
     write_to_file(tfn_tram_links,
-                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Tram Network" / "tfn_os_tram_links.shp")
+                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Tram Network" /
+                  "tfn_os_tram_links.gpkg", driver="GPKG")
 
 def clean_rapid_transport_network(cfg, tfn_rail_links):
     """Filters OS rail links for rapid transport network, then writes to file"""
@@ -365,7 +374,7 @@ def clean_rapid_transport_network(cfg, tfn_rail_links):
         ['Rapid Transport System', 'Main Line And Rapid Transport System'])]
     write_to_file(tfn_rapid_transport,
                   cfg.paths.model_input / "Infrastructure" / "Other" /
-                  "TfN Rapid Transport Network" / "tfn_rapid_transport_links.shp")
+                  "TfN Rapid Transport Network" / "tfn_rapid_transport_links.gpkg", driver="GPKG")
 
 def clean_charging_sites(cfg, boundary):
     """Reads and cleans ZapMap charging sites data, then writes to file"""
@@ -379,7 +388,8 @@ def clean_charging_sites(cfg, boundary):
     chg_sites_gdf = chg_sites_gdf[chg_sites_gdf.geometry.notnull()]
     tfn_chg_sites = clip_to_boundary(chg_sites_gdf, boundary)
     write_to_file(tfn_chg_sites,
-                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN EV Charging Sites" / "tfn_chg_sites.shp")
+                  cfg.paths.model_input / "Infrastructure" / "Other" / "TfN EV Charging Sites" / "tfn_chg_sites.gpkg",
+                  driver="GPKG")
 
 def clean_ncn(cfg, boundary):
     """Reads and cleans National Cycle Network data, then writes to file"""
@@ -390,7 +400,8 @@ def clean_ncn(cfg, boundary):
                         'Quality', 'Lighting', 'RoadClass']
     ncn[ncn_cols_replace] = ncn[ncn_cols_replace].replace(0, 'N/A')
     tfn_ncn = clip_to_boundary(ncn, boundary)
-    write_to_file(tfn_ncn, cfg.paths.model_input / "Infrastructure" / "Other" / "TfN NCN" / "tfn_ncn.shp")
+    write_to_file(tfn_ncn, cfg.paths.model_input / "Infrastructure" / "Other" / "TfN NCN" / "tfn_ncn.gpkg",
+                  driver="GPKG")
 
 ## HAZARDS
 
@@ -428,7 +439,8 @@ def clean_common_grid(cfg, boundary):
     common_grid = temp_max[['grid_id', 'geometry']]
     tfn_common_grid = clip_to_boundary(common_grid, boundary)
     tfn_common_grid = explode_to_polygons(tfn_common_grid)
-    write_to_file(tfn_common_grid, cfg.paths.model_input / "Other" / "TfN Common Grid" / "tfn_common_grid.shp")
+    write_to_file(tfn_common_grid, cfg.paths.model_input / "Other" / "TfN Common Grid" / "tfn_common_grid.gpkg",
+                  driver="GPKG")
     return tfn_common_grid
 
 def clean_temp_max(cfg, grid):
@@ -496,10 +508,9 @@ def clean_rain_days(cfg, boundary):
     tfn_rain_days = clip_to_boundary(rain_days, boundary)
     tfn_rain_days = explode_to_polygons(tfn_rain_days)
     tfn_rain_days.rename(columns={'Rain10mmDa': 'rain_d_c'}, inplace=True)
-    tfn_rain_days['rain_d_f'] = tfn_rain_days['rain_d_c'] # Duplicate rain days column
     tfn_rain_days.drop(columns=['part'], inplace=True)
     write_to_file(tfn_rain_days, cfg.paths.model_input / "Hazards" / "Extreme Weather" /
-                  "TfN 10mm Rain Days 1991-2020" / "tfn_rain_days.shp")
+                  "TfN 10mm Rain Days 1991-2020" / "tfn_rain_days.gpkg", driver="GPKG")
 
 def clean_drought_index(cfg, boundary):
     """Reads and cleans drought severity index data, then writes to file"""
@@ -511,7 +522,7 @@ def clean_drought_index(cfg, boundary):
     tfn_drought = explode_to_polygons(tfn_drought)
     tfn_drought.drop(columns=['part'], inplace=True)
     write_to_file(tfn_drought, cfg.paths.model_input / "Hazards" / "Extreme Weather" /
-                  "TfN Drought Severity Index" / "tfn_drought_index.shp")
+                  "TfN Drought Severity Index" / "tfn_drought_index.gpkg", driver="GPKG")
 
 def clean_hot_summer_days(cfg, grid):
     """Reads and cleans hot summer days projections, then writes to file"""
@@ -575,7 +586,7 @@ def clean_wind_speed(cfg, boundary):
     tfn_windspd = explode_to_polygons(tfn_windspd)
     tfn_windspd.drop(columns=['part'], inplace=True)
     write_to_file(tfn_windspd, cfg.paths.model_input / "Hazards" / "Extreme Weather" /
-                  "TfN Wind Speed Projections" / "tfn_windspd.shp")
+                  "TfN Wind Speed Projections" / "tfn_windspd.gpkg", driver="GPKG")
 
 def read_wind_speed_reduce(xr_path, tp):
     """Reads wind speed projections, calculates exceedance and percentile measures and returns a reduced dataframe"""
@@ -614,7 +625,7 @@ def clean_wind_driven_rain(cfg, boundary):
     tfn_wdr = explode_to_polygons(tfn_wdr)
     tfn_wdr.drop(columns=['part'], inplace=True)
     write_to_file(tfn_wdr, cfg.paths.model_input / "Hazards" / "Extreme Weather" /
-                  "TfN Wind Driven Rain Index" / "tfn_wdr.shp")
+                  "TfN Wind Driven Rain Index" / "tfn_wdr.gpkg", driver="GPKG")
 
 ### FLOODING
 
@@ -748,17 +759,17 @@ def clean_ground_stability(cfg, boundary):
 def clean_geosure(cfg, boundary):
     """Cleans GeoSureHexGrids data, merges by nearest centroids, then writes to file"""
     geosure_layers = {
-        'cd': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
+        'collapsible_deposits': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
                             f"/" + cfg.hazards.ground_stability.geosure.collapsible_deposits),
-        'cg': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
+        'compressible_ground': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
                             f"/" + cfg.hazards.ground_stability.geosure.compressible_ground),
-        'ls': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
+        'landslides': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
                             f"/" + cfg.hazards.ground_stability.geosure.landslides),
-        'rs': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
+        'running_sand': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
                             f"/" + cfg.hazards.ground_stability.geosure.running_sand),
-        'ss': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
+        'shrink_swell': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
                             f"/" + cfg.hazards.ground_stability.geosure.shrink_swell),
-        'sr': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
+        'soluble_rocks': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
                             f"/" + cfg.hazards.ground_stability.geosure.soluble_rocks)
     }
 
@@ -769,8 +780,8 @@ def clean_geosure(cfg, boundary):
         tfn_geosure_layers[code] = explode_to_polygons(tfn_geosure_layers[code])
 
     # Merge layers based on nearest centroids
-    base_code = 'cd'
-    tfn_geosure = tfn_geosure_layers[base_code][['cd_risk', 'geometry']].copy()
+    base_code = 'collapsible_deposits'
+    tfn_geosure = tfn_geosure_layers[base_code][['collapsible_deposits_risk', 'geometry']].copy()
     for code, layer in tfn_geosure_layers.items():
         if code == base_code:
             continue  # skip the base layer
@@ -778,19 +789,21 @@ def clean_geosure(cfg, boundary):
         matched = nearest_centroids(tfn_geosure, layer_subset) # Apply nearest centroid matching
         tfn_geosure[f'{code}_risk'] = matched[f'{code}_risk'] # Add the matched CLASS column to the base dataframe
 
-    tfn_geosure = tfn_geosure[['cd_risk', 'cg_risk', 'ls_risk', 'rs_risk', 'ss_risk', 'sr_risk', 'geometry']]
-    write_to_file(tfn_geosure, cfg.paths.model_input / "Hazards" / "Ground Stability" / "TfN GeoSure" / "tfn_geosure.shp")
+    tfn_geosure = tfn_geosure[['collapsible_deposits_risk', 'compressible_ground_risk', 'landslides_risk',
+                               'running_sand_risk', 'shrink_swell_risk', 'soluble_rocks_risk', 'geometry']]
+    write_to_file(tfn_geosure, cfg.paths.model_input / "Hazards" / "Ground Stability" / "TfN GeoSure" /
+                  "tfn_geosure.gpkg", driver="GPKG")
 
 def clean_geoclimate(cfg, boundary):
     """Reads and cleans GeoClimate Shrink-Swell data, then writes to file"""
     for year in ['2030', '2070']:
         gdf = gpd.read_file(cfg.hazards.ground_stability.geo_shrink_swell[year])
-        gdf.rename(columns={'CLASS': 'ss_geo_risk'}, inplace=True)
-        gdf = gdf[['ss_geo_risk', 'geometry']]
+        gdf.rename(columns={'CLASS': 'shrink_swell_geoclimate_risk'}, inplace=True)
+        gdf = gdf[['shrink_swell_geoclimate_risk', 'geometry']]
         tfn_gdf = clip_to_boundary(gdf, boundary)
         tfn_gdf = explode_to_polygons(tfn_gdf)
         write_to_file(tfn_gdf, cfg.paths.model_input / "Hazards" / "Ground Stability" /
-                      "BGS Shrink Swell" / year / f"tfn_bgs_ss_{year}.shp")
+                      "BGS Shrink Swell" / year / f"tfn_bgs_ss_{year}.gpkg", driver="GPKG")
 
 ### COASTAL EROSION
 
@@ -806,7 +819,7 @@ def clean_giz(cfg, boundary):
     tfn_ncerm_giz = clip_to_boundary(ncerm_giz, boundary)
     tfn_ncerm_giz = explode_to_polygons(tfn_ncerm_giz)
     write_to_file(tfn_ncerm_giz, cfg.paths.model_input / "Hazards" / "Coastal Erosion" /
-                  "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.shp")
+                  "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.gpkg", driver="GPKG")
 
 def clean_ncerm(cfg, boundary):
     """Cleans erosion data from NCERM for 2055, and 2105, then writes to file"""
@@ -817,7 +830,7 @@ def clean_ncerm(cfg, boundary):
         tfn_gdf = explode_to_polygons(tfn_gdf)
         write_to_file(tfn_gdf,
                       cfg.paths.model_input / "Hazards" / "Coastal Erosion" /
-                      "NCERM" / f"SMP_{year}_70CC" / f"tfn_ncerm_smp_{year}_70CC.shp")
+                      "NCERM" / f"SMP_{year}_70CC" / f"tfn_ncerm_smp_{year}_70CC.gpkg", driver="GPKG")
 
 ## IMPACT
 
@@ -834,10 +847,11 @@ def clean_freight_demand(cfg, boundary):
 
     tfn_os_freight_network_demand = map_freight_networks(
         tfn_freight_network_demand,
-        cfg.model_input / "Infrastructure" / "Rail" / "TfN OS Freight Rail" / "tfn_freight_rail_links.shp")
+        cfg.model_input / "Infrastructure" / "Rail" / "TfN OS Freight Rail" / "tfn_freight_rail_links.gpkg")
 
     write_to_file(tfn_os_freight_network_demand,
-                  cfg.paths.model_input / "Impact" / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg")
+                  cfg.paths.model_input / "Impact" / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg",
+                  driver="GPKG")
 
 def read_freight_demand(path, boundary):
     """Reads and cleans freight demand data, and returns as GeoDataFrame"""
@@ -872,7 +886,7 @@ def clean_noham_flows(cfg):
         tfn_noham_flows = link_flows[year]
         tfn_noham_net_flows = merge_noham_flow_network(
             tfn_noham_flows,
-            cfg.paths.model_input / "Infrastructure" / "Road" / f"TfN NoHAM {year}" / f"tfn_noham_{year}.shp"
+            cfg.paths.model_input / "Infrastructure" / "Road" / f"TfN NoHAM {year}" / f"tfn_noham_{year}.gpkg"
         )
         write_to_file(tfn_noham_net_flows,
                       cfg.paths.model_input / "Impact" / "TfN NoHAM Flows" / year / f"tfn_noham_net_flows_{tp}.gpkg",

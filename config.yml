@@ -2,9 +2,10 @@
 
 # Model Section Switches
 switches:
-  run_data_cleaning: false
+  run_data_cleaning: true
   run_functional_rules: true
-  run_layering: false
+  run_layering: true
+
   flood_zip_extract: false
   noham_zip_extract: false
   create_flood_grid: false
@@ -27,7 +28,7 @@ infrastructure:
     noham_2023: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2023/NoHAM_Decarb_DM_Core_2023_carbon.shp"
     noham_2048: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2048/NoHAM_Decarb_DM_Core_2048_carbon.shp"
   rail:
-    tfn_rail_links: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/TfN_Area_tfn_ntwk_railwaylink.gpkg"
+    tfn_rail_links: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/OS Rail Network/TfN_Area_tfn_ntwk_railwaylink.gpkg"
   other:
     bus_stops:
       ne: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ne.csv"

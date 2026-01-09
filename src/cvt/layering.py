@@ -77,7 +77,7 @@ def prepare_model_output(gdf, drop_cols, desc_cols, rename_map, risk_cols_order)
     gdf.rename(columns={col: f"{col}_score" for col in risk_cols_order}, inplace=True)
     return gdf
 
-def split_csv_shapefile(cfg, gdf, id_col, folder, filename):
+def split_csv_shapefile(cfg, gdf, id_col, inf_type, folder, filename):
     """Splits a GeoDataFrame into a CSV with an ID and all attribute data, and a Shapefile with an ID and spatial data,
     then writes them to file"""
     # Separate spatial and attribute data
@@ -85,8 +85,8 @@ def split_csv_shapefile(cfg, gdf, id_col, folder, filename):
     attribute_gdf = gdf.drop(columns=['geometry'])
 
     # Save to file
-    write_to_file(spatial_gdf, cfg.paths.model_output / folder / f"{filename}.shp")
-    write_to_file(attribute_gdf, cfg.paths.model_output / folder / f"{filename}.csv", csv=True)
+    write_to_file(spatial_gdf, cfg.paths.model_output / inf_type / folder / f"{filename}.shp")
+    write_to_file(attribute_gdf, cfg.paths.model_output / inf_type / folder / f"{filename}.csv", csv=True)
 
 # LAYERING
 
@@ -99,15 +99,14 @@ def layering(cfg):
         'heat_risk', 'cold_risk', 'drought_risk', 'storm_risk', 'extreme_weather_risk',
 
         # Flooding risk columns
-        'rofrs_risk', 'rofsw_risk', 'flood_risk',
+        'rivers_sea_flood_risk', 'surface_water_flood_risk', 'flood_risk',
 
         # Ground Stability risk columns
         'collapsible_deposits_risk', 'compressible_ground_risk', 'landslides_risk', 'running_sand_risk',
-        'shrink_swell_risk',
-        'soluble_rocks_risk', 'shrink_swell_geoclimate_risk', 'ground_stability_risk',
+        'shrink_swell_risk', 'soluble_rocks_risk', 'shrink_swell_geoclimate_risk', 'ground_stability_risk',
 
         # Coastal Erosion risk columns
-        'erosion_risk'
+        'coastal_erosion_risk'
     ]
 
     impact_weights = {
@@ -115,7 +114,7 @@ def layering(cfg):
         'flood': 0.125,  # Weight hazards as 0.125 each to make up half
         'extreme_weather': 0.125,
         'ground_stability': 0.125,
-        'erosion': 0.125
+        'coastal_erosion': 0.125
     }
 
     infrastructure_layering(cfg, hazard_layers, risk_cols, impact_weights)
@@ -126,34 +125,14 @@ def read_hazard_layers(cfg):
     """Reads and cleans hazard layers, and returns them in a dictionary"""
     hazard_layers = {
         'Extreme Weather': gpd.read_file(
-            cfg.paths.model_interim_out / "TfN Extreme Weather Risk" / "tfn_extreme_weather_risk.shp"),
+            cfg.paths.model_interim_output / "TfN Extreme Weather Risk" / "tfn_extreme_weather_risk.gpkg"),
         'Flooding': gpd.read_file(
-            cfg.paths.model_interim_out / "TfN Flood Risk" / "tfn_flood_risk.gpkg"),
+            cfg.paths.model_interim_output / "TfN Flood Risk" / "tfn_flood_risk.gpkg"),
         'Ground Stability': gpd.read_file(
-            cfg.paths.model_interim_out / "TfN Ground Stability Risk" / "tfn_ground_stability_risk.gpkg"),
+            cfg.paths.model_interim_output / "TfN Ground Stability Risk" / "tfn_ground_stability_risk.gpkg"),
         'Coastal Erosion':  gpd.read_file(
-            cfg.paths.model_interim_out / "TfN Coastal Erosion Risk" / "tfn_coastal_erosion_risk.shp"),
+            cfg.paths.model_interim_output / "TfN Coastal Erosion Risk" / "tfn_coastal_erosion_risk.gpkg"),
     }
-
-    hazard_layers['Extreme Weather'].rename(columns={'heat_risk_': 'heat_risk_c', 'heat_ris_1': 'heat_risk_f',
-                                         'cold_risk_': 'cold_risk_c', 'cold_ris_1': 'cold_risk_f',
-                                         'drought_ri': 'drought_risk_c', 'drought__1': 'drought_risk_f',
-                                         'storm_risk': 'storm_risk_c', 'storm_ri_1': 'storm_risk_f',
-                                         'extreme_we': 'extreme_weather_risk_c',
-                                         'extreme__1': 'extreme_weather_risk_f'}, inplace=True)
-
-    hazard_layers['Ground Stability'].rename(columns=
-                {'cd_risk_c': 'collapsible_deposits_risk_c', 'cd_risk_f': 'collapsible_deposits_risk_f',
-                 'cg_risk_c': 'compressible_ground_risk_c', 'cg_risk_f': 'compressible_ground_risk_f',
-                 'ls_risk_c': 'landslides_risk_c', 'ls_risk_f': 'landslides_risk_f',
-                 'rs_risk_c': 'running_sand_risk_c', 'rs_risk_f': 'running_sand_risk_f',
-                 'ss_risk_c': 'shrink_swell_risk_c', 'ss_risk_f': 'shrink_swell_risk_f',
-                 'sr_risk_c': 'soluble_rocks_risk_c', 'sr_risk_f': 'soluble_rocks_risk_f',
-                 'ss_geo_risk_c': 'shrink_swell_geoclimate_risk_c', 'ss_geo_risk_f': 'shrink_swell_geoclimate_risk_f'},
-                inplace=True)
-
-    hazard_layers['Coastal Erosion'].rename(
-        columns={'erosion_c': 'erosion_risk_c','erosion_f': 'erosion_risk_f'}, inplace=True)
 
     return hazard_layers
 
@@ -176,46 +155,57 @@ def get_road_risk(cfg, hazard_layers, risk_cols, impact_weights):
 
 def os_open_road_risk(cfg, hazard_layers, risk_cols):
     """Overlay OS Road infrastructure with hazards, clean output, and write to file"""
-    tfn_os_road = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Road" / "TfN OS Road" / "tfn_os_road.shp")
+    tfn_os_road = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Road" / "TfN OS Road" / "tfn_os_road.gpkg")
 
     tfn_os_road_risk = infrastructure_risk_overlay(tfn_os_road, hazard_layers)
 
     tfn_os_road_risk = prepare_model_output(
         gdf=tfn_os_road_risk,
-        drop_cols=['class', 'name2', 'formOfWay', 'primary', 'structure'],
+        drop_cols=[],
         desc_cols=['road_number', 'name', 'function'],
-        rename_map={'identifier': 'id', 'name1': 'name', 'roadNumber': 'road_number'},
+        rename_map={'identifier': 'id'},
         risk_cols_order=risk_cols
     )
 
-    split_csv_shapefile(cfg, tfn_os_road_risk, 'id', 'OS Roads', 'tfn_os_road_risk')
+    split_csv_shapefile(cfg, tfn_os_road_risk, 'id', "Road", 'OS Roads', 'tfn_os_road_risk')
 
 #### NoHAM
 
 def noham_road_risk(cfg, hazard_layers, risk_cols, impact_weights):
     """Overlay NOHAM with hazards, calculate impact index, clean output, and write to file"""
     tfn_noham = {}
-    tfn_noham_risk = {}
-    for tp in ['c', 'f']:
+    tfn_noham_risk_tp = {}
+    for year, tp in {'2023': 'c', '2048': 'f'}.items():
         tfn_noham[tp] = gpd.read_file(
-            cfg.paths.model_input / "Impact" / "TfN NoHAM Flows" / f"tfn_noham_net_flows_{tp}.gpkg")
-        tfn_noham_risk[tp] = infrastructure_risk_overlay(tfn_noham[tp], hazard_layers)
+            cfg.paths.model_input / "Impact" / "TfN NoHAM Flows" / year / f"tfn_noham_net_flows_{tp}.gpkg")
+        tfn_noham_risk_tp[tp] = infrastructure_risk_overlay(tfn_noham[tp], hazard_layers)
         other_tp = 'f' if tp == 'c' else 'c'
-        drop_cols = [col for col in tfn_noham_risk[tp].columns if col.endswith(f'_{other_tp}')]
-        tfn_noham_risk[tp].drop(columns=drop_cols, inplace=True)
-        tfn_noham_risk[tp].drop_duplicates(subset=['geometry'], inplace=True)
-        tfn_noham_risk[tp].columns = [col.replace(f'_{tp}', '') for col in tfn_noham_risk[tp].columns]
+        drop_cols = [col for col in tfn_noham_risk_tp[tp].columns if col.endswith(f'_{other_tp}')]
+        tfn_noham_risk_tp[tp].drop(columns=drop_cols, inplace=True)
+        tfn_noham_risk_tp[tp].drop_duplicates(subset=['geometry'], inplace=True)
+        tfn_noham_risk_tp[tp].columns = [col.replace(f'_{tp}', '') for col in tfn_noham_risk_tp[tp].columns]
         if tp == 'c':
-            tfn_noham_risk[tp]['current_or_forecast'] = 'Current'
+            tfn_noham_risk_tp[tp]['current_or_forecast'] = 'Current'
         else:
-            tfn_noham_risk[tp]['current_or_forecast'] = 'Forecast'
+            tfn_noham_risk_tp[tp]['current_or_forecast'] = 'Forecast'
 
 
-    tfn_noham_risk['c'], tfn_noham_risk['f'] = noham_impact_index(tfn_noham_risk['c'], tfn_noham_risk['f'],
+    tfn_noham_risk_tp['c'], tfn_noham_risk_tp['f'] = noham_impact_index(tfn_noham_risk_tp['c'], tfn_noham_risk_tp['f'],
                                                                   impact_weights, risk_cols)
 
+    # Remove suffixes from risk columns
+    tfn_noham_risk_tp['c'].columns = [col.replace('_c', '') for col in tfn_noham_risk_tp['c'].columns]
+    tfn_noham_risk_tp['f'].columns = [col.replace('_f', '') for col in tfn_noham_risk_tp['f'].columns]
+
+    # Add scenario column
+    tfn_noham_risk_tp['c']['current_or_forecast'] = 'Current'
+    tfn_noham_risk_tp['f']['current_or_forecast'] = 'Forecast'
+
     # Concatenate
-    tfn_noham_risk = pd.concat([tfn_noham_risk['c'], tfn_noham_risk['f']], ignore_index=True)
+    tfn_noham_risk = pd.concat([tfn_noham_risk_tp['c'], tfn_noham_risk_tp['f']], ignore_index=True)
+
+    noham_impact_cols = ['uc1_impact', 'uc2_impact', 'uc3_impact', 'uc4_impact', 'uc5_impact', 'impact']
+    tfn_noham_risk = tfn_noham_risk[['link_id', 'current_or_forecast', 'geometry'] + risk_cols + noham_impact_cols]
 
     cols_to_round = [col for col in tfn_noham_risk.columns if col not in ['link_id', 'geometry']]
     tfn_noham_risk[cols_to_round] = tfn_noham_risk[cols_to_round].round(1)
@@ -223,7 +213,7 @@ def noham_road_risk(cfg, hazard_layers, risk_cols, impact_weights):
     tfn_noham_risk.rename(columns={'link_id': 'id'}, inplace=True)
     tfn_noham_risk.rename(columns={col: f"{col}_score" for col in cols_to_round}, inplace=True)
 
-    split_csv_shapefile(cfg, tfn_noham_risk, 'id', 'NoHAM', 'tfn_noham_risk')
+    split_csv_shapefile(cfg, tfn_noham_risk, 'id', "Road", 'NoHAM', 'tfn_noham_risk')
 
 def noham_impact_index(tfn_noham_c, tfn_noham_f, impact_weights, risk_cols):
     """Normalise demand, then calculate impact index for NoHAM using demand and hazard information"""
@@ -288,19 +278,19 @@ def calculate_noham_impact(df_c, df_f, user_classes, impact_weights):
         for df, tp in [(df_c, 'c'), (df_f, 'f')]:
             df[f'{uc}_impact_{tp}'] = (
                 df[f'{uc}_demand_{tp}'] * impact_weights['demand'] +
-                df[f'flood_risk_{tp}'] * impact_weights['flood'] +
-                df[f'extreme_weather_risk_{tp}'] * impact_weights['extreme_weather'] +
-                df[f'ground_stability_risk_{tp}'] * impact_weights['ground_stability'] +
-                df[f'erosion_risk_{tp}'] * impact_weights['erosion']
+                df[f'flood_risk'] * impact_weights['flood'] +
+                df[f'extreme_weather_risk'] * impact_weights['extreme_weather'] +
+                df[f'ground_stability_risk'] * impact_weights['ground_stability'] +
+                df[f'erosion_risk'] * impact_weights['erosion']
             )
 
     for df, tp in [(df_c, 'c'), (df_f, 'f')]:
         df[f'impact_{tp}'] = (
             df[f'demand_{tp}'] * impact_weights['demand'] +
-            df[f'flood_risk_{tp}'] * impact_weights['flood'] +
-            df[f'extreme_weather_risk_{tp}'] * impact_weights['extreme_weather'] +
-            df[f'ground_stability_risk_{tp}'] * impact_weights['ground_stability'] +
-            df[f'erosion_risk_{tp}'] * impact_weights['erosion']
+            df[f'flood_risk'] * impact_weights['flood'] +
+            df[f'extreme_weather_risk'] * impact_weights['extreme_weather'] +
+            df[f'ground_stability_risk'] * impact_weights['ground_stability'] +
+            df[f'erosion_risk'] * impact_weights['erosion']
         )
 
     return df_c, df_f
@@ -317,20 +307,20 @@ def get_rail_risk(cfg, hazard_layers, risk_cols, impact_weights):
 def passenger_rail_risk(cfg, hazard_layers, risk_cols):
     """Overlay passenger rail network with hazard to assign risk, clean output, and write to file"""
     tfn_rail_network = gpd.read_file(
-        cfg.paths.model_input / "Infrastructure" / "Rail" / "TfN OS Passenger Rail" / "tfn_pass_rail_links.shp")
+        cfg.paths.model_input / "Infrastructure" / "Rail" / "TfN OS Passenger Rail" / "tfn_pass_rail_links.gpkg")
 
     tfn_rail_network_risk = infrastructure_risk_overlay(tfn_rail_network, hazard_layers)
 
     tfn_rail_network_risk = prepare_model_output(
         gdf=tfn_rail_network_risk,
-        drop_cols=['geometry_l', 'gauge', 'direction', 'operationa', 'name1_text', 'startnode', 'endnode', 'rgn17cd'],
-        desc_cols=['desc', 'structure', 'phys_level', 'rail_use', 'track_rep'],
-        rename_map={'osid': 'id', 'desc': 'description', 'phys_level': 'physical_level',
-                    'rail_use': 'railway_use', 'track_rep': 'track_representation'},
+        drop_cols=[],
+        desc_cols=['description', 'structure', 'physical_level', 'railway_use', 'track_representation'],
+        rename_map={'osid': 'id', 'descriptio': 'description', 'physicalle': 'physical_level',
+                    'railwayuse': 'railway_use', 'trackrepre': 'track_representation'},
         risk_cols_order=risk_cols
     )
 
-    split_csv_shapefile(cfg, tfn_rail_network_risk, "id", "Passenger Rail", "tfn_passenger_rail_network_risk")
+    split_csv_shapefile(cfg, tfn_rail_network_risk, "id", "Rail", "Passenger Rail", "tfn_passenger_rail_network_risk")
 
 #### Freight Rail
 
@@ -345,15 +335,14 @@ def freight_rail_risk(cfg, hazard_layers, risk_cols, impact_weights):
 
     tfn_freight_network_risk = prepare_model_output(
         gdf=tfn_freight_network_risk,
-        drop_cols=['geometry_l', 'gauge', 'direction', 'operationa', 'name1_text', 'startnode', 'endnode', 'rgn17cd',
-                   'dij_id', 'distance', 'demand_c', 'demand_f'],
-        desc_cols=['desc', 'structure', 'phys_level', 'rail_use', 'track_rep'],
-        rename_map={'osid': 'id', 'desc': 'description', 'phys_level': 'physical_level',
-                    'rail_use': 'railway_use', 'track_rep': 'track_representation'},
+        drop_cols=['dij_id', 'distance', 'demand_c', 'demand_f'],
+        desc_cols=['description', 'structure', 'physical_level', 'railway_use', 'track_representation'],
+        rename_map={'osid': 'id', 'descriptio': 'description', 'physicalle': 'physical_level',
+                    'railwayuse': 'railway_use', 'trackrepre': 'track_representation'},
         risk_cols_order=risk_cols + ['impact']
     )
 
-    split_csv_shapefile(cfg, tfn_freight_network_risk, 'id', "Freight Rail", "tfn_freight_rail_network_risk")
+    split_csv_shapefile(cfg, tfn_freight_network_risk, 'id', "Rail", "Freight Rail", "tfn_freight_rail_network_risk")
 
 def freight_impact_index(tfn_freight_network_risk, impact_weights):
     """Calculate impact index using freight demand data and hazard risk"""
@@ -410,7 +399,7 @@ def buffer_geometry(gdf, buffer_size_m):
 def train_stations_risk(cfg, hazard_layers, risk_cols):
     """Buffer train stations, then overlay with hazard risk, clean output, and write to file"""
     tfn_train_stations = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Train Stations" /
-                                       "tfn_train_stations.shp")
+                                       "tfn_train_stations.gpkg")
 
     tfn_train_stations = buffer_geometry(tfn_train_stations, 100)
 
@@ -418,20 +407,20 @@ def train_stations_risk(cfg, hazard_layers, risk_cols):
 
     tfn_train_stations_risk = prepare_model_output(
         gdf=tfn_train_stations_risk,
-        drop_cols=['os_parenti', 'os_nodetyp', 'name'],
+        drop_cols=[],
         desc_cols=[],
         rename_map={'nodeid': 'id'},
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_train_stations_risk, 'id', "Train Stations", "tfn_train_stations_risk")
+    split_csv_shapefile(cfg, tfn_train_stations_risk, 'id', "Other", "Train Stations", "tfn_train_stations_risk")
 
 #### EV Charging Sites
 
 def ev_charging_sites_risk(cfg, hazard_layers, risk_cols):
     """Buffer charging sites, then overlay with hazard risk, clean output, and write to file"""
     tfn_chg_sites = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN EV Charging Sites" /
-                                  "tfn_chg_sites.shp")
+                                  "tfn_chg_sites.gpkg")
 
     tfn_chg_sites = buffer_geometry(tfn_chg_sites, 25)
 
@@ -445,13 +434,14 @@ def ev_charging_sites_risk(cfg, hazard_layers, risk_cols):
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_chg_sites_risk, 'id', "EV Charging Sites", "tfn_chg_sites_risk")
+    split_csv_shapefile(cfg, tfn_chg_sites_risk, 'id', "Other", "EV Charging Sites", "tfn_chg_sites_risk")
 
 #### Airports
 
 def airports_risk(cfg, hazard_layers, risk_cols):
     """Overlay airports with hazard risk, clean output, and write to file"""
-    tfn_airports = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Airports" / "tfn_airports.shp")
+    tfn_airports = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Airports" /
+                                 "tfn_airports.gpkg")
 
     tfn_airports_risk = infrastructure_risk_overlay(tfn_airports, hazard_layers)
 
@@ -463,14 +453,14 @@ def airports_risk(cfg, hazard_layers, risk_cols):
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_airports_risk, 'id', "Airports", "tfn_airports_risk")
+    split_csv_shapefile(cfg, tfn_airports_risk, 'id', "Other", "Airports", "tfn_airports_risk")
 
 #### Bus and Coach Stations
 
 def bus_coach_stations_risk(cfg, hazard_layers, risk_cols):
     """Buffer bus and coach stations, then overlay with hazard risk, clean output, and write to file"""
     tfn_bus_coach_stations = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Bus Coach Stations" /
-                                           "tfn_bus_coach_stations.shp")
+                                           "tfn_bus_coach_stations.gpkg")
 
     tfn_bus_coach_stations = buffer_geometry(tfn_bus_coach_stations, 50)
 
@@ -478,19 +468,20 @@ def bus_coach_stations_risk(cfg, hazard_layers, risk_cols):
 
     tfn_bus_coach_stations_risk = prepare_model_output(
         gdf=tfn_bus_coach_stations_risk,
-        drop_cols=['os_parenti', 'os_nodetyp', 'name'],
+        drop_cols=[],
         desc_cols=[],
         rename_map={'nodeid': 'id'},
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_bus_coach_stations_risk, 'id', "Bus and Coach Stations", "tfn_bus_coach_stations_risk")
+    split_csv_shapefile(cfg, tfn_bus_coach_stations_risk, 'id', "Other", "Bus and Coach Stations", "tfn_bus_coach_stations_risk")
 
 #### Bus Stops
 
 def bus_stops_risk(cfg, hazard_layers, risk_cols):
     """Overlay bus stops with hazard risk, clean output, and write to file"""
-    tfn_bus_stops = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Bus Stops" / "tfn_bus_stops.shp")
+    tfn_bus_stops = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Bus Stops" /
+                                  "tfn_bus_stops.gpkg")
 
     tfn_bus_stops_risk = infrastructure_risk_overlay(tfn_bus_stops, hazard_layers)
 
@@ -502,14 +493,14 @@ def bus_stops_risk(cfg, hazard_layers, risk_cols):
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_bus_stops_risk, 'id', "Bus Stops", "tfn_bus_stops_risk")
+    split_csv_shapefile(cfg, tfn_bus_stops_risk, 'id', "Other", "Bus Stops", "tfn_bus_stops_risk")
 
 #### Tram Stations
 
 def tram_stations_risk(cfg, hazard_layers, risk_cols):
     """Buffer tram stations, then overlay with hazard risk, clean output, and write to file"""
     tfn_tram_stations = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Tram Stations" /
-                                      "tfn_tram_stations.shp")
+                                      "tfn_tram_stations.gpkg")
 
     tfn_tram_stations = buffer_geometry(tfn_tram_stations, 25)
 
@@ -517,20 +508,20 @@ def tram_stations_risk(cfg, hazard_layers, risk_cols):
 
     tfn_tram_stations_risk = prepare_model_output(
         gdf=tfn_tram_stations_risk,
-        drop_cols=['os_parenti', 'os_nodetyp', 'name'],
+        drop_cols=[],
         desc_cols=[],
         rename_map={'nodeid': 'id'},
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_tram_stations_risk, 'id', "Tram Stations", "tfn_tram_stations_risk")
+    split_csv_shapefile(cfg, tfn_tram_stations_risk, 'id', "Other", "Tram Stations", "tfn_tram_stations_risk")
 
 #### Rapid Transport Stations
 
 def rapid_transport_stations_risk(cfg, hazard_layers, risk_cols):
     """Buffer rapid transport stations, then overlay with hazard risk, clean output, and write to file"""
-    tfn_metro_stations = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Metro Stations" /
-                                       "tfn_metro_stations.shp")
+    tfn_metro_stations = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Rapid Transport Stations" /
+                                       "tfn_rapid_transport_stations.gpkg")
 
     tfn_metro_stations = buffer_geometry(tfn_metro_stations, 50)
 
@@ -538,20 +529,20 @@ def rapid_transport_stations_risk(cfg, hazard_layers, risk_cols):
 
     tfn_metro_stations_risk = prepare_model_output(
         gdf=tfn_metro_stations_risk,
-        drop_cols=['os_parenti', 'os_nodetyp', 'name'],
+        drop_cols=[],
         desc_cols=[],
         rename_map={'nodeid': 'id'},
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_metro_stations_risk, 'id', 'Rapid Transport Stations', 'tfn_rapid_transport_stations_risk')
+    split_csv_shapefile(cfg, tfn_metro_stations_risk, 'id', "Other", 'Rapid Transport Stations', 'tfn_rapid_transport_stations_risk')
 
 #### Ferry Terminals
 
 def ferry_terminals_risk(cfg, hazard_layers, risk_cols):
     """Buffer ferry terminals, then overlay with hazard risk, clean output, and write to file"""
     tfn_ferry_terminals = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Ferry Terminals" /
-                                        "tfn_ferry_terminals.shp")
+                                        "tfn_ferry_terminals.gpkg")
 
     tfn_ferry_terminals = buffer_geometry(tfn_ferry_terminals, 50)
 
@@ -559,20 +550,20 @@ def ferry_terminals_risk(cfg, hazard_layers, risk_cols):
 
     tfn_ferry_terminals_risk = prepare_model_output(
         gdf=tfn_ferry_terminals_risk,
-        drop_cols=['os_parenti', 'os_nodetyp', 'name'],
+        drop_cols=[],
         desc_cols=[],
         rename_map={'nodeid': 'id'},
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_ferry_terminals_risk, 'id', 'Ferry Terminals', 'tfn_ferry_terminals_risk')
+    split_csv_shapefile(cfg, tfn_ferry_terminals_risk, 'id', "Other", 'Ferry Terminals', 'tfn_ferry_terminals_risk')
 
 #### Petrol Stations
 
 def petrol_stations_risk(cfg, hazard_layers, risk_cols):
     """Buffer petrol stations, then overlay with hazard risk, clean output, and write to file"""
     tfn_petrol_stations = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Petrol Stations" /
-                                        "tfn_petrol_stations.shp")
+                                        "tfn_petrol_stations.gpkg")
 
     tfn_petrol_stations = buffer_geometry(tfn_petrol_stations, 50)
 
@@ -586,19 +577,19 @@ def petrol_stations_risk(cfg, hazard_layers, risk_cols):
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_petrol_stations_risk, 'id', 'Petrol Stations', 'tfn_petrol_stations_risk')
+    split_csv_shapefile(cfg, tfn_petrol_stations_risk, 'id', "Other", 'Petrol Stations', 'tfn_petrol_stations_risk')
 
 #### National Cycle Network
 
 def ncn_risk(cfg, hazard_layers, risk_cols):
     """Overlay National Cycle Network with hazard risk, clean output, then write to file"""
-    tfn_ncn = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN NCN" / "tfn_ncn.shp")
+    tfn_ncn = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN NCN" / "tfn_ncn.gpkg")
 
     tfn_ncn_risk = infrastructure_risk_overlay(tfn_ncn, hazard_layers)
 
     tfn_ncn_risk = prepare_model_output(
         gdf=tfn_ncn_risk,
-        drop_cols=['RouteCat', 'OpenStatus', 'GlobalID'],
+        drop_cols=[],
         desc_cols=['description', 'greenway', 'route_type', 'route_number', 'link_number', 'surface', 'quality',
                    'lighting', 'road_class'],
         rename_map={'Desc_': 'description', 'Greenway': 'greenway', 'RouteType': 'route_type',
@@ -607,47 +598,47 @@ def ncn_risk(cfg, hazard_layers, risk_cols):
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_ncn_risk, 'id', 'National Cycle Network', 'tfn_ncn_risk')
+    split_csv_shapefile(cfg, tfn_ncn_risk, 'id', "Other", 'National Cycle Network', 'tfn_ncn_risk')
 
 #### Tram Network
 
 def tram_network_risk(cfg, hazard_layers, risk_cols):
     """Overlay tram network with hazard risk, clean output, then write to file"""
-    tfn_tram_network = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Tram Links" /
-                                     "tfn_os_tram_links.shp")
+    tfn_tram_network = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Tram Network" /
+                                     "tfn_os_tram_links.gpkg")
 
     tfn_tram_risk = infrastructure_risk_overlay(tfn_tram_network, hazard_layers)
 
     tfn_tram_risk = prepare_model_output(
         gdf=tfn_tram_risk,
-        drop_cols=['geometry_l', 'gauge', 'direction', 'operationa', 'startnode', 'endnode', 'rgn17cd'],
-        desc_cols=['desc', 'structure', 'phys_level', 'rail_use', 'track_rep', 'name'],
+        drop_cols=[],
+        desc_cols=['description', 'structure', 'physical_level', 'railway_use', 'track_representation'],
         rename_map={'osid': 'id', 'desc': 'description', 'phys_level': 'physical_level',
-                    'rail_use': 'railway_use', 'track_rep': 'track_representation', 'name1_text': 'name'},
+                    'rail_use': 'railway_use', 'track_rep': 'track_representation'},
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_tram_risk, 'id', 'Tram Network', 'tfn_tram_links_risk')
+    split_csv_shapefile(cfg, tfn_tram_risk, 'id', "Other", 'Tram Network', 'tfn_tram_links_risk')
 
 #### Rapid Transport Network
 
 def rapid_transport_network_risk(cfg, hazard_layers, risk_cols):
     """Overlay rapid transport network with hazard risk, clean output, then write to file"""
-    tfn_rapid_transport = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Rapid Transport" /
-                                        "tfn_rapid_transport_links.shp")
+    tfn_rapid_transport = gpd.read_file(cfg.paths.model_input / "Infrastructure" / "Other" /
+                                        "TfN Rapid Transport Network" / "tfn_rapid_transport_links.gpkg")
 
     tfn_rapid_transport_risk = infrastructure_risk_overlay(tfn_rapid_transport, hazard_layers)
 
     tfn_rapid_transport_risk = prepare_model_output(
         gdf=tfn_rapid_transport_risk,
-        drop_cols=['geometry_l', 'gauge', 'direction', 'operationa', 'startnode', 'endnode', 'rgn17cd'],
-        desc_cols=['description', 'structure', 'physical_level', 'railway_use', 'track_representation', 'name'],
+        drop_cols=[],
+        desc_cols=['description', 'structure', 'physical_level', 'railway_use', 'track_representation'],
         rename_map={'osid': 'id', 'desc': 'description', 'phys_level': 'physical_level',
-                    'rail_use': 'railway_use', 'track_rep': 'track_representation', 'name1_text': 'name'},
+                    'rail_use': 'railway_use', 'track_rep': 'track_representation'},
         risk_cols_order=risk_cols,
     )
 
-    split_csv_shapefile(cfg, tfn_rapid_transport_risk, 'id', 'Rapid Transport Network', 'tfn_rapid_transport_risk')
+    split_csv_shapefile(cfg, tfn_rapid_transport_risk, 'id', "Other", 'Rapid Transport Network', 'tfn_rapid_transport_risk')
 
 
 
