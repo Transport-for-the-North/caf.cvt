@@ -158,7 +158,7 @@ def data_cleaning(cfg):
     """Clean all input datasets ready for analysis"""
     boundary = gpd.read_file(cfg.paths.boundary_path)
 
-    clean_infrastructure(cfg, boundary)
+    #clean_infrastructure(cfg, boundary)
     clean_hazards(cfg, boundary)
     clean_impact(cfg, boundary)
 
@@ -407,7 +407,7 @@ def clean_ncn(cfg, boundary):
 
 def clean_hazards(cfg, boundary):
     """Cleans hazard data ready for analysis"""
-    clean_extreme_weather(cfg, boundary)
+    #clean_extreme_weather(cfg, boundary)
     clean_flooding(cfg, boundary)
     clean_ground_stability(cfg, boundary)
     clean_coastal_erosion(cfg, boundary)
@@ -453,7 +453,7 @@ def clean_temp_max(cfg, grid):
     temp_max['tasmax_s_f'] = temp_max['tasmax_s_c'] + temp_max['tasmax_s_f']
     tfn_temp_max = temp_max[temp_max['grid_id'].isin(grid['grid_id'])]
     write_to_file(tfn_temp_max,
-                  cfg.model_input / "Hazards" / "Extreme Weather" /
+                  cfg.paths.model_input / "Hazards" / "Extreme Weather" /
                   "TfN Summer Max Temperature Change Projections" / "tfn_temp_max.csv",
                   csv=True)
 
@@ -699,7 +699,7 @@ def extract_gdb_file(cfg, code, number, flood_data, version, cc):
 
 def read_gdb(cfg, code, number, file_name, flood_data, version, cc):
     """Reads first layer of flood gdb file"""
-    base_path = cfg.paths.model_input / "Hazards" / "Flooding" / file_name / code
+    base_path = cfg.paths.raw_input / "Hazards" / "Flooding" / file_name / code
 
     if cc:
         gdb_path = base_path / f"{flood_data}_Climate_Change_01_{code}{number}_{version}.gdb"

@@ -39,7 +39,7 @@ infrastructure:
     poi_uk:
       zip_path: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/poi_uk.zip"
       internal_path: "poi_uk.gpkg"
-    zapmap: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/ZapMap/ZapMap Site Devices"
+    zapmap: "D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/ZapMap/ZapMap Site Devices.csv"
 
 hazards:
   coastal_erosion:
