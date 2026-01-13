@@ -8,7 +8,7 @@ switches:
 
   flood_zip_extract: false
   noham_zip_extract: false
-  create_flood_grid: true
+  create_flood_grid: false
 
 ####### FILE PATHS #########
 
