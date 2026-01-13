@@ -82,12 +82,12 @@ class Flooding(ctk.BaseConfig):
 
 class GeoSure(ctk.BaseConfig):
     zip_path: Path
-    collapsible_deposits: Path
-    compressible_ground: Path
-    landslides: Path
-    running_sand: Path
-    shrink_swell: Path
-    soluble_rocks: Path
+    collapsible_deposits: str
+    compressible_ground: str
+    landslides: str
+    running_sand: str
+    shrink_swell: str
+    soluble_rocks: str
 
 class GroundStability(ctk.BaseConfig):
     geo_shrink_swell: dict
@@ -128,7 +128,7 @@ def main():
     cfg = Config.load_yaml(Path("../../config.yml"))
     details = ctk.log_helpers.ToolDetails(_NAME, "1.0.0", full_version=None)
 
-    with ctk.LogHelper(_NAME, details, log_file=cfg.paths.log_file):
+    with ctk.LogHelper(_NAME, details, log_file=cfg.paths.log_path):
         # Run data cleaning
         if cfg.switches.run_data_cleaning:
             data_cleaning(cfg)

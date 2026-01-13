@@ -6,21 +6,30 @@ Cleans raw input data to prepare it for input into the model
 import pandas as pd
 import geopandas as gpd
 import fiona
+import shapely
 from shapely.geometry import Point, Polygon, MultiPolygon, GeometryCollection
 import xarray as xr
 import h5py
 import py7zr
+from pathlib import Path
 from zipfile import ZipFile
+from typing import Tuple
+
+from __main__ import Config
 
 ### GENERAL FUNCTIONS
 
-def clip_to_boundary(gdf, boundary):
+def clip_to_boundary(gdf: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Clip a GeoDataFrame to a spatial boundary"""
     boundary = boundary.to_crs(gdf.crs) # Match CRS
     gdf_boundary = gpd.clip(gdf, boundary) # Clip GDF to boundary
     return gdf_boundary
 
-def write_to_file(df, output_path, driver=None, csv=False):
+def write_to_file(
+        df: pd.DataFrame | gpd.GeoDataFrame,
+        output_path: Path,
+        driver: str | None = None,
+        csv: bool = False) -> None:
     """Write data to file, creating directory if necessary"""
     output_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists, make one if not
 
@@ -32,13 +41,13 @@ def write_to_file(df, output_path, driver=None, csv=False):
     else:
         df.to_file(output_path, driver=driver)
 
-def df_to_gdf(df, x_col, y_col, crs):
+def df_to_gdf(df: pd.DataFrame, x_col: str, y_col: str, crs: str) -> gpd.GeoDataFrame:
     """Takes a DataFrame and converts it to a GeoDataFrame using spatial columns"""
     geometry = [Point(xy) for xy in zip(df[x_col], df[y_col])]  # Create geometry
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs=crs) # Convert to GeoDataFrame
     return gdf
 
-def convert_point_to_grid(x, y, size):
+def convert_point_to_grid(x: int, y: int, size: int) -> shapely.geometry.Polygon:
     """Takes a point and converts it to a grid of the given size"""
     return Polygon([
         (x - size, y - size),
@@ -47,7 +56,7 @@ def convert_point_to_grid(x, y, size):
         (x - size, y + size),
     ])
 
-def extract_poly_from_geomcollection(gdf):
+def extract_poly_from_geomcollection(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Extracts polygons from GeomCollection objects in a GeoDataFrame and turns them into new rows"""
     rows = []
 
@@ -71,7 +80,7 @@ def extract_poly_from_geomcollection(gdf):
     # Create new GeoDataFrame from expanded rows
     return gpd.GeoDataFrame(rows, crs=gdf.crs)
 
-def explode_to_polygons(gdf):
+def explode_to_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame  :
     """Explodes the MultiPolygons and GeomCollections in a GeoDataFrame into Polygons"""
     rows = []
     for idx, row in gdf.iterrows():
@@ -98,7 +107,7 @@ def explode_to_polygons(gdf):
 
     return gpd.GeoDataFrame(rows, crs=gdf.crs).reset_index(drop=True)
 
-def nearest_centroids(gdf1, gdf2):
+def nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Takes two GeoDataFrames and merges them on their nearest centroids"""
     # Ensure both GeoDataFrames are in the same projected CRS
     gdf1 = gdf1.to_crs("EPSG:27700")
@@ -117,15 +126,15 @@ def nearest_centroids(gdf1, gdf2):
 
     return result
 
-def calculate_exceedance(threshold, gdf, variable, timescale):
+def calculate_exceedance(threshold: int, df: pd.DataFrame, variable: str, timescale: str) -> pd.DataFrame:
     """Counts the number of exceedance days of a variable over a given threshold, then calculates the average over the
     timescale, per geometry"""
 
-    gdf['exceedance'] = gdf[variable] > threshold
+    df['exceedance'] = df[variable] > threshold
 
     # Group by grid square and year, and count exceedance days
     exceedance_counts = (
-      gdf[gdf['exceedance']]
+      df[df['exceedance']]
      .groupby(['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude', 'year'])
      .size()
      .reset_index(name='exceedance_days')
@@ -141,11 +150,11 @@ def calculate_exceedance(threshold, gdf, variable, timescale):
 
     return average_exceedance
 
-def calculate_percentile(gdf, quantiles, variable):
+def calculate_percentile(df: pd.DataFrame, quantile: float, variable: str) -> pd.DataFrame:
     """Calculates the percentiles of a given variable in a GeoDataFrame per geometry"""
     percentiles = (
-        gdf.groupby(['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude'])[variable]
-        .quantile(quantiles)
+        df.groupby(['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude'])[variable]
+        .quantile(quantile)
         .unstack()
         .reset_index()
     )
@@ -154,18 +163,18 @@ def calculate_percentile(gdf, quantiles, variable):
 
 # DATA CLEANING
 
-def data_cleaning(cfg):
+def data_cleaning(cfg: Config) -> None:
     """Clean all input datasets ready for analysis"""
     boundary = gpd.read_file(cfg.paths.boundary_path)
 
     #clean_infrastructure(cfg, boundary)
-    clean_hazards(cfg, boundary)
+    #clean_hazards(cfg, boundary)
     clean_impact(cfg, boundary)
 
 
 ## INFRASTRUCTURE
 
-def clean_infrastructure(cfg, boundary):
+def clean_infrastructure(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all infrastructure datasets ready for analysis"""
     tfn_rail_links = get_rail_links(boundary, cfg.infrastructure.rail.tfn_rail_links)
 
@@ -175,12 +184,12 @@ def clean_infrastructure(cfg, boundary):
 
 ### ROAD
 
-def clean_roads(cfg, boundary):
+def clean_roads(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all roads datasets ready for analysis"""
     clean_os_roads(cfg, boundary)
     clean_noham_roads(cfg, boundary)
 
-def clean_os_roads(cfg, boundary):
+def clean_os_roads(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans OS Open Roads dataset, then writes to file"""
     os_road = gpd.read_file(cfg.infrastructure.road.os_road)
     os_road.drop_duplicates(subset=['identifier', 'geometry'], inplace=True)
@@ -194,7 +203,7 @@ def clean_os_roads(cfg, boundary):
     write_to_file(tfn_os_road, cfg.paths.model_input / "Infrastructure" / "Road" / "TfN OS Road" / "tfn_os_road.gpkg",
                   driver="GPKG")
 
-def clean_noham_roads(cfg, boundary):
+def clean_noham_roads(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans 2023 and 2048 NoHAM network datasets, then writes to file"""
     noham = {
         '2023': gpd.read_file(cfg.infrastructure.road.noham_2023),
@@ -215,12 +224,12 @@ def clean_noham_roads(cfg, boundary):
 
 ### RAIL
 
-def clean_rail(cfg, rail_links):
+def clean_rail(cfg: Config, rail_links: gpd.GeoDataFrame) -> None:
     """Clean all rail datasets ready for analysis"""
     clean_passenger_rail(cfg, rail_links)
     clean_freight_rail(cfg, rail_links)
 
-def get_rail_links(boundary, os_rail_path):
+def get_rail_links(boundary: gpd.GeoDataFrame, os_rail_path: Path) -> gpd.GeoDataFrame:
     """Reads and cleans OS Rail Network data"""
     tfn_rail_links = gpd.read_file(os_rail_path)
     tfn_rail_links = tfn_rail_links[tfn_rail_links['operationalstatus'] == 'Active']  # Exclude inactive links
@@ -237,7 +246,7 @@ def get_rail_links(boundary, os_rail_path):
     tfn_rail_links = clip_to_boundary(tfn_rail_links, boundary)
     return tfn_rail_links
 
-def clean_passenger_rail(cfg, tfn_rail_links):
+def clean_passenger_rail(cfg: Config, tfn_rail_links: gpd.GeoDataFrame) -> None:
     """Filters OS rail data to passenger rail network, then writes to file"""
     tfn_pass_rail = tfn_rail_links[tfn_rail_links['rail_use'].isin(['Freight And Passenger', 'Passenger'])]
     tfn_pass_rail = tfn_pass_rail[tfn_pass_rail['desc'].isin(['Main Line', 'Main Line And Tram',
@@ -246,7 +255,7 @@ def clean_passenger_rail(cfg, tfn_rail_links):
                   cfg.paths.model_input / "Infrastructure" / "Rail" / "TfN OS Passenger Rail" /
                   "tfn_pass_rail_links.gpkg", driver="GPKG")
 
-def clean_freight_rail(cfg, tfn_rail_links):
+def clean_freight_rail(cfg: Config, tfn_rail_links: gpd.GeoDataFrame) -> None:
     """Filters OS rail data to freight rail network, then writes to file"""
     tfn_freight_rail = tfn_rail_links[tfn_rail_links['rail_use'].isin(['Freight And Passenger', 'Freight'])]
     write_to_file(tfn_freight_rail,
@@ -255,7 +264,7 @@ def clean_freight_rail(cfg, tfn_rail_links):
 
 ### OTHER
 
-def clean_other(cfg, boundary, rail_links):
+def clean_other(cfg: Config, boundary: gpd.GeoDataFrame, rail_links: gpd.GeoDataFrame) -> None:
     """Cleans all other datasets ready for analysis"""
     clean_bus_stops(cfg, boundary)
     clean_petrol_stations(cfg, boundary)
@@ -271,7 +280,7 @@ def clean_other(cfg, boundary, rail_links):
     clean_tram_network(cfg, rail_links)
     clean_rapid_transport_network(cfg, rail_links)
 
-def clean_bus_stops(cfg, boundary):
+def clean_bus_stops(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads, combines and cleans regional bus stops datasets, then writes to file"""
     bus_stops_ne = pd.read_csv(cfg.infrastructure.other.bus_stops.ne)  # North East
     bus_stops_nw = pd.read_csv(cfg.infrastructure.other.bus_stops.nw)  # North West
@@ -285,7 +294,7 @@ def clean_bus_stops(cfg, boundary):
     write_to_file(tfn_bus_stops, cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Bus Stops" /
                   "tfn_bus_stops.gpkg", driver="GPKG")
 
-def clean_petrol_stations(cfg, boundary):
+def clean_petrol_stations(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans POI data, filters for petrol stations, and writes to file"""
     poi_uk = gpd.read_file(
         f"zip://{cfg.infrastructure.other.poi_uk.zip_path}!{cfg.infrastructure.other.poi_uk.internal_path}")
@@ -297,14 +306,14 @@ def clean_petrol_stations(cfg, boundary):
                   cfg.paths.model_input / "Infrastructure" / "Other" / "TfN Petrol Stations" /
                   "tfn_petrol_stations.gpkg", driver="GPKG")
 
-def read_os_mm_node_network(path):
+def read_os_mm_node_network(path: Path) -> gpd.GeoDataFrame:
     """Reads and cleans OS Multi-Modal Routing Network (OS MMRN) dataset to prepare for further filtering"""
     os_mm_net_node = gpd.read_file(path, layer="mrn_ntwk_transportnode")
     os_mm_net_node.drop(columns=['os_parentid', 'name'], inplace=True)
     os_mm_net_node.drop_duplicates(subset=['nodeid', 'geometry'], inplace=True)
     return os_mm_net_node
 
-def clean_train_stations(cfg, os_mm_net_node, boundary):
+def clean_train_stations(cfg: Config, os_mm_net_node: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> None:
     """Filters OS MMRN for train stations, then clips to boundary and writes to file"""
     train_stations = os_mm_net_node[
         (os_mm_net_node['os_nodetype'] == 'Railway Station;Modal Change') |
@@ -319,7 +328,7 @@ def clean_train_stations(cfg, os_mm_net_node, boundary):
                   cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Train Stations" /
                   "tfn_train_stations.gpkg", driver="GPKG")
 
-def clean_tram_stations(cfg, os_mm_net_node, boundary):
+def clean_tram_stations(cfg: Config, os_mm_net_node: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> None:
     """Filters OS MMRN for tram stations, then clips to boundary and writes to file"""
     tram_stations = os_mm_net_node[os_mm_net_node['os_nodetype'].str.contains('Tram Station', case=False, na=False)]
     tram_stations.drop(columns=['os_nodetype'], inplace=True)
@@ -328,7 +337,7 @@ def clean_tram_stations(cfg, os_mm_net_node, boundary):
                   cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Tram Stations" /
                   "tfn_tram_stations.gpkg", driver="GPKG")
 
-def clean_rapid_transport_stations(cfg, os_mm_net_node, boundary):
+def clean_rapid_transport_stations(cfg: Config, os_mm_net_node: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> None:
     """Filters OS MMRN for rapid transport stations, then clips to boundary and writes to file"""
     rapid_transport_stations = os_mm_net_node[
         os_mm_net_node['os_nodetype'].str.contains('Underground System', case=False, na=False)]
@@ -338,7 +347,7 @@ def clean_rapid_transport_stations(cfg, os_mm_net_node, boundary):
                   cfg.paths.model_input / "Infrastructure" / "Other" /
                   "TfN OS Rapid Transport Stations" / "tfn_rapid_transport_stations.gpkg", driver="GPKG")
 
-def clean_ferry_terminals(cfg, os_mm_net_node, boundary):
+def clean_ferry_terminals(cfg: Config, os_mm_net_node: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> None:
     """Filters OS MMRN for ferry terminals, then clips to boundary and writes to file"""
     ferry_terminals = os_mm_net_node[os_mm_net_node['os_nodetype'].str.contains('Ferry', case=False, na=False)]
     ferry_terminals.drop(columns=['os_nodetype'], inplace=True)
@@ -347,7 +356,7 @@ def clean_ferry_terminals(cfg, os_mm_net_node, boundary):
                   cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Ferry Terminals" /
                   "tfn_ferry_terminals.gpkg", driver="GPKG")
 
-def clean_bus_coach_stations(cfg, os_mm_net_node, boundary):
+def clean_bus_coach_stations(cfg: Config, os_mm_net_node: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> None:
     """Filters OS MMRN for bus and coach stations, then clips to boundary and writes to file"""
     bus_coach_stations = os_mm_net_node[
         (os_mm_net_node['os_nodetype'].str.contains('Bus Station', case=False, na=False)) |
@@ -359,7 +368,7 @@ def clean_bus_coach_stations(cfg, os_mm_net_node, boundary):
                   cfg.paths.model_input / "Infrastructure" / "Other" /
                   "TfN OS Bus Coach Stations" / "tfn_bus_coach_stations.gpkg", driver="GPKG")
 
-def clean_tram_network(cfg, tfn_rail_links):
+def clean_tram_network(cfg: Config, tfn_rail_links: gpd.GeoDataFrame) -> None:
     """Filters OS rail links for tram network, then writes to file"""
     tfn_tram_links = tfn_rail_links[tfn_rail_links['rail_use'].isin(['Freight And Passenger', 'Passenger'])]
     tfn_tram_links = tfn_tram_links[tfn_tram_links['desc'].isin(['Tram', 'Main Line And Tram'])]
@@ -367,7 +376,7 @@ def clean_tram_network(cfg, tfn_rail_links):
                   cfg.paths.model_input / "Infrastructure" / "Other" / "TfN OS Tram Network" /
                   "tfn_os_tram_links.gpkg", driver="GPKG")
 
-def clean_rapid_transport_network(cfg, tfn_rail_links):
+def clean_rapid_transport_network(cfg: Config, tfn_rail_links: gpd.GeoDataFrame):
     """Filters OS rail links for rapid transport network, then writes to file"""
     tfn_rapid_transport = tfn_rail_links[tfn_rail_links['rail_use'].isin(['Freight And Passenger', 'Passenger'])]
     tfn_rapid_transport = tfn_rapid_transport[tfn_rapid_transport['desc'].isin(
@@ -376,7 +385,7 @@ def clean_rapid_transport_network(cfg, tfn_rail_links):
                   cfg.paths.model_input / "Infrastructure" / "Other" /
                   "TfN Rapid Transport Network" / "tfn_rapid_transport_links.gpkg", driver="GPKG")
 
-def clean_charging_sites(cfg, boundary):
+def clean_charging_sites(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans ZapMap charging sites data, then writes to file"""
     chg_sites = pd.read_csv(cfg.infrastructure.other.zapmap)
     chg_sites_gdf = gpd.GeoDataFrame(chg_sites, geometry=[Point(xy) for xy in zip(chg_sites['lon'], chg_sites['lat'])],
@@ -391,7 +400,7 @@ def clean_charging_sites(cfg, boundary):
                   cfg.paths.model_input / "Infrastructure" / "Other" / "TfN EV Charging Sites" / "tfn_chg_sites.gpkg",
                   driver="GPKG")
 
-def clean_ncn(cfg, boundary):
+def clean_ncn(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans National Cycle Network data, then writes to file"""
     ncn = gpd.read_file(cfg.infrastructure.other.ncn_sustrans)
     ncn.drop(columns=['RouteCat', 'OpenStatus', 'GlobalID'], inplace=True)
@@ -405,16 +414,16 @@ def clean_ncn(cfg, boundary):
 
 ## HAZARDS
 
-def clean_hazards(cfg, boundary):
+def clean_hazards(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Cleans hazard data ready for analysis"""
-    #clean_extreme_weather(cfg, boundary)
+    clean_extreme_weather(cfg, boundary)
     clean_flooding(cfg, boundary)
     clean_ground_stability(cfg, boundary)
     clean_coastal_erosion(cfg, boundary)
 
 ### EXTREME WEATHER
 
-def clean_extreme_weather(cfg, boundary):
+def clean_extreme_weather(cfg: Config, boundary: gpd.GeoDataFrame):
     """Clean all extreme weather datasets ready for analysis"""
     tfn_common_grid = clean_common_grid(cfg, boundary)
 
@@ -431,7 +440,7 @@ def clean_extreme_weather(cfg, boundary):
     clean_wind_speed(cfg, boundary)
     clean_wind_driven_rain(cfg, boundary)
 
-def clean_common_grid(cfg, boundary):
+def clean_common_grid(cfg: Config, boundary: gpd.GeoDataFrame):
     """Creates and prepares common grid DataFrame for variables on same 12km British National Grid"""
     temp_max = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.max_temp_summer.zip_path}!"
                             f"{cfg.hazards.extreme_weather.max_temp_summer.internal_path}")
@@ -443,7 +452,7 @@ def clean_common_grid(cfg, boundary):
                   driver="GPKG")
     return tfn_common_grid
 
-def clean_temp_max(cfg, grid):
+def clean_temp_max(cfg: Config, grid: gpd.GeoDataFrame) -> None:
     """Reads and cleans max summer temperature change projections, then writes to file"""
     temp_max = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.max_temp_summer.zip_path}!"
                              f"{cfg.hazards.extreme_weather.max_temp_summer.internal_path}")
@@ -457,7 +466,7 @@ def clean_temp_max(cfg, grid):
                   "TfN Summer Max Temperature Change Projections" / "tfn_temp_max.csv",
                   csv=True)
 
-def clean_temp_min(cfg, grid):
+def clean_temp_min(cfg: Config, grid: gpd.GeoDataFrame) -> None:
     """Reads and cleans min winter temperature change projections, then writes to file"""
     temp_min = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.min_temp_winter.zip_path}!"
                              f"{cfg.hazards.extreme_weather.min_temp_winter.internal_path}")
@@ -471,7 +480,7 @@ def clean_temp_min(cfg, grid):
                   "TfN Winter Min Temperature Change Projections" / "tfn_temp_min.csv",
                   csv=True)
 
-def clean_summer_precip(cfg, grid):
+def clean_summer_precip(cfg: Config, grid: gpd.GeoDataFrame):
     """Reads and cleans summer precipitation change projections, then writes to file"""
     precip_sum = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.precip_summer.zip_path}!"
                                f"{cfg.hazards.extreme_weather.precip_summer.internal_path}")
@@ -486,7 +495,7 @@ def clean_summer_precip(cfg, grid):
                   "TfN Summer Precipitation Change Projections" / "tfn_precip_sum.csv",
                   csv=True)
 
-def clean_winter_precip(cfg, grid):
+def clean_winter_precip(cfg: Config, grid: gpd.GeoDataFrame) -> None:
     """Reads and cleans winter precipitation change projections, then writes to file"""
     precip_win = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.precip_winter.zip_path}!"
                                f"{cfg.hazards.extreme_weather.precip_winter.internal_path}")
@@ -501,7 +510,7 @@ def clean_winter_precip(cfg, grid):
                   "TfN Winter Precipitation Change Projections" / "tfn_precip_win.csv",
                   csv=True)
 
-def clean_rain_days(cfg, boundary):
+def clean_rain_days(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans 10mm rain days observations, then writes to file"""
     rain_days = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.rain_days.zip_path}!"
                               f"{cfg.hazards.extreme_weather.rain_days.internal_path}")
@@ -512,7 +521,7 @@ def clean_rain_days(cfg, boundary):
     write_to_file(tfn_rain_days, cfg.paths.model_input / "Hazards" / "Extreme Weather" /
                   "TfN 10mm Rain Days 1991-2020" / "tfn_rain_days.gpkg", driver="GPKG")
 
-def clean_drought_index(cfg, boundary):
+def clean_drought_index(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans drought severity index data, then writes to file"""
     drought_index = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.drought_index.zip_path}!"
                                   f"{cfg.hazards.extreme_weather.drought_index.internal_path}")
@@ -524,7 +533,7 @@ def clean_drought_index(cfg, boundary):
     write_to_file(tfn_drought, cfg.paths.model_input / "Hazards" / "Extreme Weather" /
                   "TfN Drought Severity Index" / "tfn_drought_index.gpkg", driver="GPKG")
 
-def clean_hot_summer_days(cfg, grid):
+def clean_hot_summer_days(cfg: Config, grid: gpd.GeoDataFrame) -> None:
     """Reads and cleans hot summer days projections, then writes to file"""
     hot_days = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.hot_days.zip_path}!"
                              f"{cfg.hazards.extreme_weather.hot_days.internal_path}")
@@ -536,7 +545,7 @@ def clean_hot_summer_days(cfg, grid):
                   "TfN Hot Summer Days Projections" / "tfn_hot_days.csv",
                   csv=True)
 
-def clean_extreme_summer_days(cfg, grid):
+def clean_extreme_summer_days(cfg: Config, grid: gpd.GeoDataFrame) -> None:
     """Reads and cleans extreme summer days projections, then writes to file"""
     extr_days = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.extreme_summer_days.zip_path}!"
                               f"{cfg.hazards.extreme_weather.extreme_summer_days.internal_path}")
@@ -548,7 +557,7 @@ def clean_extreme_summer_days(cfg, grid):
                   cfg.paths.model_input / "Hazards" / "Extreme Weather" /
                   "TfN Extreme Summer Days Projections" / "tfn_extr_days.csv", csv=True)
 
-def clean_frost_days(cfg, grid):
+def clean_frost_days(cfg: Config, grid: gpd.GeoDataFrame) -> None:
     """Reads and cleans frost days projections, then writes to file"""
     frost_days = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.frost_days.zip_path}!"
                                f"{cfg.hazards.extreme_weather.frost_days.internal_path}")
@@ -560,7 +569,7 @@ def clean_frost_days(cfg, grid):
                   "TfN Frost Days Projections" / "tfn_frost_days.csv",
                   csv=True)
 
-def clean_icing_days(cfg, grid):
+def clean_icing_days(cfg: Config, grid: gpd.GeoDataFrame) -> None:
     """Reads and cleans icing days projections, then writes to file"""
     ice_days = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.icing_days.zip_path}!"
                              f"{cfg.hazards.extreme_weather.icing_days.internal_path}")
@@ -571,7 +580,7 @@ def clean_icing_days(cfg, grid):
     write_to_file(tfn_ice_days, cfg.paths.model_input / "Hazards" / "Extreme Weather" /
                   "TfN Icing Days Projections" / "tfn_ice_days.csv", csv=True)
 
-def clean_wind_speed(cfg, boundary):
+def clean_wind_speed(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads wind speed projections, calculates exceedance and percentiles, cleans, then writes to file"""
     windspd_c_combined = read_wind_speed_reduce(cfg.hazards.extreme_weather.wind_spd_current, 'c')
     windspd_f_combined = read_wind_speed_reduce(cfg.hazards.extreme_weather.wind_spd_forecast, 'f')
@@ -588,21 +597,21 @@ def clean_wind_speed(cfg, boundary):
     write_to_file(tfn_windspd, cfg.paths.model_input / "Hazards" / "Extreme Weather" /
                   "TfN Wind Speed Projections" / "tfn_windspd.gpkg", driver="GPKG")
 
-def read_wind_speed_reduce(xr_path, tp):
+def read_wind_speed_reduce(xr_path: Path, tp: str) -> pd.DataFrame:
     """Reads wind speed projections, calculates exceedance and percentile measures and returns a reduced dataframe"""
     windspd = xr.open_dataset(xr_path).to_dataframe()
     exc = calculate_exceedance(20, windspd, 'wsgmax10m', tp)
-    pct = calculate_percentile(windspd, [0.99], 'wsgmax10m')
+    pct = calculate_percentile(windspd, 0.99, 'wsgmax10m')
     pct.columns = ['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude', f'p99_{tp}']
     windspd_combined = windspd_merge_and_fill(pct, exc, f'avg_excd_{tp}')
     return windspd_combined
 
-def windspd_merge_and_fill(df1, df2, fill_col):
+def windspd_merge_and_fill(df1: pd.DataFrame, df2: pd.DataFrame, fill_col: str) -> pd.DataFrame:
     """Merges two dataframes on common coordinates, filling a given column with 0 values"""
     return pd.merge(df1, df2, on=['projection_y_coordinate', 'projection_x_coordinate', 'latitude', 'longitude'],
                     how='outer').fillna({fill_col: 0})
 
-def clean_wind_driven_rain(cfg, boundary):
+def clean_wind_driven_rain(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans wind driven rain index data, then writes to file"""
     wdr = gpd.read_file(f"zip://{cfg.hazards.extreme_weather.wdr_index.zip_path}!"
                         f"{cfg.hazards.extreme_weather.wdr_index.internal_path}")
@@ -629,7 +638,7 @@ def clean_wind_driven_rain(cfg, boundary):
 
 ### FLOODING
 
-def clean_flooding(cfg, boundary):
+def clean_flooding(cfg: Config, boundary: gpd.GeoDataFrame):
     """Clean flooding data ready for analysis"""
     code_number_map = {'NT': ['50', '55'],
                        'NU': ['00', '05'],
@@ -657,7 +666,13 @@ def clean_flooding(cfg, boundary):
     clean_flood(cfg, "RoFSW", "RoFSW", "v202509", boundary,
                 "TfN RoFSW/tfn_rofsw.gpkg", False, code_number_map)
 
-def extract_gdb_file(cfg, code, number, flood_data, version, cc):
+def extract_gdb_file(
+        cfg: Config,
+        code: str,
+        number: str,
+        flood_data: str,
+        version: str,
+        cc: bool) -> gpd.GeoDataFrame | None:
     """Extracts a flood gdb file from a zip file given its BNG code and number, and version"""
     try:
         base_path = cfg.paths.raw_input / "Hazards" / "Flooding" / flood_data
@@ -697,7 +712,14 @@ def extract_gdb_file(cfg, code, number, flood_data, version, cc):
         print(f"Error processing {code}{number}: {e}")
         return None
 
-def read_gdb(cfg, code, number, file_name, flood_data, version, cc):
+def read_gdb(
+        cfg: Config,
+        code: str,
+        number: str,
+        file_name: str,
+        flood_data: str,
+        version: str,
+        cc: bool) -> gpd.GeoDataFrame | None:
     """Reads first layer of flood gdb file"""
     base_path = cfg.paths.raw_input / "Hazards" / "Flooding" / file_name / code
 
@@ -721,7 +743,7 @@ def read_gdb(cfg, code, number, file_name, flood_data, version, cc):
 
     return gdf
 
-def extract_flood_data(cfg, code_number_map):
+def extract_flood_data(cfg: Config, code_number_map: dict[str, list[str]]) -> None:
     """Extract geodatabase files from raw RoFRS and RoFSW flood data"""
     for code in code_number_map.keys():
         for number in code_number_map[code]:
@@ -733,7 +755,15 @@ def extract_flood_data(cfg, code_number_map):
             extract_gdb_file(cfg, code, number, "RoFRS", "v202501", False)
             extract_gdb_file(cfg, code, number, "RoFSW", "v202509", False)
 
-def clean_flood(cfg, file_name, flood_type, version, boundary, out_path, cc, code_number_map):
+def clean_flood(
+        cfg: Config,
+        file_name: str,
+        flood_type: str,
+        version: str,
+        boundary: gpd.GeoDataFrame,
+        out_path: str,
+        cc: bool,
+        code_number_map: dict[str, list[str]]) -> None:
     """Reads and cleans flood data, then writes to file"""
     gdfs = []
     for code in code_number_map.keys():
@@ -744,33 +774,33 @@ def clean_flood(cfg, file_name, flood_type, version, boundary, out_path, cc, cod
             print(code, number)
             del gdf, tfn_gdf
 
-    flood_data = pd.concat(gdfs, ignore_index=True)
+    flood_data = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True), geometry='geometry', crs=gdfs[0].crs)
     flood_data = extract_poly_from_geomcollection(flood_data)
     flood_data = flood_data[['Risk_band', 'geometry']]
     write_to_file(flood_data, cfg.paths.model_input / "Hazards" / "Flooding" / out_path, driver="GPKG")
 
 ### GROUND STABILITY
 
-def clean_ground_stability(cfg, boundary):
+def clean_ground_stability(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Cleans ground stability data ready for analysis"""
     clean_geosure(cfg, boundary)
     clean_geoclimate(cfg, boundary)
 
-def clean_geosure(cfg, boundary):
+def clean_geosure(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Cleans GeoSureHexGrids data, merges by nearest centroids, then writes to file"""
     geosure_layers = {
         'collapsible_deposits': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
-                            f"/" + cfg.hazards.ground_stability.geosure.collapsible_deposits),
-        'compressible_ground': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
-                            f"/" + cfg.hazards.ground_stability.geosure.compressible_ground),
+                                              f"{cfg.hazards.ground_stability.geosure.collapsible_deposits}"),
+        'compressible_ground': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!" 
+                                                f"{cfg.hazards.ground_stability.geosure.compressible_ground}"),
         'landslides': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
-                            f"/" + cfg.hazards.ground_stability.geosure.landslides),
+                                                f"{cfg.hazards.ground_stability.geosure.landslides}"),
         'running_sand': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
-                            f"/" + cfg.hazards.ground_stability.geosure.running_sand),
+                                                f"{cfg.hazards.ground_stability.geosure.running_sand}"),
         'shrink_swell': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
-                            f"/" + cfg.hazards.ground_stability.geosure.shrink_swell),
+                                                f"{cfg.hazards.ground_stability.geosure.shrink_swell}"),
         'soluble_rocks': gpd.read_file(f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
-                            f"/" + cfg.hazards.ground_stability.geosure.soluble_rocks)
+                                                f"{cfg.hazards.ground_stability.geosure.soluble_rocks}")
     }
 
     tfn_geosure_layers = {}
@@ -794,7 +824,7 @@ def clean_geosure(cfg, boundary):
     write_to_file(tfn_geosure, cfg.paths.model_input / "Hazards" / "Ground Stability" / "TfN GeoSure" /
                   "tfn_geosure.gpkg", driver="GPKG")
 
-def clean_geoclimate(cfg, boundary):
+def clean_geoclimate(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans GeoClimate Shrink-Swell data, then writes to file"""
     for year in ['2030', '2070']:
         gdf = gpd.read_file(cfg.hazards.ground_stability.geo_shrink_swell[year])
@@ -807,12 +837,12 @@ def clean_geoclimate(cfg, boundary):
 
 ### COASTAL EROSION
 
-def clean_coastal_erosion(cfg, boundary):
+def clean_coastal_erosion(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Cleans coastal erosion data ready for analysis"""
     clean_giz(cfg, boundary)
     clean_ncerm(cfg, boundary)
 
-def clean_giz(cfg, boundary):
+def clean_giz(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Cleans Ground Instability Zones data from NCERM, then writes to file"""
     ncerm_giz = gpd.read_file(f"zip://{cfg.hazards.coastal_erosion.zip_path}!{cfg.hazards.coastal_erosion.giz}")
     ncerm_giz = ncerm_giz[['smp_no', 'geometry']]
@@ -821,7 +851,7 @@ def clean_giz(cfg, boundary):
     write_to_file(tfn_ncerm_giz, cfg.paths.model_input / "Hazards" / "Coastal Erosion" /
                   "NCERM" / "Ground Instability Zones" / "tfn_ncerm_giz.gpkg", driver="GPKG")
 
-def clean_ncerm(cfg, boundary):
+def clean_ncerm(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Cleans erosion data from NCERM for 2055, and 2105, then writes to file"""
     for year in ['2055', '2105']:
         gdf = gpd.read_file(f"zip://{cfg.hazards.coastal_erosion.zip_path}!/" + cfg.hazards.coastal_erosion.smp[year])
@@ -834,33 +864,33 @@ def clean_ncerm(cfg, boundary):
 
 ## IMPACT
 
-def clean_impact(cfg, boundary):
+def clean_impact(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Cleans impact datasets ready for analysis"""
     clean_freight_demand(cfg, boundary)
     clean_noham_flows(cfg)
 
 ### FREIGHT
 
-def clean_freight_demand(cfg, boundary):
+def clean_freight_demand(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Cleans freight demand data ready for analysis"""
     tfn_freight_network_demand = read_freight_demand(cfg.impact.freight_demand, boundary)
 
     tfn_os_freight_network_demand = map_freight_networks(
         tfn_freight_network_demand,
-        cfg.model_input / "Infrastructure" / "Rail" / "TfN OS Freight Rail" / "tfn_freight_rail_links.gpkg")
+        cfg.paths.model_input / "Infrastructure" / "Rail" / "TfN OS Freight Rail" / "tfn_freight_rail_links.gpkg")
 
     write_to_file(tfn_os_freight_network_demand,
                   cfg.paths.model_input / "Impact" / "TfN Freight Flows" / "tfn_freight_network_demand.gpkg",
                   driver="GPKG")
 
-def read_freight_demand(path, boundary):
+def read_freight_demand(path: Path, boundary: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Reads and cleans freight demand data, and returns as GeoDataFrame"""
     freight_network_demand = gpd.read_file(path)
     freight_network_demand = freight_network_demand[['dij_id', '2022_23_total', '2050_51 sc2_total', 'geometry']]
     tfn_freight_network_demand = clip_to_boundary(freight_network_demand, boundary)
     return tfn_freight_network_demand
 
-def map_freight_networks(tfn_freight_network_demand, os_path):
+def map_freight_networks(tfn_freight_network_demand: gpd.GeoDataFrame, os_path: Path) -> gpd.GeoDataFrame:
     """Maps freight demand data onto the OS freight network using nearest spatial join, then cleans and returns"""
     tfn_os_freight_rail = gpd.read_file(os_path)
     tfn_os_freight_rail = tfn_os_freight_rail.to_crs(tfn_freight_network_demand.crs)
@@ -878,7 +908,7 @@ def map_freight_networks(tfn_freight_network_demand, os_path):
 
 ### NoHAM
 
-def clean_noham_flows(cfg):
+def clean_noham_flows(cfg: Config) -> None:
     """Cleans NoHAM flows data, aggregates link flows by year, merges with the network, then write to file"""
     link_flows = aggregate_link_flows_year(cfg)
 
@@ -892,7 +922,13 @@ def clean_noham_flows(cfg):
                       cfg.paths.model_input / "Impact" / "TfN NoHAM Flows" / year / f"tfn_noham_net_flows_{tp}.gpkg",
                       driver="GPKG")
 
-def read_noham_h5(year, time_period, user_class, noham_path, output_path, extract):
+def read_noham_h5(
+        year: str,
+        time_period: str,
+        user_class: str,
+        noham_path: Path,
+        output_path: Path,
+        extract: bool) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Reads NoHAM h5 files and extracts the link, routes, and od's DataFrames"""
     if extract:
         with py7zr.SevenZipFile(noham_path, mode='r') as archive:
@@ -939,7 +975,7 @@ def read_noham_h5(year, time_period, user_class, noham_path, output_path, extrac
 
     return od_df, route_df, link_df
 
-def aggregate_link_flows(ods, routes, links):
+def aggregate_link_flows(ods: pd.DataFrame, routes: pd.DataFrame, links: pd.DataFrame) -> pd.DataFrame:
     """Takes NoHAM od's, routes, and links to create aggregated link flows DataFrame"""
     # Flatten OD and Route data
     od_flat = ods.reset_index()[['route', 'abs_demand']]
@@ -955,7 +991,7 @@ def aggregate_link_flows(ods, routes, links):
 
     return link_flows
 
-def aggregate_link_flows_year(cfg):
+def aggregate_link_flows_year(cfg: Config) -> dict[str, pd.DataFrame]:
     """Aggregates link flows for each year, time period, and user class"""
     years = ["2023", "2048"]
     time_periods = ["TS1", "TS2", "TS3"]
@@ -1010,7 +1046,7 @@ def aggregate_link_flows_year(cfg):
 
     return link_flows
 
-def merge_noham_flow_network(tfn_noham_flows, noham_path):
+def merge_noham_flow_network(tfn_noham_flows: pd.DataFrame, noham_path: Path) -> gpd.GeoDataFrame:
     """Merges NoHAM flows onto road network, then returns as GeoDataFrame"""
     tfn_noham_link = gpd.read_file(noham_path)
     tfn_noham_net_flows = pd.merge(
@@ -1019,7 +1055,7 @@ def merge_noham_flow_network(tfn_noham_flows, noham_path):
         on='link_id',
         how='left'  # Keep all network, adding flows where available
     )
-    return tfn_noham_net_flows
+    return gpd.GeoDataFrame(tfn_noham_net_flows, geometry='geometry', crs=tfn_noham_link.crs)
 
 
 
