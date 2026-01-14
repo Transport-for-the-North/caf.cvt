@@ -43,6 +43,7 @@ def clip_to_boundary(gdf: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> gpd.G
     gdf_boundary = gpd.clip(gdf, boundary)  # Clip GDF to boundary
     return gdf_boundary
 
+
 def write_to_file(
     data: pd.DataFrame | gpd.GeoDataFrame,
     output_path: Path,
@@ -87,6 +88,7 @@ def write_to_file(
     else:
         raise ValueError(f"Unsupported file extension: {ext}")
 
+
 def explode_to_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
     Explodes the MultiPolygons and GeomCollections in a GeoDataFrame into Polygons
@@ -129,6 +131,7 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
                     poly_count += 1
 
     return gpd.GeoDataFrame(rows, crs=gdf.crs).reset_index(drop=True)
+
 
 def _df_to_gdf(df: pd.DataFrame, x_col: str, y_col: str, crs: str) -> gpd.GeoDataFrame:
     """Takes a DataFrame and converts it to a GeoDataFrame using spatial columns"""
@@ -192,56 +195,6 @@ def _nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.Ge
     result = gdf1.merge(nearest.drop(columns="geometry"), left_index=True, right_index=True)
 
     return result
-
-
-def _calculate_exceedance(
-    threshold: int, df: pd.DataFrame, variable: str, timescale: str
-) -> pd.DataFrame:
-    """Counts the number of exceedance days of a variable over a given threshold, then calculates the average over the
-    timescale, per geometry"""
-
-    df["exceedance"] = df[variable] > threshold
-
-    # Group by grid square and year, and count exceedance days
-    exceedance_counts = (
-        df[df["exceedance"]]
-        .groupby(
-            [
-                "projection_y_coordinate",
-                "projection_x_coordinate",
-                "latitude",
-                "longitude",
-                "year",
-            ]
-        )
-        .size()
-        .reset_index(name="exceedance_days")
-    )
-
-    # Calculate the average exceedance days per year for each grid square
-    average_exceedance = (
-        exceedance_counts.groupby(
-            ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
-        )["exceedance_days"]
-        .mean()
-        .reset_index(name=f"avg_excd_{timescale}")
-    )
-
-    return average_exceedance
-
-
-def _calculate_percentile(df: pd.DataFrame, quantile: float, variable: str) -> pd.DataFrame:
-    """Calculates the percentiles of a given variable in a GeoDataFrame per geometry"""
-    percentiles = (
-        df.groupby(
-            ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
-        )[variable]
-        .quantile(quantile)
-        .unstack()
-        .reset_index()
-    )
-
-    return percentiles
 
 
 # DATA CLEANING
@@ -316,6 +269,7 @@ def _clean_noham_roads(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
         noham_network[["a", "b"]] = (
             noham_network["link_id"].str.split("_", expand=True).astype(int)
         )
+        # Filter out links with a or b less than 10,000 (zone connectors)
         noham_network = noham_network[
             (noham_network["a"] >= 10000) & (noham_network["b"] >= 10000)
         ]
@@ -1023,6 +977,53 @@ def _windspd_merge_and_fill(
         how="outer",
     ).fillna({fill_col: 0})
 
+def _calculate_exceedance(
+    threshold: int, df: pd.DataFrame, variable: str, timescale: str
+) -> pd.DataFrame:
+    """Counts the number of exceedance days of a variable over a given threshold, then calculates the average over the
+    timescale, per geometry"""
+
+    df["exceedance"] = df[variable] > threshold
+
+    # Group by grid square and year, and count exceedance days
+    exceedance_counts = (
+        df[df["exceedance"]]
+        .groupby(
+            [
+                "projection_y_coordinate",
+                "projection_x_coordinate",
+                "latitude",
+                "longitude",
+                "year",
+            ]
+        )
+        .size()
+        .reset_index(name="exceedance_days")
+    )
+
+    # Calculate the average exceedance days per year for each grid square
+    average_exceedance = (
+        exceedance_counts.groupby(
+            ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
+        )["exceedance_days"]
+        .mean()
+        .reset_index(name=f"avg_excd_{timescale}")
+    )
+
+    return average_exceedance
+
+def _calculate_percentile(df: pd.DataFrame, quantile: float, variable: str) -> pd.DataFrame:
+    """Calculates the percentiles of a given variable in a GeoDataFrame per geometry"""
+    percentiles = (
+        df.groupby(
+            ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
+        )[variable]
+        .quantile(quantile)
+        .unstack()
+        .reset_index()
+    )
+
+    return percentiles
 
 def _clean_wind_driven_rain(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans wind driven rain index data, then writes to file"""
