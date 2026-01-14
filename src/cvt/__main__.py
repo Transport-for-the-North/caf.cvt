@@ -17,7 +17,9 @@ LOG = logging.getLogger(_NAME)
 
 def _main():
     """Run Climate Vulnerability Tool"""
-    cfg = Config.load_yaml(Path("../../config.yml"))
+    current_dir = Path(__file__).parent
+    config_path = current_dir.parents[1] / "config.yml"
+    cfg = Config.load_yaml(config_path)
     details = ctk.log_helpers.ToolDetails(_NAME, "1.0.0", full_version=None)
 
     with ctk.LogHelper(_NAME, details, log_file=cfg.paths.log_path):
