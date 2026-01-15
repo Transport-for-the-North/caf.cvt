@@ -1,4 +1,4 @@
-"""Tests for the {} module"""
+"""Tests for the {} module."""
 # Built-Ins
 
 # Third Party
@@ -12,5 +12,5 @@
 
 # # # TESTS # # #
 class TestFunctionName:
-    def test_something(self):
+    def test_something(self) -> None:
         assert True

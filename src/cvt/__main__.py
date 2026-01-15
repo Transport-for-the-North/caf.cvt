@@ -1,6 +1,4 @@
-"""
-Main script
-"""
+"""Main script."""
 
 import logging
 from pathlib import Path
@@ -11,12 +9,11 @@ from data_cleaning import data_cleaning
 from functional_rules import apply_functional_rules
 from layering import layering
 
-_NAME = "cvt"
-LOG = logging.getLogger(_NAME)
 
+LOG = logging.getLogger(__name__)
 
-def _main():
-    """Run Climate Vulnerability Tool"""
+def _main() -> None:
+    """Run Climate Vulnerability Tool."""
     current_dir = Path(__file__).parent
     config_path = current_dir.parents[1] / "config.yml"
     cfg = Config.load_yaml(config_path)

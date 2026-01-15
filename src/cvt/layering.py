@@ -1,6 +1,4 @@
-"""
-Intersect infrastructure with hazard layers to attribute risk to each piece of infrastructure
-"""
+"""Intersect infrastructure with hazard layers to attribute risk to each piece of infrastructure."""
 
 import geopandas as gpd
 import numpy as np
@@ -17,11 +15,11 @@ def _infrastructure_risk_overlay(
     gdf: gpd.GeoDataFrame, hazards_dict: dict[str, gpd.GeoDataFrame]
 ) -> gpd.GeoDataFrame:
     """Overlay infrastructure over hazard risk layers using an intersection spatial join, then calculate hazard risk
-    score as the max risk value of the intersection
+    score as the max risk value of the intersection.
     """
     gdf_with_risk = gdf.copy()
 
-    for hazard, gdf in hazards_dict.items():
+    for _hazard, gdf in hazards_dict.items():
         # Spatial join to find intersections with hazards
         gdf = gdf.to_crs(gdf_with_risk.crs)  # Match CRS
         intersections = gpd.sjoin(gdf_with_risk, gdf, how="left", predicate="intersects")
@@ -35,19 +33,18 @@ def _infrastructure_risk_overlay(
         # Merge back into main DataFrame
         gdf_with_risk = gdf_with_risk.join(agg, how="left")
 
-    gdf_with_risk.fillna(0, inplace=True)
+    return gdf_with_risk.fillna(0)
 
-    return gdf_with_risk
 
 
 def _reshape_for_current_forecast(
     gdf: gpd.GeoDataFrame, id_col: str, risk_cols_order: list[str]
 ) -> gpd.GeoDataFrame:
     """Reshapes a given dataframe by adding a current/forecast column that distinguishes two identical pieces of
-    infrastructure, and removes the suffix
+    infrastructure, and removes the suffix.
     """
     # Identify risk and descriptive columns
-    risk_cols = [col for col in gdf.columns if col.endswith("_c") or col.endswith("_f")]
+    risk_cols = [col for col in gdf.columns if col.endswith(("_c", "_f"))]
     id_cols = [id_col]
     descriptive_cols = [
         col
@@ -74,19 +71,18 @@ def _reshape_for_current_forecast(
 
     # Pivot back so each risk variable becomes a column
     reshaped = melted.pivot_table(
-        index=id_cols + ["current_or_forecast"] + descriptive_cols,
+        index=[*id_cols, "current_or_forecast", *descriptive_cols],
         columns="variable",
         values="value",
     ).reset_index()
 
     # Reorder risk columns based on original order
-    reshaped = reshaped[id_cols + ["current_or_forecast"] + descriptive_cols + risk_cols_order]
+    reshaped = reshaped[[*id_cols, "current_or_forecast", *descriptive_cols, *risk_cols_order]]
 
     # Merge geometry back
     reshaped_gdf = pd.merge(reshaped, geometry, on=id_col)
-    reshaped_gdf = gpd.GeoDataFrame(reshaped_gdf, geometry="geometry", crs=gdf.crs)
+    return gpd.GeoDataFrame(reshaped_gdf, geometry="geometry", crs=gdf.crs)
 
-    return reshaped_gdf
 
 
 def _prepare_model_output(
@@ -96,23 +92,22 @@ def _prepare_model_output(
     rename_map: dict[str, str],
     risk_cols_order: list[str],
 ) -> gpd.GeoDataFrame:
-    """Performs standard cleaning operations on final GeoDataFrame's to prepare it for model output"""
-    gdf.drop(columns=drop_cols, inplace=True)
-    gdf.drop_duplicates(subset=["geometry"], inplace=True)
-    gdf.rename(columns=rename_map, inplace=True)
+    """Performs standard cleaning operations on final GeoDataFrame's to prepare it for model output."""
+    gdf = gdf.drop(columns=drop_cols)
+    gdf = gdf.drop_duplicates(subset=["geometry"])
+    gdf = gdf.rename(columns=rename_map)
     gdf[desc_cols] = gdf[desc_cols].replace(0, "N/A")
     gdf = gdf.to_crs(epsg=27700)
     gdf = _reshape_for_current_forecast(gdf, "id", risk_cols_order)
     gdf[risk_cols_order] = gdf[risk_cols_order].round(1)
-    gdf.rename(columns={col: f"{col}_score" for col in risk_cols_order}, inplace=True)
-    return gdf
+    return gdf.rename(columns={col: f"{col}_score" for col in risk_cols_order})
 
 
 def _split_csv_shapefile(
     cfg: Config, gdf: gpd.GeoDataFrame, id_col: str, inf_type: str, folder: str, filename: str
 ) -> None:
     """Splits a GeoDataFrame into a CSV with an ID and all attribute data, and a Shapefile with an ID and spatial data,
-    then writes them to file
+    then writes them to file.
     """
     # Separate spatial and attribute data
     spatial_gdf = gdf[[id_col, "geometry"]].copy()
@@ -181,8 +176,8 @@ def layering(cfg: Config) -> None:
 
 
 def _read_hazard_layers(cfg: Config) -> dict[str, gpd.GeoDataFrame]:
-    """Reads and cleans hazard layers, and returns them in a dictionary"""
-    hazard_layers = {
+    """Reads and cleans hazard layers, and returns them in a dictionary."""
+    return {
         "Extreme Weather": gpd.read_file(
             cfg.paths.model_interim_output
             / "TfN Extreme Weather Risk"
@@ -203,7 +198,6 @@ def _read_hazard_layers(cfg: Config) -> dict[str, gpd.GeoDataFrame]:
         ),
     }
 
-    return hazard_layers
 
 
 ## INFRASTRUCTURE-HAZARD LAYERING
@@ -215,7 +209,7 @@ def _infrastructure_layering(
     risk_cols: list[str],
     impact_weights: dict[str, float],
 ) -> None:
-    """Layer roads, rail, and other infrastructure with hazards"""
+    """Layer roads, rail, and other infrastructure with hazards."""
     _get_road_risk(cfg, hazard_layers, risk_cols, impact_weights)
     _get_rail_risk(cfg, hazard_layers, risk_cols, impact_weights)
     _get_other_risk(cfg, hazard_layers, risk_cols)
@@ -230,7 +224,7 @@ def _get_road_risk(
     risk_cols: list[str],
     impact_weights: dict[str, float],
 ) -> None:
-    """Layer OS Open Roads and NoHAM with hazards to assign risk"""
+    """Layer OS Open Roads and NoHAM with hazards to assign risk."""
     _os_open_road_risk(cfg, hazard_layers, risk_cols)
     _noham_road_risk(cfg, hazard_layers, risk_cols, impact_weights)
 
@@ -241,7 +235,7 @@ def _get_road_risk(
 def _os_open_road_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Overlay OS Road infrastructure with hazards, clean output, and write to file"""
+    """Overlay OS Road infrastructure with hazards, clean output, and write to file."""
     tfn_os_road = gpd.read_file(
         cfg.paths.model_input / "Infrastructure" / "Road" / "TfN OS Road" / "tfn_os_road.gpkg"
     )
@@ -268,7 +262,7 @@ def _noham_road_risk(
     risk_cols: list[str],
     impact_weights: dict[str, float],
 ) -> None:
-    """Overlay NOHAM with hazards, calculate impact index, clean output, and write to file"""
+    """Overlay NOHAM with hazards, calculate impact index, clean output, and write to file."""
     tfn_noham = {}
     tfn_noham_risk_tp = {}
     for year, tp in {"2023": "c", "2048": "f"}.items():
@@ -284,8 +278,8 @@ def _noham_road_risk(
         drop_cols = [
             col for col in tfn_noham_risk_tp[tp].columns if col.endswith(f"_{other_tp}")
         ]
-        tfn_noham_risk_tp[tp].drop(columns=drop_cols, inplace=True)
-        tfn_noham_risk_tp[tp].drop_duplicates(subset=["geometry"], inplace=True)
+        tfn_noham_risk_tp[tp] = tfn_noham_risk_tp[tp].drop(columns=drop_cols)
+        tfn_noham_risk_tp[tp] = tfn_noham_risk_tp[tp].drop_duplicates(subset=["geometry"])
         tfn_noham_risk_tp[tp].columns = [
             col.removesuffix(f"_{tp}") for col in tfn_noham_risk_tp[tp].columns
         ]
@@ -320,7 +314,7 @@ def _noham_road_risk(
         "impact",
     ]
     tfn_noham_risk = tfn_noham_risk[
-        ["link_id", "current_or_forecast", "geometry"] + risk_cols + noham_impact_cols
+        ["link_id", "current_or_forecast", "geometry", *risk_cols, *noham_impact_cols]
     ]
 
     cols_to_round = [
@@ -328,8 +322,8 @@ def _noham_road_risk(
     ]
     tfn_noham_risk[cols_to_round] = tfn_noham_risk[cols_to_round].round(1)
     tfn_noham_risk = tfn_noham_risk.to_crs(epsg=27700)
-    tfn_noham_risk.rename(columns={"link_id": "id"}, inplace=True)
-    tfn_noham_risk.rename(columns={col: f"{col}_score" for col in cols_to_round}, inplace=True)
+    tfn_noham_risk = tfn_noham_risk.rename(columns={"link_id": "id"})
+    tfn_noham_risk = tfn_noham_risk.rename(columns={col: f"{col}_score" for col in cols_to_round})
 
     _split_csv_shapefile(cfg, tfn_noham_risk, "id", "Road", "NoHAM", "tfn_noham_risk")
 
@@ -340,7 +334,7 @@ def _noham_impact_index(
     impact_weights: dict[str, float],
     risk_cols: list[str],
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
-    """Normalise demand, then calculate impact index for NoHAM using demand and hazard information"""
+    """Normalise demand, then calculate impact index for NoHAM using demand and hazard information."""
     user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
 
     # Normalise user class demand together
@@ -364,10 +358,10 @@ def _noham_impact_index(
     )
 
     tfn_noham_c = tfn_noham_c[
-        ["link_id", "current_or_forecast", "geometry"] + risk_cols + impact_cols_c
+        ["link_id", "current_or_forecast", "geometry", *risk_cols, *impact_cols_c]
     ]
     tfn_noham_f = tfn_noham_f[
-        ["link_id", "current_or_forecast", "geometry"] + risk_cols + impact_cols_f
+        ["link_id", "current_or_forecast", "geometry", *risk_cols, *impact_cols_f]
     ]
 
     return tfn_noham_c, tfn_noham_f
@@ -376,7 +370,7 @@ def _noham_impact_index(
 def _normalise_uc_demand(
     df_c: pd.DataFrame, df_f: pd.DataFrame, user_classes: list[str]
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Normalise NoHAM demand for each user class individually"""
+    """Normalise NoHAM demand for each user class individually."""
     uc_total_cols = [f"{uc}_total" for uc in user_classes]
     combined_values = np.vstack([df_c[uc_total_cols].values, df_f[uc_total_cols].values])
     scaler = MinMaxScaler(feature_range=(0, 100))
@@ -390,7 +384,7 @@ def _normalise_uc_demand(
 def _normalise_total_col(
     df_c: pd.DataFrame, df_f: pd.DataFrame, old_column: str, new_column: str
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Normalise total demand for one column"""
+    """Normalise total demand for one column."""
     # Normalise all vehicles total separately
     combined_values = np.vstack(
         [df_c[old_column].values.reshape(-1, 1), df_f[old_column].values.reshape(-1, 1)]
@@ -406,7 +400,7 @@ def _normalise_total_col(
 def _normalise_total_cols(
     df_c: pd.DataFrame, df_f: pd.DataFrame, cols_c: list[str], cols_f: list[str]
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Normalise total demand for several columns"""
+    """Normalise total demand for several columns."""
     combined_values = np.vstack([df_c[cols_c].values, df_f[cols_f].values])
     scaler = MinMaxScaler(feature_range=(0, 100))
     scaler.fit(combined_values)
@@ -422,7 +416,7 @@ def _calculate_noham_impact(
     user_classes: list[str],
     impact_weights: dict[str, float],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Calculate NoHAM impact score for each user class, and for all vehicles"""
+    """Calculate NoHAM impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
     for uc in user_classes:
         for df, tp in [(df_c, "c"), (df_f, "f")]:
@@ -455,7 +449,7 @@ def _get_rail_risk(
     risk_cols: list[str],
     impact_weights: dict[str, float],
 ) -> None:
-    """Layer passenger rail and freight rail network with hazard to assign risk"""
+    """Layer passenger rail and freight rail network with hazard to assign risk."""
     _passenger_rail_risk(cfg, hazard_layers, risk_cols)
     _freight_rail_risk(cfg, hazard_layers, risk_cols, impact_weights)
 
@@ -466,7 +460,7 @@ def _get_rail_risk(
 def _passenger_rail_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Overlay passenger rail network with hazard to assign risk, clean output, and write to file"""
+    """Overlay passenger rail network with hazard to assign risk, clean output, and write to file."""
     tfn_rail_network = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -516,7 +510,7 @@ def _freight_rail_risk(
     risk_cols: list[str],
     impact_weights: dict[str, float],
 ) -> None:
-    """Overlay freight rail network with hazard risk, calculate impact index, clean output, and write to file"""
+    """Overlay freight rail network with hazard risk, calculate impact index, clean output, and write to file."""
     tfn_freight_network = gpd.read_file(
         cfg.paths.model_input
         / "Impact"
@@ -550,7 +544,7 @@ def _freight_rail_risk(
             "rail_use": "railway_use",
             "track_rep": "track_representation",
         },
-        risk_cols_order=risk_cols + ["impact"],
+        risk_cols_order=[*risk_cols, "impact"],
     )
 
     _split_csv_shapefile(
@@ -566,13 +560,13 @@ def _freight_rail_risk(
 def _freight_impact_index(
     tfn_freight_network_risk: gpd.GeoDataFrame, impact_weights: dict[str, float]
 ) -> gpd.GeoDataFrame:
-    """Calculate impact index using freight demand data and hazard risk"""
+    """Calculate impact index using freight demand data and hazard risk."""
     tfn_freight_network_risk = min_max_scaling_pair(
         tfn_freight_network_risk, [("2022_23_total", "2050_51 sc2_total")]
     )
 
-    tfn_freight_network_risk.rename(
-        columns={"2022_23_total": "demand_c", "2050_51 sc2_total": "demand_f"}, inplace=True
+    tfn_freight_network_risk = tfn_freight_network_risk.rename(
+        columns={"2022_23_total": "demand_c", "2050_51 sc2_total": "demand_f"}
     )
 
     tfn_freight_network_risk = _calculate_freight_impact(
@@ -583,17 +577,16 @@ def _freight_impact_index(
         tfn_freight_network_risk, [("impact_c", "impact_f")]
     )
 
-    tfn_freight_network_risk = gpd.GeoDataFrame(
+    return gpd.GeoDataFrame(
         tfn_freight_network_risk, geometry="geometry", crs="EPSG:4326"
     )
 
-    return tfn_freight_network_risk
 
 
 def _calculate_freight_impact(
     df: pd.DataFrame, impact_weights: dict[str, float]
 ) -> pd.DataFrame:
-    """Calculate composite impact score for current and forecast years"""
+    """Calculate composite impact score for current and forecast years."""
     for tp in ["c", "f"]:
         df[f"impact_{tp}"] = (
             df[f"demand_{tp}"] * impact_weights["demand"]
@@ -612,7 +605,7 @@ def _calculate_freight_impact(
 def _get_other_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Layer other infrastructure with hazards to assign risk"""
+    """Layer other infrastructure with hazards to assign risk."""
     _train_stations_risk(cfg, hazard_layers, risk_cols)
     _ev_charging_sites_risk(cfg, hazard_layers, risk_cols)
     _airports_risk(cfg, hazard_layers, risk_cols)
@@ -628,7 +621,7 @@ def _get_other_risk(
 
 
 def _buffer_geometry(gdf: gpd.GeoDataFrame, buffer_size_m: int) -> gpd.GeoDataFrame:
-    """Buffers the geometries of a given GeoDataFrame to a given size in metres"""
+    """Buffers the geometries of a given GeoDataFrame to a given size in metres."""
     gdf = gdf.to_crs(epsg=27700)
     gdf["geometry"] = gdf.buffer(buffer_size_m)
     return gdf
@@ -640,7 +633,7 @@ def _buffer_geometry(gdf: gpd.GeoDataFrame, buffer_size_m: int) -> gpd.GeoDataFr
 def _train_stations_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Buffer train stations, then overlay with hazard risk, clean output, and write to file"""
+    """Buffer train stations, then overlay with hazard risk, clean output, and write to file."""
     tfn_train_stations = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -677,7 +670,7 @@ def _train_stations_risk(
 def _ev_charging_sites_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Buffer charging sites, then overlay with hazard risk, clean output, and write to file"""
+    """Buffer charging sites, then overlay with hazard risk, clean output, and write to file."""
     tfn_chg_sites = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -709,7 +702,7 @@ def _ev_charging_sites_risk(
 def _airports_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Overlay airports with hazard risk, clean output, and write to file"""
+    """Overlay airports with hazard risk, clean output, and write to file."""
     tfn_airports = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -739,7 +732,7 @@ def _airports_risk(
 def _bus_coach_stations_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Buffer bus and coach stations, then overlay with hazard risk, clean output, and write to file"""
+    """Buffer bus and coach stations, then overlay with hazard risk, clean output, and write to file."""
     tfn_bus_coach_stations = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -778,7 +771,7 @@ def _bus_coach_stations_risk(
 def _bus_stops_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Overlay bus stops with hazard risk, clean output, and write to file"""
+    """Overlay bus stops with hazard risk, clean output, and write to file."""
     tfn_bus_stops = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -808,7 +801,7 @@ def _bus_stops_risk(
 def _tram_stations_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Buffer tram stations, then overlay with hazard risk, clean output, and write to file"""
+    """Buffer tram stations, then overlay with hazard risk, clean output, and write to file."""
     tfn_tram_stations = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -840,7 +833,7 @@ def _tram_stations_risk(
 def _rapid_transport_stations_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Buffer rapid transport stations, then overlay with hazard risk, clean output, and write to file"""
+    """Buffer rapid transport stations, then overlay with hazard risk, clean output, and write to file."""
     tfn_metro_stations = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -877,7 +870,7 @@ def _rapid_transport_stations_risk(
 def _ferry_terminals_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Buffer ferry terminals, then overlay with hazard risk, clean output, and write to file"""
+    """Buffer ferry terminals, then overlay with hazard risk, clean output, and write to file."""
     tfn_ferry_terminals = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -914,7 +907,7 @@ def _ferry_terminals_risk(
 def _petrol_stations_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Buffer petrol stations, then overlay with hazard risk, clean output, and write to file"""
+    """Buffer petrol stations, then overlay with hazard risk, clean output, and write to file."""
     tfn_petrol_stations = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -951,7 +944,7 @@ def _petrol_stations_risk(
 def _ncn_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Overlay National Cycle Network with hazard risk, clean output, then write to file"""
+    """Overlay National Cycle Network with hazard risk, clean output, then write to file."""
     tfn_ncn = gpd.read_file(
         cfg.paths.model_input / "Infrastructure" / "Other" / "TfN NCN" / "tfn_ncn.gpkg"
     )
@@ -998,7 +991,7 @@ def _ncn_risk(
 def _tram_network_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Overlay tram network with hazard risk, clean output, then write to file"""
+    """Overlay tram network with hazard risk, clean output, then write to file."""
     tfn_tram_network = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
@@ -1040,7 +1033,7 @@ def _tram_network_risk(
 def _rapid_transport_network_risk(
     cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
-    """Overlay rapid transport network with hazard risk, clean output, then write to file"""
+    """Overlay rapid transport network with hazard risk, clean output, then write to file."""
     tfn_rapid_transport = gpd.read_file(
         cfg.paths.model_input
         / "Infrastructure"
