@@ -3,7 +3,7 @@
 # Model Section Switches
 switches:
   run_data_cleaning: false
-  run_functional_rules: true
+  run_functional_rules: false
   run_layering: true
 
   flood_zip_extract: false

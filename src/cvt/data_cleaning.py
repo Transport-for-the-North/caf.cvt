@@ -379,6 +379,7 @@ def _clean_freight_rail(cfg: Config, tfn_rail_links: gpd.GeoDataFrame) -> None:
 
 def _clean_other(cfg: Config, boundary: gpd.GeoDataFrame, rail_links: gpd.GeoDataFrame) -> None:
     """Cleans all other datasets ready for analysis"""
+    _clean_airports(cfg)
     _clean_bus_stops(cfg, boundary)
     _clean_petrol_stations(cfg, boundary)
     _clean_charging_sites(cfg, boundary)
@@ -392,6 +393,19 @@ def _clean_other(cfg: Config, boundary: gpd.GeoDataFrame, rail_links: gpd.GeoDat
     _clean_bus_coach_stations(cfg, os_mm_net_node, boundary)
     _clean_tram_network(cfg, rail_links)
     _clean_rapid_transport_network(cfg, rail_links)
+
+
+def _clean_airports(cfg: Config) -> None:
+    """Reads TfN airports dataset, then writes to file in new directory"""
+    airports = gpd.read_file(cfg.infrastructure.other.uk_airports)
+    write_to_file(
+        airports,
+        cfg.paths.model_input
+        / "Infrastructure"
+        / "Other"
+        / "TfN Airports"
+        / "tfn_airports.gpkg",
+    )
 
 
 def _clean_bus_stops(cfg: Config, boundary: gpd.GeoDataFrame) -> None:

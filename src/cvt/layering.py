@@ -286,7 +286,7 @@ def _noham_road_risk(
         tfn_noham_risk_tp[tp].drop(columns=drop_cols, inplace=True)
         tfn_noham_risk_tp[tp].drop_duplicates(subset=["geometry"], inplace=True)
         tfn_noham_risk_tp[tp].columns = [
-            col.replace(f"_{tp}", "") for col in tfn_noham_risk_tp[tp].columns
+            col.removesuffix(f"_{tp}") for col in tfn_noham_risk_tp[tp].columns
         ]
         if tp == "c":
             tfn_noham_risk_tp[tp]["current_or_forecast"] = "Current"
@@ -297,17 +297,13 @@ def _noham_road_risk(
         tfn_noham_risk_tp["c"], tfn_noham_risk_tp["f"], impact_weights, risk_cols
     )
 
-    # Remove suffixes from risk columns
+    # Remove suffixes from risk and impact columns
     tfn_noham_risk_tp["c"].columns = [
-        col.replace("_c", "") for col in tfn_noham_risk_tp["c"].columns
+        col.removesuffix("_c") for col in tfn_noham_risk_tp["c"].columns
     ]
     tfn_noham_risk_tp["f"].columns = [
-        col.replace("_f", "") for col in tfn_noham_risk_tp["f"].columns
+        col.removesuffix("_f") for col in tfn_noham_risk_tp["f"].columns
     ]
-
-    # Add scenario column
-    tfn_noham_risk_tp["c"]["current_or_forecast"] = "Current"
-    tfn_noham_risk_tp["f"]["current_or_forecast"] = "Forecast"
 
     # Concatenate
     tfn_noham_risk = pd.concat(
@@ -366,8 +362,8 @@ def _noham_impact_index(
         tfn_noham_c, tfn_noham_f, impact_cols_c, impact_cols_f
     )
 
-    tfn_noham_c = tfn_noham_c[["link_id", "geometry"] + risk_cols + impact_cols_c]
-    tfn_noham_f = tfn_noham_f[["link_id", "geometry"] + risk_cols + impact_cols_f]
+    tfn_noham_c = tfn_noham_c[["link_id", "current_or_forecast", "geometry"] + risk_cols + impact_cols_c]
+    tfn_noham_f = tfn_noham_f[["link_id", "current_or_forecast", "geometry"] + risk_cols + impact_cols_f]
 
     return tfn_noham_c, tfn_noham_f
 
@@ -430,7 +426,7 @@ def _calculate_noham_impact(
                 + df["flood_risk"] * impact_weights["flood"]
                 + df["extreme_weather_risk"] * impact_weights["extreme_weather"]
                 + df["ground_stability_risk"] * impact_weights["ground_stability"]
-                + df["erosion_risk"] * impact_weights["erosion"]
+                + df["coastal_erosion_risk"] * impact_weights["coastal_erosion"]
             )
 
     for df, tp in [(df_c, "c"), (df_f, "f")]:
@@ -439,7 +435,7 @@ def _calculate_noham_impact(
             + df["flood_risk"] * impact_weights["flood"]
             + df["extreme_weather_risk"] * impact_weights["extreme_weather"]
             + df["ground_stability_risk"] * impact_weights["ground_stability"]
-            + df["erosion_risk"] * impact_weights["erosion"]
+            + df["coastal_erosion_risk"] * impact_weights["coastal_erosion"]
         )
 
     return df_c, df_f
@@ -488,10 +484,10 @@ def _passenger_rail_risk(
         ],
         rename_map={
             "osid": "id",
-            "descriptio": "description",
-            "physicalle": "physical_level",
-            "railwayuse": "railway_use",
-            "trackrepre": "track_representation",
+            "desc": "description",
+            "phys_level": "physical_level",
+            "rail_use": "railway_use",
+            "track_rep": "track_representation",
         },
         risk_cols_order=risk_cols,
     )
@@ -527,6 +523,10 @@ def _freight_rail_risk(
 
     tfn_freight_network_risk = _freight_impact_index(tfn_freight_network_risk, impact_weights)
 
+    #Set the correct CRS
+    tfn_freight_network_risk = tfn_freight_network_risk.set_crs(epsg=27700, allow_override=True)
+
+
     tfn_freight_network_risk = _prepare_model_output(
         gdf=tfn_freight_network_risk,
         drop_cols=["dij_id", "distance", "demand_c", "demand_f"],
@@ -539,10 +539,10 @@ def _freight_rail_risk(
         ],
         rename_map={
             "osid": "id",
-            "descriptio": "description",
-            "physicalle": "physical_level",
-            "railwayuse": "railway_use",
-            "trackrepre": "track_representation",
+            "desc": "description",
+            "phys_level": "physical_level",
+            "rail_use": "railway_use",
+            "track_rep": "track_representation",
         },
         risk_cols_order=risk_cols + ["impact"],
     )
@@ -594,7 +594,7 @@ def _calculate_freight_impact(
             + df[f"flood_risk_{tp}"] * impact_weights["flood"]
             + df[f"extreme_weather_risk_{tp}"] * impact_weights["extreme_weather"]
             + df[f"ground_stability_risk_{tp}"] * impact_weights["ground_stability"]
-            + df[f"erosion_risk_{tp}"] * impact_weights["erosion"]
+            + df[f"coastal_erosion_risk_{tp}"] * impact_weights["coastal_erosion"]
         )
 
     return df

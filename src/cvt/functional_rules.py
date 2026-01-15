@@ -240,7 +240,7 @@ def apply_functional_rules(cfg: Config) -> None:
     """
     boundary = gpd.read_file(cfg.paths.boundary_path)
 
-    # extreme_weather_index(cfg)
+    _extreme_weather_index(cfg)
     _flooding_index(cfg, boundary)
     _ground_stability_index(cfg)
     _coastal_erosion_index(cfg)
@@ -644,19 +644,18 @@ def _flooding_index(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
             cfg.paths.model_interim_output / "Other" / "flood_grid.gpkg"
         )
 
-    # tfn_flood_risk_c = upscale_to_grid(
-    #     cfg,
-    #     risk_score_map,
-    #     flood_grid,
-    #     {
-    #         "current": [
-    #             ("TfN RoFRS", "tfn_rofrs.gpkg", "rivers_sea_flood_risk_c"),
-    #             ("TfN RoFSW", "tfn_rofsw.gpkg", "surface_water_flood_risk_c"),
-    #         ]
-    #     },
-    # )
-    # TEMPORARY IMPORT TO SAVE TIME AND RESOURCE
-    tfn_flood_risk_c = gpd.read_file(cfg.paths.model_interim_output / "TfN Flood Risk" / "tfn_flood_risk_c.gpkg")
+    tfn_flood_risk_c = _upscale_to_grid(
+        cfg,
+        risk_score_map,
+        flood_grid,
+        {
+            "current": [
+                ("TfN RoFRS", "tfn_rofrs.gpkg", "rivers_sea_flood_risk_c"),
+                ("TfN RoFSW", "tfn_rofsw.gpkg", "surface_water_flood_risk_c"),
+            ]
+        },
+    )
+
 
     tfn_flood_risk_f = _upscale_to_grid(
         cfg,
