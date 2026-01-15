@@ -269,8 +269,8 @@ def _clean_noham_roads(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
         )
         # Filter out links with a or b less than 10,000 (zone connectors)
         noham_network_clean = noham_network_clean[
-            (noham_network_clean["a"] >= NOHAM_ROAD_THRESHOLD) &
-            (noham_network_clean["b"] >= NOHAM_ROAD_THRESHOLD)
+            (noham_network_clean["a"] >= NOHAM_ROAD_THRESHOLD)
+            & (noham_network_clean["b"] >= NOHAM_ROAD_THRESHOLD)
         ]
         noham_network_clean = noham_network_clean[["link_id", "geometry"]]
         noham_network_clean = noham_network_clean[~noham_network_clean.geometry.is_empty]
@@ -981,8 +981,7 @@ def _windspd_merge_and_fill(
     df1: pd.DataFrame, df2: pd.DataFrame, fill_col: str
 ) -> pd.DataFrame:
     """Merge two dataframes on common coordinates, fill a given column with 0 values."""
-    return pd.merge(
-        df1,
+    return df1.merge(
         df2,
         on=["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"],
         how="outer",
@@ -1023,18 +1022,21 @@ def _calculate_exceedance(
 
 def _calculate_percentile(df: pd.DataFrame, quantile: float, variable: str) -> pd.DataFrame:
     """Calculate the percentiles per geometry for a given variable."""
-    return (
-        df.groupby(
-            ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
-        )[variable]
-        .quantile(quantile)
-        .unstack()
-        .reset_index()
-    )
+    return df.pivot_table(
+        index=[
+            "projection_y_coordinate",
+            "projection_x_coordinate",
+            "latitude",
+            "longitude",
+            "time",
+        ],
+        values=variable,
+        aggfunc=lambda x: x.quantile(quantile),
+    ).reset_index()
 
 
 def _clean_wind_driven_rain(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
-    """Reads and cleans wind driven rain index data, then writes to file."""
+    """Read and clean wind driven rain index data, then write to file."""
     wdr = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.wdr_index.zip_path}!"
         f"{cfg.hazards.extreme_weather.wdr_index.internal_path}"
@@ -1131,7 +1133,7 @@ def _clean_flooding(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
 def _extract_gdb_file(
     cfg: Config, code: str, number: str, flood_data: str, version: str, cc: bool
 ) -> gpd.GeoDataFrame | None:
-    """Extracts a flood gdb file from a zip file given its BNG code and number, and version."""
+    """Extract a flood gdb file from a zip file given its BNG code and number, and version."""
     try:
         base_path = cfg.paths.raw_input / "Hazards" / "Flooding" / flood_data
         if cc:
@@ -1151,7 +1153,7 @@ def _extract_gdb_file(
 
         # Check if zip file exists
         if not zip_path.exists():
-            LOG.debug(f"Zip file not found: {zip_path}")
+            LOG.warning("Zip file not found: %s", zip_path)
             return None
 
         # Extract the contents
@@ -1160,19 +1162,19 @@ def _extract_gdb_file(
 
         # Check if GDB folder exists
         if not gdb_path.exists():
-            print(f"GDB folder not found: {gdb_path}")
+            LOG.warning("GDB folder not found: %s", gdb_path)
             return None
 
         layers = fiona.listlayers(gdb_path)
         if not layers:
-            print("No layers found in:", gdb_path)
+            LOG.warning("No layers found in: %s", gdb_path)
             return None
 
-        print("Available layers:", layers)
+        LOG.info("Available layers: %s", layers)
         return gpd.read_file(gdb_path, layer=layers[0])
 
-    except Exception as e:
-        print(f"Error processing {code}{number}: {e}")
+    except Exception:
+        LOG.exception("Error processing %s%s", code, number)
         return None
 
 
@@ -1185,7 +1187,7 @@ def _read_gdb(
     version: str,
     cc: bool,
 ) -> gpd.GeoDataFrame | None:
-    """Reads first layer of flood gdb file."""
+    """Read first layer of flood gdb file."""
     base_path = cfg.paths.raw_input / "Hazards" / "Flooding" / file_name / code
 
     if cc:
@@ -1195,22 +1197,22 @@ def _read_gdb(
 
     # Check if GDB folder exists
     if not gdb_path.exists():
-        print(f"GDB folder not found: {gdb_path}")
+        LOG.warning("GDB folder not found: %s", gdb_path)
         return None
 
     layers = fiona.listlayers(gdb_path)
     if not layers:
-        print("No layers found in:", gdb_path)
+        LOG.warning("No layers found in: %s", gdb_path)
         return None
 
-    print("Available layers:", layers)
+    LOG.info("Available layers: %s", layers)
     return gpd.read_file(gdb_path, layer=layers[0])
 
 
 def _extract_flood_data(cfg: Config, code_number_map: dict[str, list[str]]) -> None:
     """Extract geodatabase files from raw RoFRS and RoFSW flood data."""
-    for code in code_number_map:
-        for number in code_number_map[code]:
+    for code, num_list in code_number_map.items():
+        for number in num_list:
             # Forecast (Climate Change) data
             _extract_gdb_file(cfg, code, number, "RoFRS", "v202501", True)
             _extract_gdb_file(cfg, code, number, "RoFSW", "v202509", True)
@@ -1230,14 +1232,14 @@ def _clean_flood(
     cc: bool,
     code_number_map: dict[str, list[str]],
 ) -> None:
-    """Reads and cleans flood data, then writes to file."""
+    """Read and clean flood data, then write to file."""
     gdfs = []
-    for code in code_number_map:
-        for number in code_number_map[code]:
+    for code, num_list in code_number_map:
+        for number in num_list:
+            LOG.info("Processing: %s%s", code, number)
             gdf = _read_gdb(cfg, code, number, file_name, flood_type, version, cc)  # Read file
             tfn_gdf = clip_to_boundary(gdf, boundary)
             gdfs.append(tfn_gdf)  # Add to list
-            print(code, number)
             del gdf, tfn_gdf
 
     flood_data = gpd.GeoDataFrame(
@@ -1252,13 +1254,13 @@ def _clean_flood(
 
 
 def _clean_ground_stability(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
-    """Cleans ground stability data ready for analysis."""
+    """Clean ground stability data ready for analysis."""
     _clean_geosure(cfg, boundary)
     _clean_geoclimate(cfg, boundary)
 
 
 def _clean_geosure(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
-    """Cleans GeoSureHexGrids data, merges by nearest centroids, then writes to file."""
+    """Clean GeoSureHexGrids data, merge by nearest centroids, then write to file."""
     geosure_layers = {
         "collapsible_deposits": gpd.read_file(
             f"zip://{cfg.hazards.ground_stability.geosure.zip_path}!"
@@ -1288,8 +1290,8 @@ def _clean_geosure(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
 
     tfn_geosure_layers = {}
     for code, df in geosure_layers.items():
-        df = df.rename(columns={"CLASS": f"{code}_risk"})
-        tfn_geosure_layers[code] = clip_to_boundary(df, boundary)
+        df_clean = df.rename(columns={"CLASS": f"{code}_risk"})
+        tfn_geosure_layers[code] = clip_to_boundary(df_clean, boundary)
         tfn_geosure_layers[code] = explode_to_polygons(tfn_geosure_layers[code])
 
     # Merge layers based on nearest centroids
@@ -1332,7 +1334,7 @@ def _clean_geosure(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
 
 
 def _clean_geoclimate(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
-    """Reads and cleans GeoClimate Shrink-Swell data, then writes to file."""
+    """Read and clean GeoClimate Shrink-Swell data, then write to file."""
     for year in ["2030", "2070"]:
         gdf = gpd.read_file(cfg.hazards.ground_stability.geo_shrink_swell[year])
         gdf = gdf.rename(columns={"CLASS": "shrink_swell_geoclimate_risk"})
@@ -1354,13 +1356,13 @@ def _clean_geoclimate(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
 
 
 def _clean_coastal_erosion(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
-    """Cleans coastal erosion data ready for analysis."""
+    """Clean coastal erosion data ready for analysis."""
     _clean_giz(cfg, boundary)
     _clean_ncerm(cfg, boundary)
 
 
 def _clean_giz(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
-    """Cleans Ground Instability Zones data from NCERM, then writes to file."""
+    """Clean Ground Instability Zones data from NCERM, then write to file."""
     ncerm_giz = gpd.read_file(
         f"zip://{cfg.hazards.coastal_erosion.zip_path}!{cfg.hazards.coastal_erosion.giz}"
     )
@@ -1379,7 +1381,7 @@ def _clean_giz(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
 
 
 def _clean_ncerm(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
-    """Cleans erosion data from NCERM for 2055, and 2105, then writes to file."""
+    """Clean erosion data from NCERM for 2055, and 2105, then write to file."""
     for year in ["2055", "2105"]:
         gdf = gpd.read_file(
             f"zip://{cfg.hazards.coastal_erosion.zip_path}!/"
@@ -1403,7 +1405,7 @@ def _clean_ncerm(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
 
 
 def _clean_impact(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
-    """Cleans impact datasets ready for analysis."""
+    """Clean impact datasets ready for analysis."""
     _clean_freight_demand(cfg, boundary)
     _clean_noham_flows(cfg)
 
@@ -1412,7 +1414,7 @@ def _clean_impact(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
 
 
 def _clean_freight_demand(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
-    """Cleans freight demand data ready for analysis."""
+    """Clean freight demand data ready for analysis."""
     tfn_freight_network_demand = _read_freight_demand(cfg.impact.freight_demand, boundary)
 
     tfn_os_freight_network_demand = _map_freight_networks(
@@ -1434,7 +1436,7 @@ def _clean_freight_demand(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
 
 
 def _read_freight_demand(path: Path, boundary: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Reads and cleans freight demand data, and returns as GeoDataFrame."""
+    """Read and clean freight demand data, and return as GeoDataFrame."""
     freight_network_demand = gpd.read_file(path)
     freight_network_demand = freight_network_demand[
         ["dij_id", "2022_23_total", "2050_51 sc2_total", "geometry"]
@@ -1445,7 +1447,7 @@ def _read_freight_demand(path: Path, boundary: gpd.GeoDataFrame) -> gpd.GeoDataF
 def _map_freight_networks(
     tfn_freight_network_demand: gpd.GeoDataFrame, os_path: Path
 ) -> gpd.GeoDataFrame:
-    """Maps freight demand data onto the OS freight network using nearest spatial join, then cleans and returns."""
+    """Map freight demand data onto OS network, then clean and return."""
     tfn_os_freight_rail = gpd.read_file(os_path)
     tfn_os_freight_rail = tfn_os_freight_rail.to_crs(tfn_freight_network_demand.crs)
     tfn_os_freight_network_demand = gpd.sjoin_nearest(
@@ -1465,7 +1467,7 @@ def _map_freight_networks(
 
 
 def _clean_noham_flows(cfg: Config) -> None:
-    """Cleans NoHAM flows data, aggregates link flows by year, merges with the network, then write to file."""
+    """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
     link_flows = _aggregate_link_flows_year(cfg)
 
     for year, tp in {"2023": "c", "2048": "f"}.items():
@@ -1496,13 +1498,17 @@ def _read_noham_h5(
     output_path: Path,
     extract: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Reads NoHAM h5 files and extracts the link, routes, and od's DataFrames."""
+    """Read and clean NoHAM h5 files and extract the link, routes, and od's DataFrames."""
     if extract:
         with py7zr.SevenZipFile(noham_path, mode="r") as archive:
             archive.extract(
                 path=output_path,
                 targets=[
-                    f"input h5s/{year}/NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
+                    (
+                        f"input h5s/"
+                        f"{year}/"
+                        f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
+                    )
                 ],
             )
 
@@ -1558,7 +1564,7 @@ def _read_noham_h5(
 def _aggregate_link_flows(
     ods: pd.DataFrame, routes: pd.DataFrame, links: pd.DataFrame
 ) -> pd.DataFrame:
-    """Takes NoHAM od's, routes, and links to create aggregated link flows DataFrame."""
+    """Take NoHAM od's, routes, and link to create aggregated link flows DataFrame."""
     # Flatten OD and Route data
     od_flat = ods.reset_index()[["route", "abs_demand"]]
     route_flat = routes.reset_index()[["route", "link_id"]]
@@ -1569,11 +1575,11 @@ def _aggregate_link_flows(
     # Aggregate demand per link_id
     link_demand = od_links.groupby("link_id")["abs_demand"].sum().reset_index()
 
-    return pd.merge(link_demand, links, left_on="link_id", right_index=True)
+    return link_demand.merge(links, left_on="link_id", right_index=True)
 
 
 def _aggregate_link_flows_year(cfg: Config) -> dict[str, pd.DataFrame]:
-    """Aggregates link flows for each year, time period, and user class."""
+    """Aggregate link flows for each year, time period, and user class."""
     years = ["2023", "2048"]
     time_periods = ["TS1", "TS2", "TS3"]
     user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
@@ -1581,12 +1587,10 @@ def _aggregate_link_flows_year(cfg: Config) -> dict[str, pd.DataFrame]:
     link_flows = {}
     for year in years:
         ts_dfs = []
-        print(year)
         for time_period in time_periods:
-            print(time_period)
             uc_dfs = []
             for user_class in user_classes:
-                print(user_class)
+                LOG.info("Processing: %s %s %s", year, time_period, user_class)
                 od_df, route_df, link_df = _read_noham_h5(
                     year,
                     time_period,
@@ -1647,10 +1651,9 @@ def _aggregate_link_flows_year(cfg: Config) -> dict[str, pd.DataFrame]:
 def _merge_noham_flow_network(
     tfn_noham_flows: pd.DataFrame, noham_path: Path
 ) -> gpd.GeoDataFrame:
-    """Merges NoHAM flows onto road network, then returns as GeoDataFrame."""
+    """Merge NoHAM flows onto road network, then return as GeoDataFrame."""
     tfn_noham_link = gpd.read_file(noham_path)
-    tfn_noham_net_flows = pd.merge(
-        tfn_noham_link,
+    tfn_noham_net_flows = tfn_noham_link.merge(
         tfn_noham_flows,
         on="link_id",
         how="left",  # Keep all network, adding flows where available

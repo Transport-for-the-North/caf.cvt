@@ -11,6 +11,7 @@ from layering import layering
 
 LOG = logging.getLogger(__name__)
 
+
 def _main() -> None:
     """Run Climate Vulnerability Tool."""
     current_dir = Path(__file__).parent

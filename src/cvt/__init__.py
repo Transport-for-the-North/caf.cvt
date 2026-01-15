@@ -1,3 +1,3 @@
-"""Climate Vulnerability Tool to assess the vulnerability of the transport network in the North to climate hazards."""
+"""Climate Vulnerability Tool to assess the climate vulnerability of the transport network."""
 
 from ._version import __version__

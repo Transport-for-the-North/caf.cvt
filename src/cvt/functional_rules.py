@@ -1,6 +1,7 @@
-"""Apply functional rules to hazard and impact datasets, and normalise, in order to classify into actionable risk factors."""
+"""Apply functional rules to hazard and impact datasets, and normalise."""
 
 ### LOAD LIBRARIES
+import logging
 from functools import reduce
 from pathlib import Path
 
@@ -11,6 +12,11 @@ from config import Config
 from data_cleaning import clip_to_boundary, explode_to_polygons, write_to_file
 from shapely.geometry import box
 from sklearn.preprocessing import MinMaxScaler
+
+LOG = logging.getLogger(__name__)
+
+WIND_RISK_THRESHOLD_LOWER = 13.4  # 30 mph in m/s
+WIND_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s
 
 ### GENERAL FUNCTIONS
 
@@ -44,7 +50,7 @@ def min_max_scaling_pair(
     """
     for col_c, col_f in pairs:
         # Combine both columns into one array for global min/max
-        combined_values = df[[col_c, col_f]].values.flatten().reshape(-1, 1)
+        combined_values = df[[col_c, col_f]].to_numpy().flatten().reshape(-1, 1)
 
         scaler = MinMaxScaler(feature_range=feature_range)
         scaler.fit(combined_values)
@@ -59,7 +65,7 @@ def min_max_scaling_pair(
 def _spatial_smooth_zero_grids(
     gdf: gpd.GeoDataFrame, variables: list[str]
 ) -> gpd.GeoDataFrame:
-    """Applies spatial smoothing to GeoDataFrame on given variables."""
+    """Apply spatial smoothing to GeoDataFrame on given variables."""
     neighbours = gpd.sjoin(
         gdf, gdf, how="left", predicate="touches"
     )  # Find neighbouring grids
@@ -70,7 +76,7 @@ def _spatial_smooth_zero_grids(
     ].mean()
 
     for var in variables:
-        # Condition: variable is NA
+        # Set condition as variable is NA
         na_condition = gdf[var].isna()
 
         # Fill with neighbour average
@@ -84,7 +90,7 @@ def _spatial_smooth_zero_grids(
 def _iterative_spatial_smoothing(
     gdf: gpd.GeoDataFrame, variables: list[str], max_iterations: int = 10
 ) -> gpd.GeoDataFrame:
-    """Iteratively applies spatial smoothing to GeoDataFrame on given variables."""
+    """Apply spatial smoothing iteratively to GeoDataFrame on given variables."""
     prev_na_count = None
 
     for i in range(max_iterations):
@@ -93,12 +99,12 @@ def _iterative_spatial_smoothing(
 
         # Stop if all filled
         if current_na_count == 0:
-            print(f"All NA values filled after {i} iterations.")
+            LOG.info("All NA values filled after %s iterations.", i)
             return gdf
 
         # Stop if no improvement
         if prev_na_count is not None and current_na_count == prev_na_count:
-            print("No further improvement. Switching to nearest join.")
+            LOG.info("No further improvement. Switching to nearest join.")
             break
 
         prev_na_count = current_na_count
@@ -125,7 +131,7 @@ def _iterative_spatial_smoothing(
 
 
 def _create_grid(bounds: np.ndarray, cell_size: int) -> gpd.GeoDataFrame:
-    """Takes bounds and a cell size and returns a grid of the given size within the bounds."""
+    """Take bounds and a cell size and return a grid of the given size within the bounds."""
     xmin, ymin, xmax, ymax = bounds
     rows = int(np.ceil((ymax - ymin) / cell_size))
     cols = int(np.ceil((xmax - xmin) / cell_size))
@@ -143,16 +149,16 @@ def _create_grid(bounds: np.ndarray, cell_size: int) -> gpd.GeoDataFrame:
 def _merge_on_key(
     dfs: list[pd.DataFrame], grid: gpd.GeoDataFrame, key: str
 ) -> gpd.GeoDataFrame:
-    """Merges a list of dataframes into a single dataframe on a given common key, then merges onto a common grid."""
-    merged = reduce(lambda left, right: pd.merge(left, right, on=key, how="outer"), dfs)
-    merged_df = pd.merge(merged, grid, on=key, how="left", validate="one_to_many")
+    """Merge dataframes into single dataframe on common key, then merge onto a common grid."""
+    merged = reduce(lambda left, right: left.merge(right, on=key, how="outer"), dfs)
+    merged_df = merged.merge(grid, on=key, how="left", validate="one_to_many")
     return gpd.GeoDataFrame(merged_df, geometry="geometry", crs=grid.crs)
 
 
 def _calculate_risk_threshold(
     df: pd.DataFrame, base_col: str, output_col: str, threshold: int, invert: bool = False
 ) -> pd.DataFrame:
-    """Calculates risk level of a given column based on a threshold."""
+    """Calculate risk level of a given column based on a threshold."""
     for tp in ["c", "f"]:
         col_name = f"{base_col}_{tp}"
         out_name = f"{output_col}_{tp}"
@@ -168,7 +174,7 @@ def _calculate_risk_threshold(
 def _calculate_composite_score(
     df: pd.DataFrame, weights: dict[str, float], output_col: str
 ) -> pd.DataFrame:
-    """Calculates composite score given a dataframe with variables and corresponding weights."""
+    """Calculate composite score given a dataframe with variables and corresponding weights."""
     for tp in ["c", "f"]:
         df[f"{output_col}_{tp}"] = sum(
             df[f"{col}_{tp}"] * weight for col, weight in weights.items()
@@ -184,7 +190,7 @@ def _overlay_normalise(
     combined_risk_name: str,
     weights: dict[str, float],
 ) -> gpd.GeoDataFrame:
-    """Overlays two GeoDataFrames, then normalises and calculates a combined risk score."""
+    """Overlay two GeoDataFrames, then normalise and calculate a combined risk score."""
     # Overlay two gdf's
     gdf1 = gdf1.to_crs(gdf2.crs)
     composite_gdf = gpd.overlay(gdf2, gdf1, how="union")
@@ -210,7 +216,7 @@ def _overlay_normalise(
 def _filter_out_small_geometries(
     gdf: gpd.GeoDataFrame, pct_of_median: float
 ) -> gpd.GeoDataFrame:
-    """Filters out geometries that have an area less than a given percentage of the median area."""
+    """Filter out geometries with area less than a given percentage of the median area."""
     gdf["area"] = gdf.geometry.area
     threshold = gdf["area"].median() * pct_of_median  # Threshold: 3.5% of median
     gdf = gdf[gdf["area"] > threshold]  # Filter out tiny geometries
@@ -247,7 +253,7 @@ def apply_functional_rules(cfg: Config) -> None:
 
 
 def _extreme_weather_index(cfg: Config) -> None:
-    """Combines extreme heat, extreme cold, drought and storm indexes into a single index."""
+    """Combine extreme heat, extreme cold, drought and storm indexes into a single index."""
     tfn_common_grid = gpd.read_file(
         cfg.paths.model_input / "Other" / "TfN Common Grid" / "tfn_common_grid.gpkg"
     )
@@ -257,8 +263,9 @@ def _extreme_weather_index(cfg: Config) -> None:
     tfn_drought = _drought_index(cfg, tfn_common_grid)
     tfn_storm = _storm_index(cfg, tfn_common_grid)
 
-    tfn_extreme_weather_merge = pd.merge(
-        tfn_extreme_heat[["grid_id", "part", "heat_risk_c", "heat_risk_f"]],
+    tfn_extreme_weather_merge = tfn_extreme_heat[
+        ["grid_id", "part", "heat_risk_c", "heat_risk_f"]
+    ].merge(
         tfn_extreme_cold[["grid_id", "part", "cold_risk_c", "cold_risk_f", "geometry"]],
         on=["grid_id", "part"],
         how="inner",
@@ -329,8 +336,8 @@ def _extreme_weather_index(cfg: Config) -> None:
 #### EXTREME HEAT
 
 
-def _extreme_heat_index(cfg: Config, common_grid: gpd.GeoDataFrame):
-    """Combines several datasets into a single extreme heat index by merging on their common grid."""
+def _extreme_heat_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Combine several datasets into extreme heat index by merging on their common grid."""
     tfn_temp_max = pd.read_csv(
         cfg.paths.model_input
         / "Hazards"
@@ -379,12 +386,11 @@ def _extreme_heat_index(cfg: Config, common_grid: gpd.GeoDataFrame):
     return gpd.GeoDataFrame(tfn_extreme_heat, geometry="geometry")
 
 
-
 #### EXTREME COLD
 
 
 def _extreme_cold_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Combines several datasets into a single extreme cold index by merging on their common grid."""
+    """Combine several datasets into extreme cold index by merging on their common grid."""
     tfn_temp_min = pd.read_csv(
         cfg.paths.model_input
         / "Hazards"
@@ -433,14 +439,11 @@ def _extreme_cold_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDa
     return gpd.GeoDataFrame(tfn_extreme_cold, geometry="geometry")
 
 
-
 #### DROUGHT
 
 
 def _drought_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Combines several datasets into a single drought index using a spatial overlay and spatial smoothing, before
-    normalising and calculating the composite score.
-    """
+    """Combine several datasets into single drought index with spatial overlay."""
     tfn_drought = gpd.read_file(
         cfg.paths.model_input
         / "Hazards"
@@ -456,7 +459,7 @@ def _drought_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFra
         / "tfn_precip_sum.csv"
     )
 
-    tfn_precip_sum_grid = pd.merge(tfn_precip_sum, common_grid, on="grid_id")
+    tfn_precip_sum_grid = tfn_precip_sum.merge(common_grid, on="grid_id")
     tfn_precip_sum_gdf = gpd.GeoDataFrame(
         tfn_precip_sum_grid, geometry="geometry", crs=common_grid.crs
     )
@@ -492,14 +495,11 @@ def _drought_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFra
     return gpd.GeoDataFrame(tfn_drought_risk, geometry="geometry")
 
 
-
 #### STORMS
 
 
 def _storm_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Combines several datasets into a single storm index using a spatial overlay and spatial smoothing, before
-    normalising and calculating the composite score.
-    """
+    """Combine several datasets into a single storm index with a spatial overlay."""
     tfn_precip_win = pd.read_csv(
         cfg.paths.model_input
         / "Hazards"
@@ -529,8 +529,8 @@ def _storm_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame
         / "tfn_wdr.gpkg"
     )
 
-    tfn_precip_win_grid = pd.merge(
-        tfn_precip_win, common_grid, on="grid_id", how="left", validate="one_to_many"
+    tfn_precip_win_grid = tfn_precip_win.merge(
+        common_grid, on="grid_id", how="left", validate="one_to_many"
     )
     tfn_precip_win_gdf = gpd.GeoDataFrame(
         tfn_precip_win_grid, geometry="geometry", crs=common_grid.crs
@@ -610,12 +610,11 @@ def _storm_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame
     return gpd.GeoDataFrame(tfn_storm_risk, geometry="geometry")
 
 
-
 def _wind_risk_scaled(speed_mps: float) -> float:
-    """Calculates a wind risk value given a wind speed, based on classification rule."""
-    if speed_mps < 13.4:  # Below 30 mph
+    """Calculate wind risk value given a wind speed, based on classification rule."""
+    if speed_mps < WIND_RISK_THRESHOLD_LOWER:  # Below 30 mph
         return 0
-    if speed_mps <= 20.1:  # between 30 and 45 mph
+    if speed_mps <= WIND_RISK_THRESHOLD_UPPER:  # between 30 and 45 mph
         return (speed_mps - 13.4) / (20.1 - 13.4)  # Scale to 0 - 1
     return 1 + (speed_mps - 20.1) / (25 - 20.1)  # Scale beyond 1
 
@@ -624,9 +623,7 @@ def _wind_risk_scaled(speed_mps: float) -> float:
 
 
 def _flooding_index(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
-    """Combines RoFRS and RoFSW indexes into a single risk index by upscaling them to a common grid, normalising, and
-    calculating a composite risk score.
-    """
+    """Combine RoFRS & RoFSW into a single risk score by upscaling them to a common grid."""
     risk_score_map = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
 
     if cfg.switches.create_flood_grid:
@@ -661,7 +658,7 @@ def _flooding_index(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     )
 
     # Merge on geometry columns (these will be exactly the same)
-    tfn_flood_risk = pd.merge(tfn_flood_risk_c, tfn_flood_risk_f, on="geometry", how="left")
+    tfn_flood_risk = tfn_flood_risk_c.merge(tfn_flood_risk_f, on="geometry", how="left")
 
     tfn_flood_risk = min_max_scaling_pair(
         tfn_flood_risk,
@@ -688,7 +685,7 @@ def _flooding_index(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
 def _create_flood_grid(
     cfg: Config, size_m: int, boundary: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
-    """Creates a grid of a given size in metres, within a given boundary."""
+    """Create a grid of a given size in metres, within a given boundary."""
     bounds = boundary.total_bounds
     grid = _create_grid(bounds, size_m)
     flood_grid = clip_to_boundary(grid, boundary)
@@ -702,7 +699,7 @@ def _process_flood_layer(
     risk_column: str,
     risk_score_map: dict[str, int],
 ) -> gpd.GeoDataFrame:
-    """Reads a flood layer, assigns its risk, and returns its area-weighted flood risk GeoDataFrame."""
+    """Read a flood layer, assigns risk, and return area-weighted flood risk."""
     layer = gpd.read_file(file_path)
     layer[risk_column] = layer["Risk_band"].map(risk_score_map)
     return _area_weighted_flood_assignment(flood_grid, layer, risk_column)
@@ -738,7 +735,7 @@ def _upscale_to_grid(
 def _area_weighted_flood_assignment(
     grid: gpd.GeoDataFrame, flood_gdf: gpd.GeoDataFrame, risk_column: str
 ) -> gpd.GeoDataFrame:
-    """Assigns flood risk to grid squares using an area-weighted average."""
+    """Assign flood risk to grid squares using an area-weighted average."""
     # Spatial join to find intersecting polygons
     flood_risk_join = gpd.sjoin(
         grid, flood_gdf[[risk_column, "geometry"]], how="left", predicate="intersects"
@@ -778,9 +775,7 @@ def _area_weighted_flood_assignment(
 
 
 def _ground_stability_index(cfg: Config) -> None:
-    """Combines GeoSure and GeoClimate ground stability risk into a single index, using a spatial overlay, before
-    normalising and calculating a composite risk score.
-    """
+    """Combine GeoSure & GeoClimate risk into a single index, using a spatial overlay."""
     risk_scores = {  # Map risk scores to normalised values (0-100)
         "Probable": 100,
         "Possible": 66,
@@ -880,9 +875,7 @@ def _ground_stability_index(cfg: Config) -> None:
 
 
 def _coastal_erosion_index(cfg: Config) -> None:
-    """Combines erosion and ground instability risk from NCERM into a single index using a spatial overlay, before
-    normalising and calculating a composite risk score.
-    """
+    """Combine erosion and ground stability risk into single index using a spatial overlay."""
     tfn_ncerm_giz = gpd.read_file(
         cfg.paths.model_input
         / "Hazards"
