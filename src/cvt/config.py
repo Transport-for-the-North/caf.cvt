@@ -1,5 +1,6 @@
-import caf.toolkit as ctk
 from pathlib import Path
+
+import caf.toolkit as ctk
 
 ### CONFIG SET UP
 

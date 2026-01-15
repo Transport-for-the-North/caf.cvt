@@ -3,21 +3,21 @@ Cleans raw input data to prepare it for input into the model
 """
 
 ### LOAD LIBRARIES
-import pandas as pd
-import geopandas as gpd
-import fiona
-import shapely
-from shapely.geometry import Point, Polygon, MultiPolygon, GeometryCollection
-import xarray as xr
-import h5py
-import py7zr
 from pathlib import Path
 from zipfile import ZipFile
-from typing import Tuple
 
+import fiona
+import geopandas as gpd
+import h5py
+import pandas as pd
+import py7zr
+import shapely
+import xarray as xr
 from config import Config
+from shapely.geometry import GeometryCollection, MultiPolygon, Point, Polygon
 
 ### GENERAL FUNCTIONS
+
 
 def clip_to_boundary(gdf: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
@@ -34,11 +34,10 @@ def clip_to_boundary(gdf: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> gpd.G
         The GeoDataFrame representing the clipping boundary.
 
     Returns
-    ----------
+    -------
     geopandas.GeoDataFrame
         A new GeoDataFrame containing only the geometries from 'gdf' that fall within the specified boundary.
     """
-
     boundary = boundary.to_crs(gdf.crs)  # Match CRS
     gdf_boundary = gpd.clip(gdf, boundary)  # Clip GDF to boundary
     return gdf_boundary
@@ -62,7 +61,7 @@ def write_to_file(
         Full path including filename and extension where the file will be saved.
 
     Returns
-    ----------
+    -------
     None
     """
     output_path.parent.mkdir(
@@ -74,10 +73,7 @@ def write_to_file(
 
     ext = Path(output_path).suffix.lower()
 
-    driver_map = {
-        ".gpkg": "GPKG",
-        ".shp": "ESRI Shapefile"
-    }
+    driver_map = {".gpkg": "GPKG", ".shp": "ESRI Shapefile"}
 
     if ext == ".csv":
         data.to_csv(output_path, index=False)
@@ -103,7 +99,7 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         The input GeoDataFrame that needs to be cleaned
 
     Returns
-    --------
+    -------
     gpd.GeoDataFrame
         A new GeoDataFrame containing only Polygon geometries, with a new column 'part' to keep track.
     """
@@ -209,7 +205,7 @@ def data_cleaning(cfg: Config) -> None:
     Parameters
     ----------
     cfg : Config
-        Main config for the model, containing paths and settings. 
+        Main config for the model, containing paths and settings.
     """
     boundary = gpd.read_file(cfg.paths.boundary_path)
 
@@ -283,7 +279,7 @@ def _clean_noham_roads(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
             / "Infrastructure"
             / "Road"
             / f"TfN NoHAM {year}"
-            / f"tfn_noham_{year}.gpkg"
+            / f"tfn_noham_{year}.gpkg",
         )
 
 
@@ -323,9 +319,7 @@ def _get_rail_links(boundary: gpd.GeoDataFrame, os_rail_path: Path) -> gpd.GeoDa
         ["description", "structure", "physicallevel", "railwayuse", "trackrepresentation"]
     ] = tfn_rail_links[
         ["description", "structure", "physicallevel", "railwayuse", "trackrepresentation"]
-    ].replace(
-        0, "N/A"
-    )
+    ].replace(0, "N/A")
     tfn_rail_links.rename(
         columns={
             "description": "desc",
@@ -377,7 +371,9 @@ def _clean_freight_rail(cfg: Config, tfn_rail_links: gpd.GeoDataFrame) -> None:
 ### OTHER
 
 
-def _clean_other(cfg: Config, boundary: gpd.GeoDataFrame, rail_links: gpd.GeoDataFrame) -> None:
+def _clean_other(
+    cfg: Config, boundary: gpd.GeoDataFrame, rail_links: gpd.GeoDataFrame
+) -> None:
     """Cleans all other datasets ready for analysis"""
     _clean_airports(cfg)
     _clean_bus_stops(cfg, boundary)
@@ -991,12 +987,13 @@ def _windspd_merge_and_fill(
         how="outer",
     ).fillna({fill_col: 0})
 
+
 def _calculate_exceedance(
     threshold: int, df: pd.DataFrame, variable: str, timescale: str
 ) -> pd.DataFrame:
     """Counts the number of exceedance days of a variable over a given threshold, then calculates the average over the
-    timescale, per geometry"""
-
+    timescale, per geometry
+    """
     df["exceedance"] = df[variable] > threshold
 
     # Group by grid square and year, and count exceedance days
@@ -1026,6 +1023,7 @@ def _calculate_exceedance(
 
     return average_exceedance
 
+
 def _calculate_percentile(df: pd.DataFrame, quantile: float, variable: str) -> pd.DataFrame:
     """Calculates the percentiles of a given variable in a GeoDataFrame per geometry"""
     percentiles = (
@@ -1038,6 +1036,7 @@ def _calculate_percentile(df: pd.DataFrame, quantile: float, variable: str) -> p
     )
 
     return percentiles
+
 
 def _clean_wind_driven_rain(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Reads and cleans wind driven rain index data, then writes to file"""
@@ -1218,7 +1217,7 @@ def _read_gdb(
 
 def _extract_flood_data(cfg: Config, code_number_map: dict[str, list[str]]) -> None:
     """Extract geodatabase files from raw RoFRS and RoFSW flood data"""
-    for code in code_number_map.keys():
+    for code in code_number_map:
         for number in code_number_map[code]:
             # Forecast (Climate Change) data
             _extract_gdb_file(cfg, code, number, "RoFRS", "v202501", True)
@@ -1241,7 +1240,7 @@ def _clean_flood(
 ) -> None:
     """Reads and cleans flood data, then writes to file"""
     gdfs = []
-    for code in code_number_map.keys():
+    for code in code_number_map:
         for number in code_number_map[code]:
             gdf = _read_gdb(cfg, code, number, file_name, flood_type, version, cc)  # Read file
             tfn_gdf = clip_to_boundary(gdf, boundary)
@@ -1254,9 +1253,7 @@ def _clean_flood(
     )
     flood_data = _extract_poly_from_geomcollection(flood_data)
     flood_data = flood_data[["Risk_band", "geometry"]]
-    write_to_file(
-        flood_data, cfg.paths.model_input / "Hazards" / "Flooding" / out_path
-    )
+    write_to_file(flood_data, cfg.paths.model_input / "Hazards" / "Flooding" / out_path)
 
 
 ### GROUND STABILITY
@@ -1508,7 +1505,7 @@ def _read_noham_h5(
     noham_path: Path,
     output_path: Path,
     extract: bool,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Reads NoHAM h5 files and extracts the link, routes, and od's DataFrames"""
     if extract:
         with py7zr.SevenZipFile(noham_path, mode="r") as archive:

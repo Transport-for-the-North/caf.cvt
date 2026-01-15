@@ -92,7 +92,6 @@ intersphinx_mapping = {
 }
 intersphinx_timeout = 30
 
-
 # -- Options for Todo extension ----------------------------------------------
 def get_env_bool(name: str, default: bool) -> bool:
     value = os.getenv(name, default)

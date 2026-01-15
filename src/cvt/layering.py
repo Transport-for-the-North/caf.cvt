@@ -3,14 +3,12 @@ Intersect infrastructure with hazard layers to attribute risk to each piece of i
 """
 
 import geopandas as gpd
-import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
-from typing import Tuple
-
+import pandas as pd
 from config import Config
 from data_cleaning import write_to_file
 from functional_rules import min_max_scaling_pair
+from sklearn.preprocessing import MinMaxScaler
 
 # GENERAL FUNCTIONS
 
@@ -19,7 +17,8 @@ def _infrastructure_risk_overlay(
     gdf: gpd.GeoDataFrame, hazards_dict: dict[str, gpd.GeoDataFrame]
 ) -> gpd.GeoDataFrame:
     """Overlay infrastructure over hazard risk layers using an intersection spatial join, then calculate hazard risk
-    score as the max risk value of the intersection"""
+    score as the max risk value of the intersection
+    """
     gdf_with_risk = gdf.copy()
 
     for hazard, gdf in hazards_dict.items():
@@ -45,7 +44,8 @@ def _reshape_for_current_forecast(
     gdf: gpd.GeoDataFrame, id_col: str, risk_cols_order: list[str]
 ) -> gpd.GeoDataFrame:
     """Reshapes a given dataframe by adding a current/forecast column that distinguishes two identical pieces of
-    infrastructure, and removes the suffix"""
+    infrastructure, and removes the suffix
+    """
     # Identify risk and descriptive columns
     risk_cols = [col for col in gdf.columns if col.endswith("_c") or col.endswith("_f")]
     id_cols = [id_col]
@@ -112,7 +112,8 @@ def _split_csv_shapefile(
     cfg: Config, gdf: gpd.GeoDataFrame, id_col: str, inf_type: str, folder: str, filename: str
 ) -> None:
     """Splits a GeoDataFrame into a CSV with an ID and all attribute data, and a Shapefile with an ID and spatial data,
-    then writes them to file"""
+    then writes them to file
+    """
     # Separate spatial and attribute data
     spatial_gdf = gdf[[id_col, "geometry"]].copy()
     attribute_gdf = gdf.drop(columns=["geometry"])
@@ -131,13 +132,13 @@ def layering(cfg: Config) -> None:
     """
     Layer infrastructure with hazard risk layers to assign risk scores to each piece of infrastructure.
 
-    Read in hazard layers from functional rules output, then spatially overlay with infrastructure layers 
-    to assign risk to each piece of infrastructure. Calculate impact indices for NoHAM and freight rail. 
+    Read in hazard layers from functional rules output, then spatially overlay with infrastructure layers
+    to assign risk to each piece of infrastructure. Calculate impact indices for NoHAM and freight rail.
 
     Parameters
     ----------
     cfg : Config
-        Main config for the model, containing paths and settings. 
+        Main config for the model, containing paths and settings.
     """
     hazard_layers = _read_hazard_layers(cfg)
 
@@ -338,7 +339,7 @@ def _noham_impact_index(
     tfn_noham_f: gpd.GeoDataFrame,
     impact_weights: dict[str, float],
     risk_cols: list[str],
-) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """Normalise demand, then calculate impact index for NoHAM using demand and hazard information"""
     user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
 
@@ -362,15 +363,19 @@ def _noham_impact_index(
         tfn_noham_c, tfn_noham_f, impact_cols_c, impact_cols_f
     )
 
-    tfn_noham_c = tfn_noham_c[["link_id", "current_or_forecast", "geometry"] + risk_cols + impact_cols_c]
-    tfn_noham_f = tfn_noham_f[["link_id", "current_or_forecast", "geometry"] + risk_cols + impact_cols_f]
+    tfn_noham_c = tfn_noham_c[
+        ["link_id", "current_or_forecast", "geometry"] + risk_cols + impact_cols_c
+    ]
+    tfn_noham_f = tfn_noham_f[
+        ["link_id", "current_or_forecast", "geometry"] + risk_cols + impact_cols_f
+    ]
 
     return tfn_noham_c, tfn_noham_f
 
 
 def _normalise_uc_demand(
     df_c: pd.DataFrame, df_f: pd.DataFrame, user_classes: list[str]
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Normalise NoHAM demand for each user class individually"""
     uc_total_cols = [f"{uc}_total" for uc in user_classes]
     combined_values = np.vstack([df_c[uc_total_cols].values, df_f[uc_total_cols].values])
@@ -384,7 +389,7 @@ def _normalise_uc_demand(
 
 def _normalise_total_col(
     df_c: pd.DataFrame, df_f: pd.DataFrame, old_column: str, new_column: str
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Normalise total demand for one column"""
     # Normalise all vehicles total separately
     combined_values = np.vstack(
@@ -400,7 +405,7 @@ def _normalise_total_col(
 
 def _normalise_total_cols(
     df_c: pd.DataFrame, df_f: pd.DataFrame, cols_c: list[str], cols_f: list[str]
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Normalise total demand for several columns"""
     combined_values = np.vstack([df_c[cols_c].values, df_f[cols_f].values])
     scaler = MinMaxScaler(feature_range=(0, 100))
@@ -416,7 +421,7 @@ def _calculate_noham_impact(
     df_f: pd.DataFrame,
     user_classes: list[str],
     impact_weights: dict[str, float],
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Calculate NoHAM impact score for each user class, and for all vehicles"""
     # Calculate impact metric for each user class
     for uc in user_classes:
@@ -523,9 +528,10 @@ def _freight_rail_risk(
 
     tfn_freight_network_risk = _freight_impact_index(tfn_freight_network_risk, impact_weights)
 
-    #Set the correct CRS
-    tfn_freight_network_risk = tfn_freight_network_risk.set_crs(epsg=27700, allow_override=True)
-
+    # Set the correct CRS
+    tfn_freight_network_risk = tfn_freight_network_risk.set_crs(
+        epsg=27700, allow_override=True
+    )
 
     tfn_freight_network_risk = _prepare_model_output(
         gdf=tfn_freight_network_risk,
@@ -722,7 +728,9 @@ def _airports_risk(
         risk_cols_order=risk_cols,
     )
 
-    _split_csv_shapefile(cfg, tfn_airports_risk, "id", "Other", "Airports", "tfn_airports_risk")
+    _split_csv_shapefile(
+        cfg, tfn_airports_risk, "id", "Other", "Airports", "tfn_airports_risk"
+    )
 
 
 #### Bus and Coach Stations

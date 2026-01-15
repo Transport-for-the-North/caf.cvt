@@ -3,23 +3,22 @@ Apply functional rules to hazard and impact datasets, and normalise, in order to
 """
 
 ### LOAD LIBRARIES
-import pandas as pd
-import geopandas as gpd
-import numpy as np
-from shapely.geometry import box
-from sklearn.preprocessing import MinMaxScaler
 from functools import reduce
-from typing import Tuple
 from pathlib import Path
 
+import geopandas as gpd
+import numpy as np
+import pandas as pd
 from config import Config
-from data_cleaning import explode_to_polygons, clip_to_boundary, write_to_file
-
+from data_cleaning import clip_to_boundary, explode_to_polygons, write_to_file
+from shapely.geometry import box
+from sklearn.preprocessing import MinMaxScaler
 
 ### GENERAL FUNCTIONS
 
+
 def min_max_scaling_pair(
-    df: pd.DataFrame, pairs: list[Tuple[str, str]], feature_range: Tuple[int, int] = (0, 100)
+    df: pd.DataFrame, pairs: list[tuple[str, str]], feature_range: tuple[int, int] = (0, 100)
 ) -> pd.DataFrame:
     """
     Scale paired columns jointly using Min-Max scaling.
@@ -35,17 +34,16 @@ def min_max_scaling_pair(
         df: pd.DataFrame
             DataFrame containing the columns to be scaled.
         pairs: list[Tuple[str, str]])
-            List of 2-tuples of column names. Each tuple specifies a pair of 
+            List of 2-tuples of column names. Each tuple specifies a pair of
             columns that will share a single scaler.
         feature_range: Tuple[int, int], optional
              Desired range of the transformed data. Defaults to ``(0, 100)``.
 
     Returns
-    ----------
-    pd.DataFrame: 
+    -------
+    pd.DataFrame:
         The original DataFrame with the specified columns scaled in-place.
     """
-   
     for col_c, col_f in pairs:
         # Combine both columns into one array for global min/max
         combined_values = df[[col_c, col_f]].values.flatten().reshape(-1, 1)
@@ -60,7 +58,9 @@ def min_max_scaling_pair(
     return df
 
 
-def _spatial_smooth_zero_grids(gdf: gpd.GeoDataFrame, variables: list[str]) -> gpd.GeoDataFrame:
+def _spatial_smooth_zero_grids(
+    gdf: gpd.GeoDataFrame, variables: list[str]
+) -> gpd.GeoDataFrame:
     """Applies spatial smoothing to GeoDataFrame on given variables"""
     neighbours = gpd.sjoin(
         gdf, gdf, how="left", predicate="touches"
@@ -172,7 +172,6 @@ def _calculate_composite_score(
     df: pd.DataFrame, weights: dict[str, float], output_col: str
 ) -> pd.DataFrame:
     """Calculates composite score given a dataframe with variables and corresponding weights"""
-
     for tp in ["c", "f"]:
         df[f"{output_col}_{tp}"] = sum(
             df[f"{col}_{tp}"] * weight for col, weight in weights.items()
@@ -229,14 +228,14 @@ def apply_functional_rules(cfg: Config) -> None:
     """
     Apply functional rules to hazard datasets and spatially combine to generate risk indices.
 
-    Create extreme weather, flooding, ground stability, and coastal erosion risk indices by 
+    Create extreme weather, flooding, ground stability, and coastal erosion risk indices by
     combining spatially, either on a shared grid or via spatial overlay. Uses functional rules
-    to normalise and classify risk levels. 
+    to normalise and classify risk levels.
 
     Parameters
     ----------
     cfg : Config
-        Main config for the model, containing paths and settings. 
+        Main config for the model, containing paths and settings.
     """
     boundary = gpd.read_file(cfg.paths.boundary_path)
 
@@ -256,7 +255,6 @@ def _extreme_weather_index(cfg: Config) -> None:
     tfn_common_grid = gpd.read_file(
         cfg.paths.model_input / "Other" / "TfN Common Grid" / "tfn_common_grid.gpkg"
     )
-
 
     tfn_extreme_heat = _extreme_heat_index(cfg, tfn_common_grid)
     tfn_extreme_cold = _extreme_cold_index(cfg, tfn_common_grid)
@@ -447,7 +445,8 @@ def _extreme_cold_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDa
 
 def _drought_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Combines several datasets into a single drought index using a spatial overlay and spatial smoothing, before
-    normalising and calculating the composite score"""
+    normalising and calculating the composite score
+    """
     tfn_drought = gpd.read_file(
         cfg.paths.model_input
         / "Hazards"
@@ -506,7 +505,8 @@ def _drought_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFra
 
 def _storm_index(cfg: Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Combines several datasets into a single storm index using a spatial overlay and spatial smoothing, before
-    normalising and calculating the composite score"""
+    normalising and calculating the composite score
+    """
     tfn_precip_win = pd.read_csv(
         cfg.paths.model_input
         / "Hazards"
@@ -623,10 +623,9 @@ def _wind_risk_scaled(speed_mps: float) -> float:
     """Calculates a wind risk value given a wind speed, based on classification rule"""
     if speed_mps < 13.4:  # Below 30 mph
         return 0
-    elif speed_mps <= 20.1:  # between 30 and 45 mph
+    if speed_mps <= 20.1:  # between 30 and 45 mph
         return (speed_mps - 13.4) / (20.1 - 13.4)  # Scale to 0 - 1
-    else:
-        return 1 + (speed_mps - 20.1) / (25 - 20.1)  # Scale beyond 1
+    return 1 + (speed_mps - 20.1) / (25 - 20.1)  # Scale beyond 1
 
 
 ### FLOODING
@@ -634,7 +633,8 @@ def _wind_risk_scaled(speed_mps: float) -> float:
 
 def _flooding_index(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
     """Combines RoFRS and RoFSW indexes into a single risk index by upscaling them to a common grid, normalising, and
-    calculating a composite risk score"""
+    calculating a composite risk score
+    """
     risk_score_map = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
 
     if cfg.switches.create_flood_grid:
@@ -655,7 +655,6 @@ def _flooding_index(cfg: Config, boundary: gpd.GeoDataFrame) -> None:
             ]
         },
     )
-
 
     tfn_flood_risk_f = _upscale_to_grid(
         cfg,
@@ -701,9 +700,7 @@ def _create_flood_grid(
     bounds = boundary.total_bounds
     grid = _create_grid(bounds, size_m)
     flood_grid = clip_to_boundary(grid, boundary)
-    write_to_file(
-        flood_grid, cfg.paths.model_interim_output / "Other" / "flood_grid.gpkg"
-    )
+    write_to_file(flood_grid, cfg.paths.model_interim_output / "Other" / "flood_grid.gpkg")
     return flood_grid
 
 
@@ -723,10 +720,9 @@ def _upscale_to_grid(
     cfg: Config,
     risk_score_map: dict[str, int],
     flood_grid: gpd.GeoDataFrame,
-    scenario_map: dict[str, list[Tuple[str, str, str]]],
+    scenario_map: dict[str, list[tuple[str, str, str]]],
 ) -> gpd.GeoDataFrame:
     """Upscales each flood layer to the common grid and writes to file"""
-
     for scenario, layers in scenario_map.items():
         result = flood_grid.copy()
         for folder, file, risk_col in layers:
@@ -791,7 +787,8 @@ def _area_weighted_flood_assignment(
 
 def _ground_stability_index(cfg: Config) -> None:
     """Combines GeoSure and GeoClimate ground stability risk into a single index, using a spatial overlay, before
-    normalising and calculating a composite risk score"""
+    normalising and calculating a composite risk score
+    """
     risk_scores = {  # Map risk scores to normalised values (0-100)
         "Probable": 100,
         "Possible": 66,
@@ -892,7 +889,8 @@ def _ground_stability_index(cfg: Config) -> None:
 
 def _coastal_erosion_index(cfg: Config) -> None:
     """Combines erosion and ground instability risk from NCERM into a single index using a spatial overlay, before
-    normalising and calculating a composite risk score"""
+    normalising and calculating a composite risk score
+    """
     tfn_ncerm_giz = gpd.read_file(
         cfg.paths.model_input
         / "Hazards"
