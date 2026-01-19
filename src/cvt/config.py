@@ -1,6 +1,6 @@
 """Module for setting up the model configuration."""
 
-from pathlib import Path
+import pathlib
 
 import caf.toolkit as ctk
 
@@ -12,17 +12,17 @@ class ZipFileEntry(ctk.BaseConfig):
 
     Attributes
     ----------
-    zip_path : Path
+    zip_path : pathlib.Path
         Path to the zip file.
     internal_path : str | None
         Path within the zip file.
-    output_path : Path | None
+    output_path : pathlib.Path | None
         Output path for the extracted file.
     """
 
-    zip_path: Path
+    zip_path: pathlib.Path
     internal_path: str | None = None
-    output_path: Path | None = None
+    output_path: pathlib.Path | None = None
 
 
 # -------------------------
@@ -35,29 +35,29 @@ class PathConfig(ctk.BaseConfig):
 
     Attributes
     ----------
-    root : Path
+    root : pathlib.Path
         Root directory for the project.
-    raw_input : Path
+    raw_input : pathlib.Path
         Directory for raw input data.
-    model_input : Path
+    model_input : pathlib.Path
         Directory for model input data.
-    model_interim_output : Path
+    model_interim_output : pathlib.Path
         Directory for interim model output.
-    model_output : Path
+    model_output : pathlib.Path
         Directory for final model output.
-    log_path : Path
+    log_path : pathlib.Path
         Directory for log files.
-    boundary_path : Path
+    boundary_path : pathlib.Path
         Directory for boundary files.
     """
 
-    root: Path
-    raw_input: Path
-    model_input: Path
-    model_interim_output: Path
-    model_output: Path
-    log_path: Path
-    boundary_path: Path
+    root: pathlib.Path
+    raw_input: pathlib.Path
+    model_input: pathlib.Path
+    model_interim_output: pathlib.Path
+    model_output: pathlib.Path
+    log_path: pathlib.Path
+    boundary_path: pathlib.Path
 
 
 class Road(ctk.BaseConfig):
@@ -65,17 +65,17 @@ class Road(ctk.BaseConfig):
 
     Attributes
     ----------
-    os_road : Path
+    os_road : pathlib.Path
         Path to the OS road data.
-    noham_2023 : Path
+    noham_2023 : pathlib.Path
         Path to the NoHAM 2023 road data.
-    noham_2048 : Path
+    noham_2048 : pathlib.Path
         Path to the NoHAM 2048 road data.
     """
 
-    os_road: Path
-    noham_2023: Path
-    noham_2048: Path
+    os_road: pathlib.Path
+    noham_2023: pathlib.Path
+    noham_2048: pathlib.Path
 
 
 class Rail(ctk.BaseConfig):
@@ -83,11 +83,11 @@ class Rail(ctk.BaseConfig):
 
     Attributes
     ----------
-    tfn_rail_links : Path
+    tfn_rail_links : pathlib.Path
         Path to the TfN rail links data.
     """
 
-    tfn_rail_links: Path
+    tfn_rail_links: pathlib.Path
 
 
 class BusStops(ctk.BaseConfig):
@@ -95,17 +95,17 @@ class BusStops(ctk.BaseConfig):
 
     Attributes
     ----------
-    ne : Path
+    ne : pathlib.Path
         Path to the North East bus stops data.
-    nw : Path
+    nw : pathlib.Path
         Path to the North West bus stops data.
-    ys : Path
+    ys : pathlib.Path
         Path to the Yorkshire bus stops data.
     """
 
-    ne: Path
-    nw: Path
-    ys: Path
+    ne: pathlib.Path
+    nw: pathlib.Path
+    ys: pathlib.Path
 
 
 class Other(ctk.BaseConfig):
@@ -115,21 +115,21 @@ class Other(ctk.BaseConfig):
     ----------
     bus_stops : BusStops
         Configuration for bus stops data.
-    ncn_sustrans : Path
+    ncn_sustrans : pathlib.Path
         Path to the NCN Sustrans data.
-    os_mmrn : Path
+    os_mmrn : pathlib.Path
         Path to the OS MMRN data.
     poi_uk : ZipFileEntry
         Configuration for the POI UK zip file entry.
-    zapmap : Path
+    zapmap : pathlib.Path
         Path to the ZapMap data.
     """
 
     bus_stops: BusStops
-    ncn_sustrans: Path
-    os_mmrn: Path
+    ncn_sustrans: pathlib.Path
+    os_mmrn: pathlib.Path
     poi_uk: ZipFileEntry
-    zapmap: Path
+    zapmap: pathlib.Path
 
 
 class InfrastructureConfig(ctk.BaseConfig):
@@ -155,7 +155,7 @@ class CoastalErosion(ctk.BaseConfig):
 
     Attributes
     ----------
-    zip_path : Path
+    zip_path : pathlib.Path
         Path to the zip file.
     giz : str
         Internal path to the GIZ file.
@@ -163,7 +163,7 @@ class CoastalErosion(ctk.BaseConfig):
         Dictionary of SMP files.
     """
 
-    zip_path: Path
+    zip_path: pathlib.Path
     giz: str
     smp: dict
 
@@ -173,9 +173,9 @@ class ExtremeWeather(ctk.BaseConfig):
 
     Attributes
     ----------
-    wind_spd_current : Path
+    wind_spd_current : pathlib.Path
         Path to the current wind speed data.
-    wind_spd_forecast : Path
+    wind_spd_forecast : pathlib.Path
         Path to the forecast wind speed data.
     rain_days : ZipFileEntry
         Configuration for rain days zip file entry.
@@ -201,8 +201,8 @@ class ExtremeWeather(ctk.BaseConfig):
         Configuration for precipitation winter zip file entry.
     """
 
-    wind_spd_current: Path
-    wind_spd_forecast: Path
+    wind_spd_current: pathlib.Path
+    wind_spd_forecast: pathlib.Path
     rain_days: ZipFileEntry
     extreme_summer_days: ZipFileEntry
     frost_days: ZipFileEntry
@@ -221,11 +221,11 @@ class Flooding(ctk.BaseConfig):
 
     Attributes
     ----------
-    flood_path : Path
+    flood_path : pathlib.Path
         Path to the flood data.
     """
 
-    flood_path: Path
+    flood_path: pathlib.Path
 
 
 class GeoSure(ctk.BaseConfig):
@@ -233,7 +233,7 @@ class GeoSure(ctk.BaseConfig):
 
     Attributes
     ----------
-    zip_path : Path
+    zip_path : pathlib.Path
         Path to the GeoSure zip file.
     collapsible_deposits : str
         Internal path to the collapsible deposits file.
@@ -249,7 +249,7 @@ class GeoSure(ctk.BaseConfig):
         Internal path to the soluble rocks file.
     """
 
-    zip_path: Path
+    zip_path: pathlib.Path
     collapsible_deposits: str
     compressible_ground: str
     landslides: str
@@ -299,13 +299,13 @@ class ImpactConfig(ctk.BaseConfig):
 
     Attributes
     ----------
-    freight_demand : Path
+    freight_demand : pathlib.Path
         Path to the freight demand data.
     noham_demand : ZipFileEntry
         Configuration for NoHAM demand zip file entry.
     """
 
-    freight_demand: Path
+    freight_demand: pathlib.Path
     noham_demand: ZipFileEntry
 
 

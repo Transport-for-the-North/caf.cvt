@@ -1,7 +1,7 @@
 """Main script."""
 
 import logging
-from pathlib import Path
+import pathlib
 
 import caf.toolkit as ctk
 from config import Config
@@ -14,7 +14,7 @@ LOG = logging.getLogger(__name__)
 
 def _main() -> None:
     """Run Climate Vulnerability Tool."""
-    current_dir = Path(__file__).parent
+    current_dir = pathlib.Path(__file__).parent
     config_path = current_dir.parents[1] / "config.yml"
     cfg = Config.load_yaml(config_path)
     details = ctk.log_helpers.ToolDetails(__name__, "1.0.0", full_version=None)

@@ -11,6 +11,9 @@
 
 
 # # # TESTS # # #
-# class TestFunctionName:
-#    def test_something(self) -> None:
-#        assert True
+class TestFunctionName:
+    """Example Class Docstring."""
+
+    def test_something(self) -> None:
+        """Example Test Docstring."""
+        assert True

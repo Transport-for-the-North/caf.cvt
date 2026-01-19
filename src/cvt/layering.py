@@ -3,10 +3,10 @@
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from config import Config
-from data_cleaning import write_to_file
 from functional_rules import min_max_scaling_pair
 from sklearn.preprocessing import MinMaxScaler
+
+from cvt import config, data_cleaning, functional_rules
 
 # GENERAL FUNCTIONS
 
@@ -107,7 +107,12 @@ def _prepare_model_output(
 
 
 def _split_csv_shapefile(
-    cfg: Config, gdf: gpd.GeoDataFrame, id_col: str, inf_type: str, folder: str, filename: str
+    cfg: config.Config,
+    gdf: gpd.GeoDataFrame,
+    id_col: str,
+    inf_type: str,
+    folder: str,
+    filename: str,
 ) -> None:
     """Split GeoDataFrame into a CSV and Shapefile, then write to file.
 
@@ -119,14 +124,18 @@ def _split_csv_shapefile(
     attribute_df = gdf.drop(columns=["geometry"])
 
     # Save to file
-    write_to_file(spatial_gdf, cfg.paths.model_output / inf_type / folder / f"{filename}.shp")
-    write_to_file(attribute_df, cfg.paths.model_output / inf_type / folder / f"{filename}.csv")
+    data_cleaning.write_to_file(
+        spatial_gdf, cfg.paths.model_output / inf_type / folder / f"{filename}.shp"
+    )
+    data_cleaning.write_to_file(
+        attribute_df, cfg.paths.model_output / inf_type / folder / f"{filename}.csv"
+    )
 
 
 # LAYERING
 
 
-def layering(cfg: Config) -> None:
+def layering(cfg: config.Config) -> None:
     """
     Layer infrastructure with hazard risk to assign risk to each piece of infrastructure.
 
@@ -179,7 +188,7 @@ def layering(cfg: Config) -> None:
 ## HAZARD LAYERS
 
 
-def _read_hazard_layers(cfg: Config) -> dict[str, gpd.GeoDataFrame]:
+def _read_hazard_layers(cfg: config.Config) -> dict[str, gpd.GeoDataFrame]:
     """Read and clean hazard layers, and return them in a dictionary."""
     return {
         "Extreme Weather": gpd.read_file(
@@ -207,7 +216,7 @@ def _read_hazard_layers(cfg: Config) -> dict[str, gpd.GeoDataFrame]:
 
 
 def _infrastructure_layering(
-    cfg: Config,
+    cfg: config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
     risk_cols: list[str],
     impact_weights: dict[str, float],
@@ -222,7 +231,7 @@ def _infrastructure_layering(
 
 
 def _get_road_risk(
-    cfg: Config,
+    cfg: config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
     risk_cols: list[str],
     impact_weights: dict[str, float],
@@ -236,7 +245,7 @@ def _get_road_risk(
 
 
 def _os_open_road_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Intersect OS Road infrastructure with hazards, clean output, and write to file."""
     tfn_os_road = gpd.read_file(
@@ -260,7 +269,7 @@ def _os_open_road_risk(
 
 
 def _noham_road_risk(
-    cfg: Config,
+    cfg: config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
     risk_cols: list[str],
     impact_weights: dict[str, float],
@@ -458,7 +467,7 @@ def _calculate_noham_impact(
 
 
 def _get_rail_risk(
-    cfg: Config,
+    cfg: config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
     risk_cols: list[str],
     impact_weights: dict[str, float],
@@ -472,7 +481,7 @@ def _get_rail_risk(
 
 
 def _passenger_rail_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Intersect passenger rail network with hazard to assign risk, clean and write to file."""
     tfn_rail_network = gpd.read_file(
@@ -519,7 +528,7 @@ def _passenger_rail_risk(
 
 
 def _freight_rail_risk(
-    cfg: Config,
+    cfg: config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
     risk_cols: list[str],
     impact_weights: dict[str, float],
@@ -581,7 +590,7 @@ def _freight_impact_index(
     tfn_freight_network_risk: gpd.GeoDataFrame, impact_weights: dict[str, float]
 ) -> gpd.GeoDataFrame:
     """Calculate impact index using freight demand data and hazard risk."""
-    tfn_freight_network_risk = min_max_scaling_pair(
+    tfn_freight_network_risk = functional_rules.min_max_scaling_pair(
         tfn_freight_network_risk, [("2022_23_total", "2050_51 sc2_total")]
     )
 
@@ -593,7 +602,7 @@ def _freight_impact_index(
         tfn_freight_network_risk, impact_weights
     )
 
-    tfn_freight_network_risk = min_max_scaling_pair(
+    tfn_freight_network_risk = functional_rules.min_max_scaling_pair(
         tfn_freight_network_risk, [("impact_c", "impact_f")]
     )
 
@@ -620,7 +629,7 @@ def _calculate_freight_impact(
 
 
 def _get_other_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Layer other infrastructure with hazards to assign risk."""
     _train_stations_risk(cfg, hazard_layers, risk_cols)
@@ -648,7 +657,7 @@ def _buffer_geometry(gdf: gpd.GeoDataFrame, buffer_size_m: int) -> gpd.GeoDataFr
 
 
 def _train_stations_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get train station risk and write to file.
 
@@ -688,7 +697,7 @@ def _train_stations_risk(
 
 
 def _ev_charging_sites_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get EV charging site risk and write to file.
 
@@ -723,7 +732,7 @@ def _ev_charging_sites_risk(
 
 
 def _airports_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get airport risk and write to file.
 
@@ -756,7 +765,7 @@ def _airports_risk(
 
 
 def _bus_coach_stations_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get bus and coach station risk and write to file.
 
@@ -799,7 +808,7 @@ def _bus_coach_stations_risk(
 
 
 def _bus_stops_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Intersect bus stops with hazard risk, clean output, and write to file."""
     tfn_bus_stops = gpd.read_file(
@@ -829,7 +838,7 @@ def _bus_stops_risk(
 
 
 def _tram_stations_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get tram station risk and write to file.
 
@@ -864,7 +873,7 @@ def _tram_stations_risk(
 
 
 def _rapid_transport_stations_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get rapid transport station risk and write to file.
 
@@ -905,7 +914,7 @@ def _rapid_transport_stations_risk(
 
 
 def _ferry_terminals_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get ferry terminal risk and write to file.
 
@@ -947,7 +956,7 @@ def _ferry_terminals_risk(
 
 
 def _petrol_stations_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get petrol station risk and write to file.
 
@@ -989,7 +998,7 @@ def _petrol_stations_risk(
 
 
 def _ncn_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get NCN risk and write to file.
 
@@ -1039,7 +1048,7 @@ def _ncn_risk(
 
 
 def _tram_network_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get tram network risk and write to file.
 
@@ -1084,7 +1093,7 @@ def _tram_network_risk(
 
 
 def _rapid_transport_network_risk(
-    cfg: Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    cfg: config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
 ) -> None:
     """Get rapid transport network risk and write to file.
 

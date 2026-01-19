@@ -14,7 +14,7 @@ import pathlib
 import re
 import sys
 
-dir_path = pathlib.Path(__file__).parents[2]
+dir_path = pathlib.pathlib.pathlib.pathlib.Path(__file__).parents[2]
 source = dir_path / "src"
 sys.path.insert(0, str(source.absolute()))
 
@@ -203,7 +203,7 @@ def linkcode_resolve(domain: str, info: dict) -> str | None:
     filepath = _get_object_filepath(info["module"], info["fullname"])
     # Check if path is in the directory
     try:
-        filepath = str(pathlib.Path(filepath).relative_to(dir_path))
+        filepath = str(pathlib.pathlib.Path(filepath).relative_to(dir_path))
     except ValueError:
         return None
 
