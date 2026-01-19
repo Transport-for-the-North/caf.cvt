@@ -14,7 +14,7 @@ import pathlib
 import re
 import sys
 
-dir_path = pathlib.pathlib.pathlib.pathlib.Path(__file__).parents[2]
+dir_path = pathlib.Path(__file__).parents[2]
 source = dir_path / "src"
 sys.path.insert(0, str(source.absolute()))
 
@@ -26,7 +26,7 @@ copyright = "2024, Transport for the North"
 author = "Transport for the North"
 
 # Third Party
-import cvt
+import src.cvt as cvt
 
 version = str(cvt.__version__)
 release = version
@@ -54,7 +54,7 @@ templates_path = ["_templates", "_templates/autosummary"]
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns: list[str] = []
 
 # -- Options for API summary -------------------------------------------------
 napoleon_google_docstring = False
@@ -203,7 +203,7 @@ def linkcode_resolve(domain: str, info: dict) -> str | None:
     filepath = _get_object_filepath(info["module"], info["fullname"])
     # Check if path is in the directory
     try:
-        filepath = str(pathlib.pathlib.Path(filepath).relative_to(dir_path))
+        filepath = str(pathlib.Path(filepath).relative_to(dir_path))
     except ValueError:
         return None
 
