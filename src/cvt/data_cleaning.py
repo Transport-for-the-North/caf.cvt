@@ -199,7 +199,7 @@ def _nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.Ge
 # DATA CLEANING
 
 
-def data_cleaning(cfg: config.Config.Config) -> None:
+def data_cleaning(cfg: config.Config) -> None:
     """
     Clean all input data for CVT.
 
@@ -220,7 +220,7 @@ def data_cleaning(cfg: config.Config.Config) -> None:
 ## INFRASTRUCTURE
 
 
-def _clean_infrastructure(cfg: config.Config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_infrastructure(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all infrastructure datasets ready for analysis."""
     tfn_rail_links = _get_rail_links(boundary, cfg.infrastructure.rail.tfn_rail_links)
 
@@ -232,13 +232,13 @@ def _clean_infrastructure(cfg: config.Config.Config, boundary: gpd.GeoDataFrame)
 ### ROAD
 
 
-def _clean_roads(cfg: config.Config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_roads(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all roads datasets ready for analysis."""
     _clean_os_roads(cfg, boundary)
     _clean_noham_roads(cfg, boundary)
 
 
-def _clean_os_roads(cfg: config.Config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_os_roads(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean OS Open Roads dataset, then write to file."""
     os_road = gpd.read_file(cfg.infrastructure.road.os_road)
     os_road = os_road.drop_duplicates(subset=["identifier", "geometry"])
@@ -256,7 +256,7 @@ def _clean_os_roads(cfg: config.Config.Config, boundary: gpd.GeoDataFrame) -> No
     )
 
 
-def _clean_noham_roads(cfg: config.Config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_noham_roads(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean 2023 and 2048 NoHAM network datasets, then write to file."""
     noham = {
         "2023": gpd.read_file(cfg.infrastructure.road.noham_2023),
