@@ -3,7 +3,6 @@
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from functional_rules import min_max_scaling_pair
 from sklearn.preprocessing import MinMaxScaler
 
 from cvt import config, data_cleaning, functional_rules
@@ -112,7 +111,7 @@ def _split_csv_shapefile(
     id_col: str,
     inf_type: str,
     folder: str,
-    filename: str,
+    filename: str
 ) -> None:
     """Split GeoDataFrame into a CSV and Shapefile, then write to file.
 
@@ -125,11 +124,9 @@ def _split_csv_shapefile(
 
     # Save to file
     data_cleaning.write_to_file(
-        spatial_gdf, cfg.paths.model_output / inf_type / folder / f"{filename}.shp"
-    )
+        spatial_gdf, cfg.paths.model_output / inf_type / folder / f"{filename}.shp")
     data_cleaning.write_to_file(
-        attribute_df, cfg.paths.model_output / inf_type / folder / f"{filename}.csv"
-    )
+        attribute_df, cfg.paths.model_output / inf_type / folder / f"{filename}.csv")
 
 
 # LAYERING
