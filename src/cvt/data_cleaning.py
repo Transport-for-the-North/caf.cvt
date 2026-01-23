@@ -247,8 +247,11 @@ def _clean_os_roads(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
     os_road[["road_number", "name", "function"]] = os_road[
         ["road_number", "name", "function"]
     ].replace(0, "N/A")
+    len_before_filter = len(os_road)
     os_road = os_road[~os_road.geometry.is_empty]
     os_road = os_road[os_road.geometry.notna()]
+    filter_removed = len(os_road) - len_before_filter
+    LOG.info("OS roads filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, 100*(filter_removed/len_before_filter))
     tfn_os_road = clip_to_boundary(os_road, boundary)
     write_to_file(
         tfn_os_road,
