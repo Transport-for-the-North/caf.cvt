@@ -1,5 +1,6 @@
 """Main script."""
 
+import argparse
 import logging
 import pathlib
 
@@ -14,25 +15,31 @@ LOG = logging.getLogger(__name__)
 
 def _main() -> None:
     """Run Climate Vulnerability Tool."""
-    current_dir = pathlib.Path(__file__).parent
-    config_path = current_dir.parents[1] / "config.yml"
-    cfg = Config.load_yaml(config_path)
+    parser = argparse.ArgumentParser(
+        __package__, description="CLI for the Climate Vulnerability Tool"
+    )
+    parser.add_argument("config", help="Config file to use", type=pathlib.Path)
+
+    args = parser.parse_args()
+    config = Config.load_yaml(args.config)
     details = ctk.log_helpers.ToolDetails(__name__, "1.0.0", full_version=None)
 
-    with ctk.LogHelper(__name__, details, log_file=cfg.paths.log_path):
-        # Run data cleaning
-        if cfg.switches.run_data_cleaning:
-            data_cleaning(cfg)
+    with ctk.LogHelper(__name__, details, log_file=config.paths.log_path):
+        if config.switches.run_data_cleaning:
+            LOG.info("Starting data cleaning step...")
+            data_cleaning(config)
+            LOG.info("Finished data cleaning step.")
 
-        # Run functional rules
-        if cfg.switches.run_functional_rules:
-            apply_functional_rules(cfg)
+        if config.switches.run_functional_rules:
+            LOG.info("Starting functional rules step...")
+            apply_functional_rules(config)
+            LOG.info("Finished data cleaning step.")
 
-        # Run layering
-        if cfg.switches.run_layering:
-            layering(cfg)
+        if config.switches.run_layering:
+            LOG.info("Starting layering step...")
+            layering(config)
+            LOG.info("Finished layering step.")
 
 
-# Run model
 if __name__ == "__main__":
     _main()
