@@ -615,12 +615,15 @@ def _clean_bus_coach_stations(
 
 def _clean_tram_network(config: model_config.Config, tfn_rail_links: gpd.GeoDataFrame) -> None:
     """Filter OS rail links for tram network, then write to file."""
+    len_before_filter = len(tfn_rail_links)
     tfn_tram_links = tfn_rail_links[
         tfn_rail_links["rail_use"].isin(["Freight And Passenger", "Passenger"])
     ]
     tfn_tram_links = tfn_tram_links[
         tfn_tram_links["desc"].isin(["Tram", "Main Line And Tram"])
     ]
+    filter_removed = len(tfn_tram_links)
+    LOG.info("Tram network links filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_tram_links,
         config.paths.model_input
@@ -635,6 +638,7 @@ def _clean_rapid_transport_network(
     config: model_config.Config, tfn_rail_links: gpd.GeoDataFrame
 ) -> None:
     """Filter OS rail links for rapid transport network, then write to file."""
+    len_before_filter = len(tfn_rail_links)
     tfn_rapid_transport = tfn_rail_links[
         tfn_rail_links["rail_use"].isin(["Freight And Passenger", "Passenger"])
     ]
@@ -643,6 +647,8 @@ def _clean_rapid_transport_network(
             ["Rapid Transport System", "Main Line And Rapid Transport System"]
         )
     ]
+    filter_removed = len_before_filter - len(tfn_rapid_transport)
+    LOG.info("Rapid transport links filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_rapid_transport,
         config.paths.model_input
@@ -663,10 +669,13 @@ def _clean_charging_sites(config: model_config.Config, boundary: gpd.GeoDataFram
     )
     chg_sites_gdf = chg_sites_gdf[["identifier", "name", "speed", "value", "geometry"]]
     chg_sites_gdf = chg_sites_gdf.rename(columns={"identifier": "id", "value": "devices"})
+    len_before_filter = len(chg_sites_gdf)
     chg_sites_gdf = chg_sites_gdf.drop_duplicates(subset=["geometry"])
     chg_sites_gdf = chg_sites_gdf[~chg_sites_gdf.geometry.is_empty]
     chg_sites_gdf = chg_sites_gdf[chg_sites_gdf.geometry.notna()]
     tfn_chg_sites = clip_to_boundary(chg_sites_gdf, boundary)
+    filter_removed = len_before_filter - len(tfn_chg_sites)
+    LOG.info("Charging sites filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_chg_sites,
         config.paths.model_input
@@ -681,6 +690,7 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean National Cycle Network data, then write to file."""
     ncn = gpd.read_file(config.infrastructure.other.ncn_sustrans)
     ncn = ncn.drop(columns=["RouteCat", "OpenStatus", "GlobalID"])
+    len_before_filter = len(ncn)
     ncn = ncn.drop_duplicates(subset=["SegmentID", "geometry"])
     ncn_cols_replace = [
         "Desc_",
@@ -695,6 +705,8 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     ]
     ncn[ncn_cols_replace] = ncn[ncn_cols_replace].replace(0, "N/A")
     tfn_ncn = clip_to_boundary(ncn, boundary)
+    filter_removed = len_before_filter - len(tfn_ncn)
+    LOG.info("NCN filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_ncn,
         config.paths.model_input / "Infrastructure" / "Other" / "TfN NCN" / "tfn_ncn.gpkg",
@@ -762,7 +774,10 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         columns={"tasmax_s_4": "tasmax_s_c", "tasmax__22": "tasmax_s_f"}
     )
     temp_max["tasmax_s_f"] = temp_max["tasmax_s_c"] + temp_max["tasmax_s_f"]
+    len_before_filter = len(temp_max)
     tfn_temp_max = temp_max[temp_max["grid_id"].isin(grid["grid_id"])]
+    filter_removed = len_before_filter - len(tfn_temp_max)
+    LOG.info("Summer max temperature change projections filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_temp_max,
         config.paths.model_input
@@ -785,7 +800,10 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         columns={"tasmin_w_4": "tasmin_w_c", "tasmin__22": "tasmin_w_f"}
     )
     temp_min["tasmin_w_f"] = temp_min["tasmin_w_c"] + temp_min["tasmin_w_f"]
+    len_before_filter = len(temp_min)
     tfn_temp_min = temp_min[temp_min["grid_id"].isin(grid["grid_id"])]
+    filter_removed = len_before_filter - len(tfn_temp_min)
+    LOG.info("Winter minimum temperature change projections filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_temp_min,
         config.paths.model_input
@@ -809,7 +827,10 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     )
     precip_sum["pr_s_f"] = precip_sum["pr_s_c"] * (1 + (precip_sum["pr_s_pct_f"] / 100))
     precip_sum = precip_sum.drop(columns=["pr_s_pct_f"])
+    len_before_filter = len(precip_sum)
     tfn_precip_sum = precip_sum[precip_sum["grid_id"].isin(grid["grid_id"])]
+    filter_removed = len_before_filter - len(tfn_precip_sum)
+    LOG.info("Summer precipitation change projections filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_precip_sum,
         config.paths.model_input
@@ -836,7 +857,10 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     )
     precip_win["pr_w_f"] = precip_win["pr_w_c"] * (1 + (precip_win["pr_w_pct_f"] / 100))
     precip_win = precip_win.drop(columns=["pr_w_pct_f"])
+    len_before_filter = len(precip_win)
     tfn_precip_win = precip_win[precip_win["grid_id"].isin(grid["grid_id"])]
+    filter_removed = len_before_filter - len(tfn_precip_win)
+    LOG.info("Winter precipitation change projections filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_precip_win,
         config.paths.model_input
@@ -853,10 +877,13 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         f"zip://{config.hazards.extreme_weather.rain_days.zip_path}!"
         f"{config.hazards.extreme_weather.rain_days.file_path}"
     )
+    len_before_filter = len(rain_days)
     tfn_rain_days = clip_to_boundary(rain_days, boundary)
     tfn_rain_days = explode_to_polygons(tfn_rain_days)
     tfn_rain_days = tfn_rain_days.rename(columns={"Rain10mmDa": "rain_d_c"})
     tfn_rain_days = tfn_rain_days.drop(columns=["part"])
+    filter_removed = len_before_filter - len(tfn_rain_days)
+    LOG.info("10mm rain days 1991-2020 filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_rain_days,
         config.paths.model_input
@@ -877,9 +904,12 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
     drought_index = drought_index.rename(
         columns={"DSI12_ba_4": "dsi_c", "DSI12_40_m": "dsi_f"}
     )
+    len_before_filter = len(drought_index)
     tfn_drought = clip_to_boundary(drought_index, boundary)
     tfn_drought = explode_to_polygons(tfn_drought)
     tfn_drought = tfn_drought.drop(columns=["part"])
+    filter_removed = len_before_filter - len(tfn_drought)
+    LOG.info("Drought severity index filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_drought,
         config.paths.model_input
@@ -899,7 +929,10 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
     hot_days["grid_id"] = range(1, len(hot_days) + 1)
     hot_days = hot_days[["grid_id", "HSD_base_4", "HSD_40_med"]]
     hot_days = hot_days.rename(columns={"HSD_base_4": "hsd_c", "HSD_40_med": "hsd_f"})
+    len_before_filter = len(hot_days)
     tfn_hot_days = hot_days[hot_days["grid_id"].isin(grid["grid_id"])]
+    filter_removed = len_before_filter - len(tfn_hot_days)
+    LOG.info("Hot summer days projections filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_hot_days,
         config.paths.model_input
@@ -919,7 +952,10 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
     extr_days["grid_id"] = range(1, len(extr_days) + 1)
     extr_days = extr_days[["grid_id", "ESD_base_4", "ESD_40_med"]]
     extr_days = extr_days.rename(columns={"ESD_base_4": "esd_c", "ESD_40_med": "esd_f"})
+    len_before_filter = len(extr_days)
     tfn_extr_days = extr_days[extr_days["grid_id"].isin(grid["grid_id"])]
+    filter_removed = len_before_filter - len(tfn_extr_days)
+    LOG.info("Extreme summer days projections - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_extr_days,
         config.paths.model_input
@@ -941,7 +977,10 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     frost_days = frost_days.rename(
         columns={"FrostDay_3": "frost_d_c", "FrostDa_18": "frost_d_f"}
     )
+    len_before_filter = len(frost_days)
     tfn_frost_days = frost_days[frost_days["grid_id"].isin(grid["grid_id"])]
+    filter_removed = len_before_filter - len(tfn_frost_days)
+    LOG.info("Frost days projections filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_frost_days,
         config.paths.model_input
@@ -961,7 +1000,10 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     ice_days["grid_id"] = range(1, len(ice_days) + 1)
     ice_days = ice_days[["grid_id", "IcingDay_3", "IcingDa_18"]]
     ice_days = ice_days.rename(columns={"IcingDay_3": "ice_d_c", "IcingDa_18": "ice_d_f"})
+    len_before_filter = len(ice_days)
     tfn_ice_days = ice_days[ice_days["grid_id"].isin(grid["grid_id"])]
+    filter_removed = len_before_filter - len(tfn_ice_days)
+    LOG.info("Icing days projections filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_ice_days,
         config.paths.model_input
@@ -974,12 +1016,14 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
 
 def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read wind speed projections, calculate metrics, clean, then write to file."""
-    windspd_c_combined = _read_wind_speed_reduce(
+    windspd_c_combined, len_before_filter_current = _read_wind_speed_reduce(
         config.hazards.extreme_weather.wind_spd_current, "c"
     )
-    windspd_f_combined = _read_wind_speed_reduce(
+    windspd_f_combined, len_before_filter_future = _read_wind_speed_reduce(
         config.hazards.extreme_weather.wind_spd_forecast, "f"
     )
+    
+    len_before_filter = len_before_filter_current + len_before_filter_future
 
     windspd_combined = _windspd_merge_and_fill(
         windspd_c_combined, windspd_f_combined, "avg_excd_f"
@@ -1002,6 +1046,8 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     tfn_windspd = clip_to_boundary(windspd_combined, boundary)
     tfn_windspd = explode_to_polygons(tfn_windspd)
     tfn_windspd = tfn_windspd.drop(columns=["part"])
+    filter_removed = len_before_filter - len(tfn_windspd)
+    LOG.info("Wind speed projections filtered - ")
     write_to_file(
         tfn_windspd,
         config.paths.model_input
@@ -1015,6 +1061,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
 def _read_wind_speed_reduce(xr_path: pathlib.Path, tp: str) -> pd.DataFrame:
     """Read wind speed projections, calculate metrics and return a merged dataframe."""
     windspd = xr.open_dataset(xr_path).to_dataframe()
+    len_before_filter = len(windspd)
     exc = _calculate_exceedance(20, windspd, "wsgmax10m", tp)
     pct = _calculate_percentile(windspd, 0.99, "wsgmax10m")
     pct.columns = [
@@ -1024,7 +1071,7 @@ def _read_wind_speed_reduce(xr_path: pathlib.Path, tp: str) -> pd.DataFrame:
         "longitude",
         f"p99_{tp}",
     ]
-    return _windspd_merge_and_fill(pct, exc, f"avg_excd_{tp}")
+    return _windspd_merge_and_fill(pct, exc, f"avg_excd_{tp}"), len_before_filter
 
 
 def _windspd_merge_and_fill(
