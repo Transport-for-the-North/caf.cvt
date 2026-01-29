@@ -5,7 +5,7 @@ import logging
 import pathlib
 
 import caf.toolkit as ctk
-from config import Config
+from cvt.model_config import Config
 from data_cleaning import data_cleaning
 from functional_rules import apply_functional_rules
 from layering import layering

@@ -11,7 +11,7 @@ import pandas as pd
 from shapely.geometry import box
 from sklearn.preprocessing import MinMaxScaler
 
-from cvt import config, data_cleaning
+from cvt import data_cleaning, model_config
 
 LOG = logging.getLogger(__name__)
 
@@ -226,7 +226,7 @@ def _filter_out_small_geometries(
 # FUNCTIONAL RULES
 
 
-def apply_functional_rules(cfg: config.Config) -> None:
+def apply_functional_rules(config: model_config.Config) -> None:
     """
     Apply functional rules to hazard datasets and spatially combine to generate risk indices.
 
@@ -236,15 +236,15 @@ def apply_functional_rules(cfg: config.Config) -> None:
 
     Parameters
     ----------
-    cfg : Config
+    config : Config
         Main config for the model, containing paths and settings.
     """
-    boundary = gpd.read_file(cfg.other_input.boundary_path)
+    boundary = gpd.read_file(config.other_input.boundary_path)
 
-    _extreme_weather_index(cfg)
-    _flooding_index(cfg, boundary)
-    _ground_stability_index(cfg)
-    _coastal_erosion_index(cfg)
+    _extreme_weather_index(config)
+    _flooding_index(config, boundary)
+    _ground_stability_index(config)
+    _coastal_erosion_index(config)
 
 
 ## HAZARDS
@@ -252,16 +252,16 @@ def apply_functional_rules(cfg: config.Config) -> None:
 ### EXTREME WEATHER
 
 
-def _extreme_weather_index(cfg: config.Config) -> None:
+def _extreme_weather_index(config: model_config.Config) -> None:
     """Combine extreme heat, extreme cold, drought and storm indexes into a single index."""
     tfn_common_grid = gpd.read_file(
-        cfg.paths.model_input / "Other" / "TfN Common Grid" / "tfn_common_grid.gpkg"
+        config.paths.model_input / "Other" / "TfN Common Grid" / "tfn_common_grid.gpkg"
     )
 
-    tfn_extreme_heat = _extreme_heat_index(cfg, tfn_common_grid)
-    tfn_extreme_cold = _extreme_cold_index(cfg, tfn_common_grid)
-    tfn_drought = _drought_index(cfg, tfn_common_grid)
-    tfn_storm = _storm_index(cfg, tfn_common_grid)
+    tfn_extreme_heat = _extreme_heat_index(config, tfn_common_grid)
+    tfn_extreme_cold = _extreme_cold_index(config, tfn_common_grid)
+    tfn_drought = _drought_index(config, tfn_common_grid)
+    tfn_storm = _storm_index(config, tfn_common_grid)
 
     tfn_extreme_weather_merge = tfn_extreme_heat[
         ["grid_id", "part", "heat_risk_c", "heat_risk_f"]
@@ -327,7 +327,7 @@ def _extreme_weather_index(cfg: config.Config) -> None:
 
     data_cleaning.write_to_file(
         tfn_extreme_weather_risk,
-        cfg.paths.model_interim_output
+        config.paths.model_interim_output
         / "TfN Extreme Weather Risk"
         / "tfn_extreme_weather_risk.gpkg",
     )
@@ -336,24 +336,24 @@ def _extreme_weather_index(cfg: config.Config) -> None:
 #### EXTREME HEAT
 
 
-def _extreme_heat_index(cfg: config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _extreme_heat_index(config: model_config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Combine several datasets into extreme heat index by merging on their common grid."""
     tfn_temp_max = pd.read_csv(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Summer Max Temperature Change Projections"
         / "tfn_temp_max.csv"
     )
     tfn_hsd = pd.read_csv(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Hot Summer Days Projections"
         / "tfn_hot_days.csv"
     )
     tfn_esd = pd.read_csv(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Extreme Summer Days Projections"
@@ -389,24 +389,24 @@ def _extreme_heat_index(cfg: config.Config, common_grid: gpd.GeoDataFrame) -> gp
 #### EXTREME COLD
 
 
-def _extreme_cold_index(cfg: config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _extreme_cold_index(config: model_config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Combine several datasets into extreme cold index by merging on their common grid."""
     tfn_temp_min = pd.read_csv(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Winter Min Temperature Change Projections"
         / "tfn_temp_min.csv"
     )
     tfn_frost = pd.read_csv(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Frost Days Projections"
         / "tfn_frost_days.csv"
     )
     tfn_icing = pd.read_csv(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Icing Days Projections"
@@ -442,17 +442,17 @@ def _extreme_cold_index(cfg: config.Config, common_grid: gpd.GeoDataFrame) -> gp
 #### DROUGHT
 
 
-def _drought_index(cfg: config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _drought_index(config: model_config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Combine several datasets into single drought index with spatial overlay."""
     tfn_drought = gpd.read_file(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Drought Severity Index"
         / "tfn_drought_index.gpkg"
     )
     tfn_precip_sum = pd.read_csv(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Summer Precipitation Change Projections"
@@ -498,31 +498,31 @@ def _drought_index(cfg: config.Config, common_grid: gpd.GeoDataFrame) -> gpd.Geo
 #### STORMS
 
 
-def _storm_index(cfg: config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _storm_index(config: model_config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Combine several datasets into a single storm index with a spatial overlay."""
     tfn_precip_win = pd.read_csv(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Winter Precipitation Change Projections"
         / "tfn_precip_win.csv"
     )
     tfn_rain_days = gpd.read_file(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN 10mm Rain Days 1991-2020"
         / "tfn_rain_days.gpkg"
     )
     tfn_wind_spd = gpd.read_file(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Wind Speed Projections"
         / "tfn_windspd.gpkg"
     )
     tfn_wdr = gpd.read_file(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Extreme Weather"
         / "TfN Wind Driven Rain Index"
@@ -622,19 +622,19 @@ def _wind_risk_scaled(speed_mps: float) -> float:
 ### FLOODING
 
 
-def _flooding_index(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Combine RoFRS & RoFSW into a single risk score by upscaling them to a common grid."""
     risk_score_map = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
 
-    if cfg.switches.create_flood_grid:
-        flood_grid = _create_flood_grid(cfg, 1000, boundary)
+    if config.switches.create_flood_grid:
+        flood_grid = _create_flood_grid(config, 1000, boundary)
     else:
         flood_grid = gpd.read_file(
-            cfg.paths.model_interim_output / "Other" / "flood_grid.gpkg"
+            config.paths.model_interim_output / "Other" / "flood_grid.gpkg"
         )
 
     tfn_flood_risk_c = _upscale_to_grid(
-        cfg,
+        config,
         risk_score_map,
         flood_grid,
         {
@@ -646,7 +646,7 @@ def _flooding_index(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
     )
 
     tfn_flood_risk_f = _upscale_to_grid(
-        cfg,
+        config,
         risk_score_map,
         flood_grid,
         {
@@ -678,19 +678,19 @@ def _flooding_index(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
 
     data_cleaning.write_to_file(
         tfn_flood_risk,
-        cfg.paths.model_interim_output / "TfN Flood Risk" / "tfn_flood_risk.gpkg",
+        config.paths.model_interim_output / "TfN Flood Risk" / "tfn_flood_risk.gpkg",
     )
 
 
 def _create_flood_grid(
-    cfg: config.Config, size_m: int, boundary: gpd.GeoDataFrame
+    config: model_config.Config, size_m: int, boundary: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
     """Create a grid of a given size in metres, within a given boundary."""
     bounds = boundary.total_bounds
     grid = _create_grid(bounds, size_m)
     flood_grid = data_cleaning.clip_to_boundary(grid, boundary)
     data_cleaning.write_to_file(
-        flood_grid, cfg.paths.model_interim_output / "Other" / "flood_grid.gpkg"
+        flood_grid, config.paths.model_interim_output / "Other" / "flood_grid.gpkg"
     )
     return flood_grid
 
@@ -708,7 +708,7 @@ def _process_flood_layer(
 
 
 def _upscale_to_grid(
-    cfg: config.Config,
+    config: model_config.Config,
     risk_score_map: dict[str, int],
     flood_grid: gpd.GeoDataFrame,
     scenario_map: dict[str, list[tuple[str, str, str]]],
@@ -719,14 +719,14 @@ def _upscale_to_grid(
         for folder, file, risk_col in layers:
             result = _process_flood_layer(
                 result,
-                cfg.paths.model_input / "Hazards" / "Flooding" / folder / file,
+                config.paths.model_input / "Hazards" / "Flooding" / folder / file,
                 risk_col,
                 risk_score_map,
             )
 
         data_cleaning.write_to_file(
             result,
-            cfg.paths.model_interim_output
+            config.paths.model_interim_output
             / "TfN Flood Risk"
             / f"tfn_flood_risk_{scenario[0]}.gpkg",
         )
@@ -776,7 +776,7 @@ def _area_weighted_flood_assignment(
 ### GROUND STABILITY
 
 
-def _ground_stability_index(cfg: config.Config) -> None:
+def _ground_stability_index(config: model_config.Config) -> None:
     """Combine GeoSure & GeoClimate risk into a single index, using a spatial overlay."""
     risk_scores = {  # Map risk scores to normalised values (0-100)
         "Probable": 100,
@@ -786,7 +786,7 @@ def _ground_stability_index(cfg: config.Config) -> None:
     }
 
     tfn_geosure = gpd.read_file(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Ground Stability"
         / "TfN Geosure"
@@ -798,7 +798,7 @@ def _ground_stability_index(cfg: config.Config) -> None:
     ground_stability = {}
     for year, tp in {"2030": "c", "2070": "f"}.items():
         tfn_ss[year] = gpd.read_file(
-            cfg.paths.model_input
+            config.paths.model_input
             / "Hazards"
             / "Ground Stability"
             / "BGS Shrink Swell"
@@ -867,7 +867,7 @@ def _ground_stability_index(cfg: config.Config) -> None:
 
     data_cleaning.write_to_file(
         tfn_ground_stability,
-        cfg.paths.model_interim_output
+        config.paths.model_interim_output
         / "TfN Ground Stability Risk"
         / "tfn_ground_stability_risk.gpkg",
     )
@@ -876,10 +876,10 @@ def _ground_stability_index(cfg: config.Config) -> None:
 ### COASTAL EROSION
 
 
-def _coastal_erosion_index(cfg: config.Config) -> None:
+def _coastal_erosion_index(config: model_config.Config) -> None:
     """Combine erosion and ground stability risk into single index using a spatial overlay."""
     tfn_ncerm_giz = gpd.read_file(
-        cfg.paths.model_input
+        config.paths.model_input
         / "Hazards"
         / "Coastal Erosion"
         / "NCERM"
@@ -892,7 +892,7 @@ def _coastal_erosion_index(cfg: config.Config) -> None:
     tfn_erosion_risk = {}
     for year, tp in {"2055": "c", "2105": "f"}.items():
         tfn_ncerm[year] = gpd.read_file(
-            cfg.paths.model_input
+            config.paths.model_input
             / "Hazards"
             / "Coastal Erosion"
             / "NCERM"
@@ -923,7 +923,7 @@ def _coastal_erosion_index(cfg: config.Config) -> None:
 
     data_cleaning.write_to_file(
         tfn_coastal_erosion_risk,
-        cfg.paths.model_interim_output
+        config.paths.model_interim_output
         / "TfN Coastal Erosion Risk"
         / "tfn_coastal_erosion_risk.gpkg",
     )

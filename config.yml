@@ -32,9 +32,9 @@ infrastructure:
     tfn_rail_links: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/OS Rail Network/TfN_Area_tfn_ntwk_railwaylink.gpkg
   other:
     bus_stops:
-      north_east_data: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ne.csv
-      north_west_data: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_nw.csv
-      yorkshire_data: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ys.csv
+      north_east: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ne.csv
+      north_west: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_nw.csv
+      yorkshire: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ys.csv
     ncn_sustrans: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/NCN Sustrans/National_Cycle_Network_Public.shp
     os_mmrn: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/OS Multi-Modal Routing Network/OSMulti-modalRoutingNetwork.gpkg
     poi_uk:

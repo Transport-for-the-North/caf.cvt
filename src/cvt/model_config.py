@@ -107,31 +107,13 @@ class Rail(ctk.BaseConfig):
     tfn_rail_links: pathlib.Path
 
 
-class BusStops(ctk.BaseConfig):
-    """Configuration for bus stops data.
-
-    Attributes
-    ----------
-    north_east_data : pathlib.Path
-        Path to the North East bus stops data.
-    north_west_data : pathlib.Path
-        Path to the North West bus stops data.
-    yorkshire_data : pathlib.Path
-        Path to the Yorkshire bus stops data.
-    """
-
-    north_east_data: pathlib.Path
-    north_west_data: pathlib.Path
-    yorkshire_data: pathlib.Path
-
-
 class Other(ctk.BaseConfig):
     """Configuration for other infrastructure data.
 
     Attributes
     ----------
-    bus_stops : BusStops
-        Configuration for bus stops data.
+    bus_stops : dict[str, pathlib.Path]
+        Mapping of region name to bus stips data path.
     ncn_sustrans : pathlib.Path
         Path to the NCN Sustrans data.
     os_mmrn : pathlib.Path
@@ -142,7 +124,7 @@ class Other(ctk.BaseConfig):
         Path to the ZapMap data.
     """
 
-    bus_stops: BusStops
+    bus_stops: dict[str, pathlib.Path]
     ncn_sustrans: pathlib.Path
     os_mmrn: pathlib.Path
     poi_uk: ZipFileEntry
