@@ -210,7 +210,7 @@ def data_cleaning(cfg: config.Config) -> None:
     cfg : Config
         Main config for the model, containing paths and settings.
     """
-    boundary = gpd.read_file(cfg.paths.boundary_path)
+    boundary = gpd.read_file(cfg.other_input.boundary_path)
 
     _clean_infrastructure(cfg, boundary)
     _clean_hazards(cfg, boundary)
@@ -411,9 +411,9 @@ def _clean_airports(cfg: config.Config) -> None:
 
 def _clean_bus_stops(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read, combine and clean regional bus stops datasets, then write to file."""
-    bus_stops_ne = pd.read_csv(cfg.infrastructure.other.bus_stops.ne)  # North East
-    bus_stops_nw = pd.read_csv(cfg.infrastructure.other.bus_stops.nw)  # North West
-    bus_stops_ys = pd.read_csv(cfg.infrastructure.other.bus_stops.ys)  # Yorkshire
+    bus_stops_ne = pd.read_csv(cfg.infrastructure.other.bus_stops.north_east_data)  # North East
+    bus_stops_nw = pd.read_csv(cfg.infrastructure.other.bus_stops.north_west_data)  # North West
+    bus_stops_ys = pd.read_csv(cfg.infrastructure.other.bus_stops.yorkshire_data)  # Yorkshire
 
     bus_stops = pd.concat(
         [bus_stops_ne, bus_stops_nw, bus_stops_ys], ignore_index=True
@@ -437,7 +437,7 @@ def _clean_bus_stops(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
 def _clean_petrol_stations(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean POI data, filter for petrol stations, and write to file."""
     poi_uk = gpd.read_file(
-        f"zip://{cfg.infrastructure.other.poi_uk.zip_path}!{cfg.infrastructure.other.poi_uk.internal_path}"
+        f"zip://{cfg.infrastructure.other.poi_uk.zip_path}!{cfg.infrastructure.other.poi_uk.file_path}"
     )
     petrol_stations = poi_uk[poi_uk["main_category"] == "gas_station"]
     petrol_stations = petrol_stations[["id", "geometry"]]
@@ -693,7 +693,7 @@ def _clean_common_grid(cfg: config.Config, boundary: gpd.GeoDataFrame) -> gpd.Ge
     """Create and prepare common grid DataFrame for variables on same 12km BNG."""
     temp_max = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.max_temp_summer.zip_path}!"
-        f"{cfg.hazards.extreme_weather.max_temp_summer.internal_path}"
+        f"{cfg.hazards.extreme_weather.max_temp_summer.file_path}"
     )
     temp_max["grid_id"] = range(1, len(temp_max) + 1)
     common_grid = temp_max[["grid_id", "geometry"]]
@@ -710,7 +710,7 @@ def _clean_temp_max(cfg: config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean max summer temperature change projections, then write to file."""
     temp_max = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.max_temp_summer.zip_path}!"
-        f"{cfg.hazards.extreme_weather.max_temp_summer.internal_path}"
+        f"{cfg.hazards.extreme_weather.max_temp_summer.file_path}"
     )
     temp_max["grid_id"] = range(1, len(temp_max) + 1)
     temp_max = temp_max[["grid_id", "tasmax_s_4", "tasmax__22"]]
@@ -733,7 +733,7 @@ def _clean_temp_min(cfg: config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean min winter temperature change projections, then write to file."""
     temp_min = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.min_temp_winter.zip_path}!"
-        f"{cfg.hazards.extreme_weather.min_temp_winter.internal_path}"
+        f"{cfg.hazards.extreme_weather.min_temp_winter.file_path}"
     )
     temp_min["grid_id"] = range(1, len(temp_min) + 1)
     temp_min = temp_min[["grid_id", "tasmin_w_4", "tasmin__22"]]
@@ -756,7 +756,7 @@ def _clean_summer_precip(cfg: config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean summer precipitation change projections, then write to file."""
     precip_sum = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.precip_summer.zip_path}!"
-        f"{cfg.hazards.extreme_weather.precip_summer.internal_path}"
+        f"{cfg.hazards.extreme_weather.precip_summer.file_path}"
     )
     precip_sum["grid_id"] = range(1, len(precip_sum) + 1)
     precip_sum = precip_sum[["grid_id", "pr_summe_3", "pr_summ_21"]]
@@ -780,7 +780,7 @@ def _clean_winter_precip(cfg: config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean winter precipitation change projections, then write to file."""
     precip_win = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.precip_winter.zip_path}!"
-        f"{cfg.hazards.extreme_weather.precip_winter.internal_path}"
+        f"{cfg.hazards.extreme_weather.precip_winter.file_path}"
     )
     precip_win["grid_id"] = range(1, len(precip_win) + 1)
     precip_win = precip_win[["grid_id", "pr_winte_3", "pr_wint_21"]]
@@ -807,7 +807,7 @@ def _clean_rain_days(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean 10mm rain days observations, then write to file."""
     rain_days = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.rain_days.zip_path}!"
-        f"{cfg.hazards.extreme_weather.rain_days.internal_path}"
+        f"{cfg.hazards.extreme_weather.rain_days.file_path}"
     )
     tfn_rain_days = clip_to_boundary(rain_days, boundary)
     tfn_rain_days = explode_to_polygons(tfn_rain_days)
@@ -827,7 +827,7 @@ def _clean_drought_index(cfg: config.Config, boundary: gpd.GeoDataFrame) -> None
     """Read and clean drought severity index data, then write to file."""
     drought_index = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.drought_index.zip_path}!"
-        f"{cfg.hazards.extreme_weather.drought_index.internal_path}"
+        f"{cfg.hazards.extreme_weather.drought_index.file_path}"
     )
     drought_index = drought_index[["DSI12_ba_4", "DSI12_40_m", "geometry"]]
     drought_index = drought_index.rename(
@@ -850,7 +850,7 @@ def _clean_hot_summer_days(cfg: config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean hot summer days projections, then write to file."""
     hot_days = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.hot_days.zip_path}!"
-        f"{cfg.hazards.extreme_weather.hot_days.internal_path}"
+        f"{cfg.hazards.extreme_weather.hot_days.file_path}"
     )
     hot_days["grid_id"] = range(1, len(hot_days) + 1)
     hot_days = hot_days[["grid_id", "HSD_base_4", "HSD_40_med"]]
@@ -870,7 +870,7 @@ def _clean_extreme_summer_days(cfg: config.Config, grid: gpd.GeoDataFrame) -> No
     """Read and clean extreme summer days projections, then write to file."""
     extr_days = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.extreme_summer_days.zip_path}!"
-        f"{cfg.hazards.extreme_weather.extreme_summer_days.internal_path}"
+        f"{cfg.hazards.extreme_weather.extreme_summer_days.file_path}"
     )
     extr_days["grid_id"] = range(1, len(extr_days) + 1)
     extr_days = extr_days[["grid_id", "ESD_base_4", "ESD_40_med"]]
@@ -890,7 +890,7 @@ def _clean_frost_days(cfg: config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean frost days projections, then write to file."""
     frost_days = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.frost_days.zip_path}!"
-        f"{cfg.hazards.extreme_weather.frost_days.internal_path}"
+        f"{cfg.hazards.extreme_weather.frost_days.file_path}"
     )
     frost_days["grid_id"] = range(1, len(frost_days) + 1)
     frost_days = frost_days[["grid_id", "FrostDay_3", "FrostDa_18"]]
@@ -912,7 +912,7 @@ def _clean_icing_days(cfg: config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean icing days projections, then write to file."""
     ice_days = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.icing_days.zip_path}!"
-        f"{cfg.hazards.extreme_weather.icing_days.internal_path}"
+        f"{cfg.hazards.extreme_weather.icing_days.file_path}"
     )
     ice_days["grid_id"] = range(1, len(ice_days) + 1)
     ice_days = ice_days[["grid_id", "IcingDay_3", "IcingDa_18"]]
@@ -1045,7 +1045,7 @@ def _clean_wind_driven_rain(cfg: config.Config, boundary: gpd.GeoDataFrame) -> N
     """Read and clean wind driven rain index data, then write to file."""
     wdr = gpd.read_file(
         f"zip://{cfg.hazards.extreme_weather.wdr_index.zip_path}!"
-        f"{cfg.hazards.extreme_weather.wdr_index.internal_path}"
+        f"{cfg.hazards.extreme_weather.wdr_index.file_path}"
     )
 
     # Aggregate by wind direction to calculate mean wind speed

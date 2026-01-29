@@ -239,7 +239,7 @@ def apply_functional_rules(cfg: config.Config) -> None:
     cfg : Config
         Main config for the model, containing paths and settings.
     """
-    boundary = gpd.read_file(cfg.paths.boundary_path)
+    boundary = gpd.read_file(cfg.other_input.boundary_path)
 
     _extreme_weather_index(cfg)
     _flooding_index(cfg, boundary)

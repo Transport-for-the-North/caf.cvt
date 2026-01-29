@@ -2,12 +2,16 @@
 
 # Model Section Switches
 switches:
-  run_data_cleaning: false
-  run_functional_rules: false
+  # If running from scratch using only the raw input files these switches should all be true
+  run_data_cleaning: true
+  run_functional_rules: true
   run_layering: true
 
+  # True if the raw flood data from Defra data services needs to be extracted from the zip files (this is time consuming)
   flood_zip_extract: false
+  # True if the raw NoHAM h5 files need to be extracted from zip file
   noham_zip_extract: false
+  # True if the 1km flood grid needs to be created before running the flood data functional rules and layering
   create_flood_grid: false
 
 ####### FILE PATHS #########
@@ -15,12 +19,9 @@ switches:
 paths:
   root: D:/Climate Vulnerability Tool/Data
   raw_input: D:/Climate Vulnerability Tool/Data/raw inputs
-  model_input: D:/Climate Vulnerability Tool/Data/model inputs
-  model_interim_output: D:/Climate Vulnerability Tool/Data/model interim outputs
-  model_output: D:/Climate Vulnerability Tool/Data/model outputs
-  log_path: D:/Climate Vulnerability Tool/Model/Logging/cvt.log
-  boundary_path: D:/Climate Vulnerability Tool/Data/raw inputs/Other/TfN Boundary/Transport_for_the_north_boundary_2020_generalised.shp
 
+other_input:
+  boundary_path: D:/Climate Vulnerability Tool/Data/raw inputs/Other/TfN Boundary/Transport_for_the_north_boundary_2020_generalised.shp
 
 infrastructure:
   road:
@@ -31,14 +32,14 @@ infrastructure:
     tfn_rail_links: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/OS Rail Network/TfN_Area_tfn_ntwk_railwaylink.gpkg
   other:
     bus_stops:
-      ne: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ne.csv
-      nw: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_nw.csv
-      ys: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ys.csv
+      north_east_data: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ne.csv
+      north_west_data: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_nw.csv
+      yorkshire_data: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ys.csv
     ncn_sustrans: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/NCN Sustrans/National_Cycle_Network_Public.shp
     os_mmrn: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/OS Multi-Modal Routing Network/OSMulti-modalRoutingNetwork.gpkg
     poi_uk:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/poi_uk.zip
-      internal_path: poi_uk.gpkg
+      file_path: poi_uk.gpkg
     zapmap: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/ZapMap/ZapMap Site Devices.csv
 
 hazards:
@@ -53,37 +54,37 @@ hazards:
     wind_spd_forecast: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/CEDA_Max_Wind_Speed/wsgmax10m_rcp85_land-cpm_uk_5km_01_day_20701201-20801130.nc
     rain_days:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_10mm_Rain_Days_1991_2020.zip
-      internal_path: Annual_Count_of_10mm_Rain_Days_1991-2020.shp
+      file_path: Annual_Count_of_10mm_Rain_Days_1991-2020.shp
     extreme_summer_days:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Extreme_Summer_Days_Projections_12km_Grid.zip
-      internal_path: annual_count_of_extreme_summer_days_projections_12km.shp
+      file_path: annual_count_of_extreme_summer_days_projections_12km.shp
     frost_days:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Frost_Days_Projections_12km_Grid.zip
-      internal_path: annual_count_of_frost_days_projections_12km.shp
+      file_path: annual_count_of_frost_days_projections_12km.shp
     hot_days:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Hot_Days___Projections__12km_grid.zip
-      internal_path: annual_count_of_hot_summer_days_projections_12km.shp
+      file_path: annual_count_of_hot_summer_days_projections_12km.shp
     icing_days:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Icing_Days___Projections__12km_grid.zip
-      internal_path: annual_count_of_icing_days_projections_12km.shp
+      file_path: annual_count_of_icing_days_projections_12km.shp
     wdr_index:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Index_of_Wind_Driven_Rain_Projections_5km.zip
-      internal_path: Annual_Index_of_Wind_Driven_Rain_-_Projections_(5km).shp
+      file_path: Annual_Index_of_Wind_Driven_Rain_-_Projections_(5km).shp
     drought_index:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Drought_Severity_Index_12_Month_Accumulations.zip
-      internal_path: Drought_Severity_Index_12_Month_Accumulations_-_Projections.shp
+      file_path: Drought_Severity_Index_12_Month_Accumulations_-_Projections.shp
     max_temp_summer:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Summer_Maximum_Temperature_Change___Projections_12km_grid.zip
-      internal_path: summer_maximum_temperature_change_projections_12km.shp
+      file_path: summer_maximum_temperature_change_projections_12km.shp
     precip_summer:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Summer_Precipitation_Change___Projections_12km_grid.zip
-      internal_path: summer_precipitation_change_projections_12km.shp
+      file_path: summer_precipitation_change_projections_12km.shp
     min_temp_winter:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Winter_Minimum_Temperature_Change___Projections_12km_grid.zip
-      internal_path: winter_minimum_temperature_change_projections_12km.shp
+      file_path: winter_minimum_temperature_change_projections_12km.shp
     precip_winter:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Winter_Precipitation_Change___Projections_12km_grid.zip
-      internal_path: winter_precipitation_change_projections_12km.shp
+      file_path: winter_precipitation_change_projections_12km.shp
   flooding:
     flood_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Flooding
   ground_stability:

@@ -8,22 +8,14 @@ import caf.toolkit as ctk
 
 
 class ZipFileEntry(ctk.BaseConfig):
-    """Configuration for a file within a zip archive.
-
-    Attributes
-    ----------
-    zip_path : pathlib.Path
-        Path to the zip file.
-    internal_path : str | None
-        Path within the zip file.
-    output_path : pathlib.Path | None
-        Output path for the extracted file.
-    """
+    """Configuration for a file within a zip archive."""
 
     zip_path: pathlib.Path
-    internal_path: str | None = None
+    """Path to the zip file"""
+    file_path_path: str | None = None
+    """Path within the zip file."""
     output_path: pathlib.Path | None = None
-
+    """Output path for the extracted file"""
 
 # -------------------------
 # CATEGORY CONFIG CLASSES
@@ -39,24 +31,49 @@ class PathConfig(ctk.BaseConfig):
         Root directory for the project.
     raw_input : pathlib.Path
         Directory for raw input data.
-    model_input : pathlib.Path
-        Directory for model input data.
-    model_interim_output : pathlib.Path
-        Directory for interim model output.
-    model_output : pathlib.Path
-        Directory for final model output.
-    log_path : pathlib.Path
-        Directory for log files.
-    boundary_path : pathlib.Path
-        Directory for boundary files.
     """
 
     root: pathlib.Path
     raw_input: pathlib.Path
-    model_input: pathlib.Path
-    model_interim_output: pathlib.Path
-    model_output: pathlib.Path
-    log_path: pathlib.Path
+
+    @property
+    def model_input(self) -> pathlib.Path:
+        """Create model input directory and return path."""
+        model_input = self.root / "model input"
+        model_input.mkdir(parents=True, exist_ok=True)
+        return model_input
+
+    @property
+    def model_interim_output(self) -> pathlib.Path:
+        """Create model interim output directory and return path."""
+        model_interim_output = self.root / "model interim outputs"
+        model_interim_output.mkdir(parents=True, exist_ok=True)
+        return model_interim_output
+
+    @property
+    def model_output(self) -> pathlib.Path:
+        """Create model output directory and return path."""
+        model_output = self.root / "model outputs"
+        model_output.mkdir(parents=True, exist_ok=True)
+        return model_output
+
+    @property
+    def log_path(self) -> pathlib.Path:
+        """Create logging directory and return path."""
+        log_path = self.root / "Logging"
+        log_path.mkdir(parents=True, exist_ok=True)
+        return log_path
+
+
+class OtherInput(ctk.BaseConfig):
+    """Configuration for other raw input data.
+
+    Attributes
+    ----------
+    boundary_path : pathlib.Path
+        Path to the STB boundary which the model is running for.
+    """
+
     boundary_path: pathlib.Path
 
 
@@ -95,17 +112,17 @@ class BusStops(ctk.BaseConfig):
 
     Attributes
     ----------
-    ne : pathlib.Path
+    north_east_data : pathlib.Path
         Path to the North East bus stops data.
-    nw : pathlib.Path
+    north_west_data : pathlib.Path
         Path to the North West bus stops data.
-    ys : pathlib.Path
+    yorkshire_data : pathlib.Path
         Path to the Yorkshire bus stops data.
     """
 
-    ne: pathlib.Path
-    nw: pathlib.Path
-    ys: pathlib.Path
+    north_east_data: pathlib.Path
+    north_west_data: pathlib.Path
+    yorkshire_data: pathlib.Path
 
 
 class Other(ctk.BaseConfig):
