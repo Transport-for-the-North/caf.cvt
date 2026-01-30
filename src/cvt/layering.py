@@ -244,11 +244,17 @@ def _get_road_risk(
 
 
 def _os_open_road_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Intersect OS Road infrastructure with hazards, clean output, and write to file."""
     tfn_os_road = gpd.read_file(
-        config.paths.model_input / "Infrastructure" / "Road" / "TfN OS Road" / "tfn_os_road.gpkg"
+        config.paths.model_input
+        / "Infrastructure"
+        / "Road"
+        / "TfN OS Road"
+        / "tfn_os_road.gpkg"
     )
 
     tfn_os_road_risk = _infrastructure_risk_intersect(tfn_os_road, hazard_layers)
@@ -261,7 +267,9 @@ def _os_open_road_risk(
         risk_cols_order=risk_cols,
     )
 
-    _split_csv_shapefile(config, tfn_os_road_risk, "id", "Road", "OS Roads", "tfn_os_road_risk")
+    _split_csv_shapefile(
+        config, tfn_os_road_risk, "id", "Road", "OS Roads", "tfn_os_road_risk"
+    )
 
 
 #### NoHAM
@@ -480,7 +488,9 @@ def _get_rail_risk(
 
 
 def _passenger_rail_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Intersect passenger rail network with hazard to assign risk, clean and write to file."""
     tfn_rail_network = gpd.read_file(
@@ -628,7 +638,9 @@ def _calculate_freight_impact(
 
 
 def _get_other_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Layer other infrastructure with hazards to assign risk."""
     _train_stations_risk(config, hazard_layers, risk_cols)
@@ -656,7 +668,9 @@ def _buffer_geometry(gdf: gpd.GeoDataFrame, buffer_size_m: int) -> gpd.GeoDataFr
 
 
 def _train_stations_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get train station risk and write to file.
 
@@ -696,7 +710,9 @@ def _train_stations_risk(
 
 
 def _ev_charging_sites_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get EV charging site risk and write to file.
 
@@ -731,7 +747,9 @@ def _ev_charging_sites_risk(
 
 
 def _airports_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get airport risk and write to file.
 
@@ -764,7 +782,9 @@ def _airports_risk(
 
 
 def _bus_coach_stations_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get bus and coach station risk and write to file.
 
@@ -807,7 +827,9 @@ def _bus_coach_stations_risk(
 
 
 def _bus_stops_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Intersect bus stops with hazard risk, clean output, and write to file."""
     tfn_bus_stops = gpd.read_file(
@@ -837,7 +859,9 @@ def _bus_stops_risk(
 
 
 def _tram_stations_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get tram station risk and write to file.
 
@@ -864,7 +888,12 @@ def _tram_stations_risk(
     )
 
     _split_csv_shapefile(
-        config, tfn_tram_stations_risk, "id", "Other", "Tram Stations", "tfn_tram_stations_risk"
+        config,
+        tfn_tram_stations_risk,
+        "id",
+        "Other",
+        "Tram Stations",
+        "tfn_tram_stations_risk",
     )
 
 
@@ -872,7 +901,9 @@ def _tram_stations_risk(
 
 
 def _rapid_transport_stations_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get rapid transport station risk and write to file.
 
@@ -913,7 +944,9 @@ def _rapid_transport_stations_risk(
 
 
 def _ferry_terminals_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get ferry terminal risk and write to file.
 
@@ -955,7 +988,9 @@ def _ferry_terminals_risk(
 
 
 def _petrol_stations_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get petrol station risk and write to file.
 
@@ -997,7 +1032,9 @@ def _petrol_stations_risk(
 
 
 def _ncn_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get NCN risk and write to file.
 
@@ -1047,7 +1084,9 @@ def _ncn_risk(
 
 
 def _tram_network_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get tram network risk and write to file.
 
@@ -1092,7 +1131,9 @@ def _tram_network_risk(
 
 
 def _rapid_transport_network_risk(
-    config: model_config.Config, hazard_layers: dict[str, gpd.GeoDataFrame], risk_cols: list[str]
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
 ) -> None:
     """Get rapid transport network risk and write to file.
 

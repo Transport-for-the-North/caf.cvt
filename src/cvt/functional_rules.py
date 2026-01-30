@@ -336,7 +336,9 @@ def _extreme_weather_index(config: model_config.Config) -> None:
 #### EXTREME HEAT
 
 
-def _extreme_heat_index(config: model_config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _extreme_heat_index(
+    config: model_config.Config, common_grid: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
     """Combine several datasets into extreme heat index by merging on their common grid."""
     tfn_temp_max = pd.read_csv(
         config.paths.model_input
@@ -389,7 +391,9 @@ def _extreme_heat_index(config: model_config.Config, common_grid: gpd.GeoDataFra
 #### EXTREME COLD
 
 
-def _extreme_cold_index(config: model_config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _extreme_cold_index(
+    config: model_config.Config, common_grid: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
     """Combine several datasets into extreme cold index by merging on their common grid."""
     tfn_temp_min = pd.read_csv(
         config.paths.model_input
@@ -442,7 +446,9 @@ def _extreme_cold_index(config: model_config.Config, common_grid: gpd.GeoDataFra
 #### DROUGHT
 
 
-def _drought_index(config: model_config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _drought_index(
+    config: model_config.Config, common_grid: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
     """Combine several datasets into single drought index with spatial overlay."""
     tfn_drought = gpd.read_file(
         config.paths.model_input
@@ -498,7 +504,9 @@ def _drought_index(config: model_config.Config, common_grid: gpd.GeoDataFrame) -
 #### STORMS
 
 
-def _storm_index(config: model_config.Config, common_grid: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _storm_index(
+    config: model_config.Config, common_grid: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
     """Combine several datasets into a single storm index with a spatial overlay."""
     tfn_precip_win = pd.read_csv(
         config.paths.model_input

@@ -17,6 +17,7 @@ class ZipFileEntry(ctk.BaseConfig):
     output_path: pathlib.Path | None = None
     """Output path for the extracted file"""
 
+
 # -------------------------
 # CATEGORY CONFIG CLASSES
 # -------------------------
@@ -76,6 +77,7 @@ class OtherInput(ctk.BaseConfig):
 
     boundary_path: pathlib.Path
 
+
 class NoHAMEntry:
     """Configuration for a NoHAM data entry.
 
@@ -89,6 +91,7 @@ class NoHAMEntry:
 
     year: str
     file_path: pathlib.Path
+
 
 class Road(ctk.BaseConfig):
     """Configuration for road infrastructure data.
