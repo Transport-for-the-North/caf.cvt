@@ -278,12 +278,10 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
 
 def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean 2023 and 2048 NoHAM network datasets, then write to file."""
-    noham = {
-        "2023": gpd.read_file(config.infrastructure.road.noham_2023),
-        "2048": gpd.read_file(config.infrastructure.road.noham_2048),
-    }
-
-    for year, noham_network in noham.items():
+    for scenario, noham_entry in config.infrastructure.road.noham.items():
+        year = noham_entry.year
+        file_path = noham_entry.file_path
+        noham_network = gpd.read_file(file_path)
         len_before_filter = len(noham_network)
         noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
         noham_network_clean[["a", "b"]] = (
@@ -1022,7 +1020,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     windspd_f_combined, len_before_filter_future = _read_wind_speed_reduce(
         config.hazards.extreme_weather.wind_spd_forecast, "f"
     )
-    
+
     len_before_filter = len_before_filter_current + len_before_filter_future
 
     windspd_combined = _windspd_merge_and_fill(
@@ -1047,7 +1045,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     tfn_windspd = explode_to_polygons(tfn_windspd)
     tfn_windspd = tfn_windspd.drop(columns=["part"])
     filter_removed = len_before_filter - len(tfn_windspd)
-    LOG.info("Wind speed projections filtered - ")
+    LOG.info("Wind speed projections filtered - %s of %s (%s percent) rows removed", len_before_filter, filter_removed, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_windspd,
         config.paths.model_input
@@ -1138,7 +1136,7 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
         f"zip://{config.hazards.extreme_weather.wdr_index.zip_path}!"
         f"{config.hazards.extreme_weather.wdr_index.file_path}"
     )
-
+    len_before_filter = len(wdr)
     # Aggregate by wind direction to calculate mean wind speed
     wdr_agg = (
         wdr.groupby(["x_coord", "y_coord"])
@@ -1152,6 +1150,8 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
     tfn_wdr = clip_to_boundary(wdr_agg, boundary)
     tfn_wdr = explode_to_polygons(tfn_wdr)
     tfn_wdr = tfn_wdr.drop(columns=["part"])
+    filter_removed = len_before_filter - len(tfn_wdr)
+    LOG.info("Wind driven rain index filtered - %s of %s (%s percent) rows removed", filter_removed, len_before_filter, (filter_removed/len_before_filter)*100)
     write_to_file(
         tfn_wdr,
         config.paths.model_input
@@ -1227,7 +1227,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     )
 
 
-def _extract_gdb_file(
+def _extract_flood_gdb_file(
     config: model_config.Config, code: str, number: str, flood_data: str, version: str, cc: bool
 ) -> gpd.GeoDataFrame | None:
     """Extract a flood gdb file from a zip file given its BNG code and number, and version."""
@@ -1248,16 +1248,13 @@ def _extract_gdb_file(
             extract_to = base_path / code
             gdb_path = extract_to / f"{flood_data}_{code}{number}_{version}.gdb"
 
-        # Check if zip file exists
         if not zip_path.exists():
             LOG.warning("Zip file not found: %s", zip_path)
             return None
 
-        # Extract the contents
         with ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_to)
 
-        # Check if GDB folder exists
         if not gdb_path.exists():
             LOG.warning("GDB folder not found: %s", gdb_path)
             return None
@@ -1275,32 +1272,30 @@ def _extract_gdb_file(
         return None
 
 
-def _read_gdb(
+def _read_flood_gdb(
     config: model_config.Config,
     code: str,
     number: str,
     file_name: str,
     flood_data: str,
     version: str,
-    cc: bool,
+    climate_change_switch: bool,
 ) -> gpd.GeoDataFrame | None:
     """Read first layer of flood gdb file."""
     base_path = config.paths.raw_input / "Hazards" / "Flooding" / file_name / code
 
-    if cc:
+    if climate_change_switch:
         gdb_path = base_path / f"{flood_data}_Climate_Change_01_{code}{number}_{version}.gdb"
     else:
         gdb_path = base_path / f"{flood_data}_{code}{number}_{version}.gdb"
 
     # Check if GDB folder exists
     if not gdb_path.exists():
-        LOG.warning("GDB folder not found: %s", gdb_path)
-        return None
+        raise FileNotFoundError(f"GBD folder not found: {gdb_path}")
 
     layers = fiona.listlayers(gdb_path)
     if not layers:
-        LOG.warning("No layers found in: %s", gdb_path)
-        return None
+        raise ValueError(f"No layers found in GDB: {gdb_path}")
 
     LOG.info("Available layers: %s", layers)
     return gpd.read_file(gdb_path, layer=layers[0])
@@ -1311,12 +1306,12 @@ def _extract_flood_data(config: model_config.Config, code_number_map: dict[str, 
     for code, num_list in code_number_map.items():
         for number in num_list:
             # Forecast (Climate Change) data
-            _extract_gdb_file(config, code, number, "RoFRS", "v202501", True)
-            _extract_gdb_file(config, code, number, "RoFSW", "v202509", True)
+            _extract_flood_gdb_file(config, code, number, "RoFRS", "v202501", True)
+            _extract_flood_gdb_file(config, code, number, "RoFSW", "v202509", True)
 
             # Current data
-            _extract_gdb_file(config, code, number, "RoFRS", "v202501", False)
-            _extract_gdb_file(config, code, number, "RoFSW", "v202509", False)
+            _extract_flood_gdb_file(config, code, number, "RoFRS", "v202501", False)
+            _extract_flood_gdb_file(config, code, number, "RoFSW", "v202509", False)
 
 
 def _clean_flood(
@@ -1326,25 +1321,24 @@ def _clean_flood(
     version: str,
     boundary: gpd.GeoDataFrame,
     out_path: str,
-    cc: bool,
+    climate_change_switch: bool,
     code_number_map: dict[str, list[str]],
 ) -> None:
     """Read and clean flood data, then write to file."""
-    gdfs = []
+    flood_datasets = []
     for code, num_list in code_number_map.items():
         for number in num_list:
             LOG.info("Processing: %s%s", code, number)
-            gdf = _read_gdb(config, code, number, file_name, flood_type, version, cc)  # Read file
-            tfn_gdf = clip_to_boundary(gdf, boundary)
-            gdfs.append(tfn_gdf)  # Add to list
-            del gdf, tfn_gdf
+            flood_data = _read_flood_gdb(config, code, number, file_name, flood_type, version, climate_change_switch)  # Read file
+            tfn_flood_data = clip_to_boundary(flood_data, boundary)
+            flood_datasets.append(tfn_flood_data)  # Add to list
 
-    flood_data = gpd.GeoDataFrame(
-        pd.concat(gdfs, ignore_index=True), geometry="geometry", crs=gdfs[0].crs
+    flood_data_combined = gpd.GeoDataFrame(
+        pd.concat(flood_datasets, ignore_index=True), geometry="geometry", crs=flood_datasets[0].crs
     )
-    flood_data = _extract_poly_from_geomcollection(flood_data)
-    flood_data = flood_data[["Risk_band", "geometry"]]
-    write_to_file(flood_data, config.paths.model_input / "Hazards" / "Flooding" / out_path)
+    flood_data_combined = _extract_poly_from_geomcollection(flood_data_combined)
+    flood_data_combined = flood_data_combined[["Risk_band", "geometry"]]
+    write_to_file(flood_data_combined, config.paths.model_input / "Hazards" / "Flooding" / out_path)
 
 
 ### GROUND STABILITY
@@ -1392,9 +1386,9 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
         tfn_geosure_layers[code] = explode_to_polygons(tfn_geosure_layers[code])
 
     # Merge layers based on nearest centroids
-    base_code = "collapsible_deposits"
+    base_code = next(iter(geosure_layers.keys()))
     tfn_geosure = tfn_geosure_layers[base_code][
-        ["collapsible_deposits_risk", "geometry"]
+        [f"{base_code}_risk", "geometry"]
     ].copy()
     for code, layer in tfn_geosure_layers.items():
         if code == base_code:
@@ -1432,8 +1426,8 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
 
 def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean GeoClimate Shrink-Swell data, then write to file."""
-    for year in ["2030", "2070"]:
-        gdf = gpd.read_file(config.hazards.ground_stability.geo_shrink_swell[year])
+    for year, filepath in config.hazards.ground_stability.geo_shrink_swell:
+        gdf = gpd.read_file(filepath)
         gdf = gdf.rename(columns={"CLASS": "shrink_swell_geoclimate_risk"})
         gdf = gdf[["shrink_swell_geoclimate_risk", "geometry"]]
         tfn_gdf = clip_to_boundary(gdf, boundary)
@@ -1567,7 +1561,8 @@ def _clean_noham_flows(config: model_config.Config) -> None:
     """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
     link_flows = _aggregate_link_flows_year(config)
 
-    for year, tp in {"2023": "c", "2048": "f"}.items():
+    for scenario, noham_entry in config.infrastructure.road.noham.items():
+        year = noham_entry.year
         tfn_noham_flows = link_flows[year]
         tfn_noham_net_flows = _merge_noham_flow_network(
             tfn_noham_flows,
@@ -1583,7 +1578,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
             / "Impact"
             / "TfN NoHAM Flows"
             / year
-            / f"tfn_noham_net_flows_{tp}.gpkg",
+            / f"tfn_noham_net_flows_{scenario}.gpkg",
         )
 
 
@@ -1677,7 +1672,10 @@ def _aggregate_link_flows(
 
 def _aggregate_link_flows_year(config: model_config.Config) -> dict[str, pd.DataFrame]:
     """Aggregate link flows for each year, time period, and user class."""
-    years = ["2023", "2048"]
+    years = [
+        config.infrastructure.road.noham['current'].year,
+        config.infrastructure.road.noham['forecast'].year
+        ]
     time_periods = ["TS1", "TS2", "TS3"]
     user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
 

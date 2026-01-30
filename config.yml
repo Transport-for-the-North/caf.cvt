@@ -26,8 +26,13 @@ other_input:
 infrastructure:
   road:
     os_road: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/TfN OS Open Roads/os_open_gb_road_links_tfn.shp
-    noham_2023: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2023/NoHAM_Decarb_DM_Core_2023_carbon.shp
-    noham_2048: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2048/NoHAM_Decarb_DM_Core_2048_carbon.shp
+    noham:
+      "current": 
+          year: 2023
+          file_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2023/NoHAM_Decarb_DM_Core_2023_carbon.shp
+      "forecast": 
+          year: 2048
+          file_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2048/NoHAM_Decarb_DM_Core_2048_carbon.shp
   rail:
     tfn_rail_links: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/OS Rail Network/TfN_Area_tfn_ntwk_railwaylink.gpkg
   other:
@@ -89,8 +94,8 @@ hazards:
     flood_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Flooding
   ground_stability:
     geo_shrink_swell:
-      '2030': D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Ground Stability/GeoClimateUKCP18OpenData/GeoclimateUKCP18_Open/GeoClimateUKCP18_ShrinkSwell_2030_Average_Open.shp
-      '2070': D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Ground Stability/GeoClimateUKCP18OpenData/GeoclimateUKCP18_Open/GeoClimateUKCP18_ShrinkSwell_2070_Average_Open.shp
+      "2030": D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Ground Stability/GeoClimateUKCP18OpenData/GeoclimateUKCP18_Open/GeoClimateUKCP18_ShrinkSwell_2030_Average_Open.shp
+      "2070": D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Ground Stability/GeoClimateUKCP18OpenData/GeoclimateUKCP18_Open/GeoClimateUKCP18_ShrinkSwell_2070_Average_Open.shp
     geosure:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Ground Stability/GeoSureHexGrids.zip
       collapsible_deposits: GeoSureHexGrids/Data/GB_Hex_5km_GS_CollapsibleDeposits_v8.shp

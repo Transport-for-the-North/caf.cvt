@@ -76,6 +76,19 @@ class OtherInput(ctk.BaseConfig):
 
     boundary_path: pathlib.Path
 
+class NoHAMEntry:
+    """Configuration for a NoHAM data entry.
+
+    Attributes
+    ----------
+    year: str
+        The year which the NoHAM entry comes from.
+    file_path: pathlib.Path
+        Path to the NoHAM data.
+    """
+
+    year: str
+    file_path: pathlib.Path
 
 class Road(ctk.BaseConfig):
     """Configuration for road infrastructure data.
@@ -84,15 +97,12 @@ class Road(ctk.BaseConfig):
     ----------
     os_road : pathlib.Path
         Path to the OS road data.
-    noham_2023 : pathlib.Path
-        Path to the NoHAM 2023 road data.
-    noham_2048 : pathlib.Path
-        Path to the NoHAM 2048 road data.
+    noham: dict[str, NoHAMEntry]
+        Dictionary containing scenario linked to year and file path in a NoHAM entry class.
     """
 
     os_road: pathlib.Path
-    noham_2023: pathlib.Path
-    noham_2048: pathlib.Path
+    noham: dict[str, NoHAMEntry]
 
 
 class Rail(ctk.BaseConfig):
