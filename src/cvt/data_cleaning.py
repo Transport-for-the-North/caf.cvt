@@ -8,7 +8,6 @@ from zipfile import ZipFile
 
 import fiona
 import geopandas as gpd
-import h5py
 import pandas as pd
 import py7zr
 import xarray as xr
@@ -23,7 +22,10 @@ LOG = logging.getLogger(__name__)
 # Minimum a and b values for NoHAM road links to keep
 _NOHAM_ROAD_THRESHOLD = int(os.getenv("_NOHAM_ROAD_THRESHOLD", "10000"))
 
-###  MODULE CONSTANTS ###
+# British National Grid CRS, for use in spatially merging datasets
+_BNG_CRS = os.getenv("_BNG_CRS", "EPSG:27700")
+
+### MODULE CONSTANTS ###
 MMRN_NODE_TYPES = {
     "Train Stations": [
         "Railway Station;Modal Change",
@@ -197,11 +199,9 @@ def _extract_poly_from_geomcollection(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame
 
 def _nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Take two GeoDataFrames and merge them on their nearest centroids."""
-    bng_crs = "EPSG:27700"
-
     # Ensure both GeoDataFrames are in the same projected CRS
-    gdf1 = gdf1.to_crs(bng_crs)
-    gdf2 = gdf2.to_crs(bng_crs)
+    gdf1 = gdf1.to_crs(_BNG_CRS)
+    gdf2 = gdf2.to_crs(_BNG_CRS)
 
     # Convert both to centroids
     gdf1_centroids = gdf1.copy()
@@ -873,14 +873,19 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     temp_max["grid_id"] = range(1, len(temp_max) + 1)
     temp_max = temp_max[["grid_id", "tasmax_s_4", "tasmax__22"]]
     temp_max = temp_max.rename(
-        columns={"tasmax_s_4": "tasmax_s_c", "tasmax__22": "tasmax_s_f"}
+        columns={
+            "tasmax_s_4": "max_temp_summer_current",
+            "tasmax__22": "max_temp_summer_forecast",
+        }
     )
-    temp_max["tasmax_s_f"] = temp_max["tasmax_s_c"] + temp_max["tasmax_s_f"]
+    temp_max["max_temp_summer_forecast"] = (
+        temp_max["max_temp_summer_current"] + temp_max["max_temp_summer_forecast"]
+    )
     len_before_filter = len(temp_max)
     tfn_temp_max = temp_max[temp_max["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(tfn_temp_max)
     LOG.info(
-        "Summer max temperature change projections filtered - %s of %s (%s percent) rows " \
+        "Summer max temperature change projections filtered - %s of %s (%s percent) rows "
         "removed",
         filter_removed,
         len_before_filter,
@@ -905,14 +910,19 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     temp_min["grid_id"] = range(1, len(temp_min) + 1)
     temp_min = temp_min[["grid_id", "tasmin_w_4", "tasmin__22"]]
     temp_min = temp_min.rename(
-        columns={"tasmin_w_4": "tasmin_w_c", "tasmin__22": "tasmin_w_f"}
+        columns={
+            "tasmin_w_4": "min_temp_winter_current",
+            "tasmin__22": "min_temp_winter_forecast",
+        }
     )
-    temp_min["tasmin_w_f"] = temp_min["tasmin_w_c"] + temp_min["tasmin_w_f"]
+    temp_min["min_temp_winter_forecast"] = (
+        temp_min["min_temp_winter_current"] + temp_min["min_temp_winter_forecast"]
+    )
     len_before_filter = len(temp_min)
     tfn_temp_min = temp_min[temp_min["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(tfn_temp_min)
     LOG.info(
-        "Winter minimum temperature change projections filtered - %s of %s (%s percent) " \
+        "Winter minimum temperature change projections filtered - %s of %s (%s percent) "
         "rows removed",
         filter_removed,
         len_before_filter,
@@ -937,15 +947,20 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     precip_sum["grid_id"] = range(1, len(precip_sum) + 1)
     precip_sum = precip_sum[["grid_id", "pr_summe_3", "pr_summ_21"]]
     precip_sum = precip_sum.rename(
-        columns={"pr_summe_3": "pr_s_c", "pr_summ_21": "pr_s_pct_f"}
+        columns={
+            "pr_summe_3": "precip_summer_current",
+            "pr_summ_21": "precip_summer_pct_chg_forecast",
+        }
     )
-    precip_sum["pr_s_f"] = precip_sum["pr_s_c"] * (1 + (precip_sum["pr_s_pct_f"] / 100))
-    precip_sum = precip_sum.drop(columns=["pr_s_pct_f"])
+    precip_sum["precip_summer_forecast"] = precip_sum["precip_summer_current"] * (
+        1 + (precip_sum["precip_summer_pct_chg_forecast"] / 100)
+    )
+    precip_sum = precip_sum.drop(columns=["precip_summer_pct_chg_forecast"])
     len_before_filter = len(precip_sum)
     tfn_precip_sum = precip_sum[precip_sum["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(tfn_precip_sum)
     LOG.info(
-        "Summer precipitation change projections filtered - %s of %s (%s percent) rows " \
+        "Summer precipitation change projections filtered - %s of %s (%s percent) rows "
         "removed",
         filter_removed,
         len_before_filter,
@@ -971,17 +986,19 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     precip_win = precip_win[["grid_id", "pr_winte_3", "pr_wint_21"]]
     precip_win = precip_win.rename(
         columns={
-            "pr_winte_3": "pr_w_c",
-            "pr_wint_21": "pr_w_pct_f",
+            "pr_winte_3": "precip_winter_current",
+            "pr_wint_21": "precip_winter_pct_chg_forecast",
         },
     )
-    precip_win["pr_w_f"] = precip_win["pr_w_c"] * (1 + (precip_win["pr_w_pct_f"] / 100))
-    precip_win = precip_win.drop(columns=["pr_w_pct_f"])
+    precip_win["precip_winter_forecast"] = precip_win["precip_winter_current"] * (
+        1 + (precip_win["precip_winter_pct_chg_forecast"] / 100)
+    )
+    precip_win = precip_win.drop(columns=["precip_winter_pct_chg_forecast"])
     len_before_filter = len(precip_win)
     tfn_precip_win = precip_win[precip_win["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(tfn_precip_win)
     LOG.info(
-        "Winter precipitation change projections filtered - %s of %s (%s percent) rows " \
+        "Winter precipitation change projections filtered - %s of %s (%s percent) rows "
         "removed",
         filter_removed,
         len_before_filter,
@@ -1006,7 +1023,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     len_before_filter = len(rain_days)
     tfn_rain_days = clip_to_boundary(rain_days, boundary)
     tfn_rain_days = explode_to_polygons(tfn_rain_days)
-    tfn_rain_days = tfn_rain_days.rename(columns={"Rain10mmDa": "rain_d_c"})
+    tfn_rain_days = tfn_rain_days.rename(columns={"Rain10mmDa": "10mm_rain_days_current"})
     tfn_rain_days = tfn_rain_days.drop(columns=["part"])
     filter_removed = len_before_filter - len(tfn_rain_days)
     LOG.info(
@@ -1033,7 +1050,10 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
     )
     drought_index = drought_index[["DSI12_ba_4", "DSI12_40_m", "geometry"]]
     drought_index = drought_index.rename(
-        columns={"DSI12_ba_4": "dsi_c", "DSI12_40_m": "dsi_f"}
+        columns={
+            "DSI12_ba_4": "drought_severity_index_current",
+            "DSI12_40_m": "drought_severity_index_forecast",
+        }
     )
     len_before_filter = len(drought_index)
     tfn_drought = clip_to_boundary(drought_index, boundary)
@@ -1064,7 +1084,12 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
     )
     hot_days["grid_id"] = range(1, len(hot_days) + 1)
     hot_days = hot_days[["grid_id", "HSD_base_4", "HSD_40_med"]]
-    hot_days = hot_days.rename(columns={"HSD_base_4": "hsd_c", "HSD_40_med": "hsd_f"})
+    hot_days = hot_days.rename(
+        columns={
+            "HSD_base_4": "hot_summer_days_curent",
+            "HSD_40_med": "hot_summer_days_forecast",
+        }
+    )
     len_before_filter = len(hot_days)
     tfn_hot_days = hot_days[hot_days["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(tfn_hot_days)
@@ -1092,7 +1117,12 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
     )
     extr_days["grid_id"] = range(1, len(extr_days) + 1)
     extr_days = extr_days[["grid_id", "ESD_base_4", "ESD_40_med"]]
-    extr_days = extr_days.rename(columns={"ESD_base_4": "esd_c", "ESD_40_med": "esd_f"})
+    extr_days = extr_days.rename(
+        columns={
+            "ESD_base_4": "extreme_summer_days_current",
+            "ESD_40_med": "extreme_summer_days_forecast",
+        }
+    )
     len_before_filter = len(extr_days)
     tfn_extr_days = extr_days[extr_days["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(tfn_extr_days)
@@ -1121,7 +1151,7 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     frost_days["grid_id"] = range(1, len(frost_days) + 1)
     frost_days = frost_days[["grid_id", "FrostDay_3", "FrostDa_18"]]
     frost_days = frost_days.rename(
-        columns={"FrostDay_3": "frost_d_c", "FrostDa_18": "frost_d_f"}
+        columns={"FrostDay_3": "frost_days_current", "FrostDa_18": "frost_days_forecast"}
     )
     len_before_filter = len(frost_days)
     tfn_frost_days = frost_days[frost_days["grid_id"].isin(grid["grid_id"])]
@@ -1150,7 +1180,9 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     )
     ice_days["grid_id"] = range(1, len(ice_days) + 1)
     ice_days = ice_days[["grid_id", "IcingDay_3", "IcingDa_18"]]
-    ice_days = ice_days.rename(columns={"IcingDay_3": "ice_d_c", "IcingDa_18": "ice_d_f"})
+    ice_days = ice_days.rename(
+        columns={"IcingDay_3": "icing_days_current", "IcingDa_18": "icing_days_forecast"}
+    )
     len_before_filter = len(ice_days)
     tfn_ice_days = ice_days[ice_days["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(tfn_ice_days)
@@ -1173,16 +1205,16 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
 def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read wind speed projections, calculate metrics, clean, then write to file."""
     windspd_c_combined, len_before_filter_current = _read_wind_speed_reduce(
-        config.hazards.extreme_weather.wind_spd_current, "c"
+        config.hazards.extreme_weather.wind_spd_current, "current"
     )
     windspd_f_combined, len_before_filter_future = _read_wind_speed_reduce(
-        config.hazards.extreme_weather.wind_spd_forecast, "f"
+        config.hazards.extreme_weather.wind_spd_forecast, "forecast"
     )
 
     len_before_filter = len_before_filter_current + len_before_filter_future
 
     windspd_combined = _windspd_merge_and_fill(
-        windspd_c_combined, windspd_f_combined, "avg_excd_f"
+        windspd_c_combined, windspd_f_combined, "avg_exceedance_days_forecast"
     )
 
     windspd_combined["geometry"] = [
@@ -1194,10 +1226,16 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
         )
     ]
     windspd_combined = gpd.GeoDataFrame(
-        windspd_combined, geometry="geometry", crs="EPSG:27700"
+        windspd_combined, geometry="geometry", crs=_BNG_CRS
     )
     windspd_combined = windspd_combined[
-        ["p99_c", "avg_excd_c", "p99_f", "avg_excd_f", "geometry"]
+        [
+            "wind_speed_99th_percentile_current",
+            "avg_exceedance_days_current",
+            "wind_speed_99th_percentile_forecast",
+            "avg_exceedance_days_forecast",
+            "geometry",
+        ]
     ]
     tfn_windspd = clip_to_boundary(windspd_combined, boundary)
     tfn_windspd = explode_to_polygons(tfn_windspd)
@@ -1219,20 +1257,22 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     )
 
 
-def _read_wind_speed_reduce(xr_path: pathlib.Path, tp: str) -> pd.DataFrame:
+def _read_wind_speed_reduce(xr_path: pathlib.Path, scenario: str) -> pd.DataFrame:
     """Read wind speed projections, calculate metrics and return a merged dataframe."""
     windspd = xr.open_dataset(xr_path).to_dataframe()
     len_before_filter = len(windspd)
-    exc = _calculate_exceedance(20, windspd, "wsgmax10m", tp)
+    exc = _calculate_exceedance(20, windspd, "wsgmax10m", scenario)
     pct = _calculate_percentile(windspd, 0.99, "wsgmax10m")
     pct.columns = [
         "projection_y_coordinate",
         "projection_x_coordinate",
         "latitude",
         "longitude",
-        f"p99_{tp}",
+        f"wind_speed_99th_percentile_{scenario}",
     ]
-    return _windspd_merge_and_fill(pct, exc, f"avg_excd_{tp}"), len_before_filter
+    return _windspd_merge_and_fill(
+        pct, exc, f"avg_exceedance_days_{scenario}"
+    ), len_before_filter
 
 
 def _windspd_merge_and_fill(
@@ -1274,7 +1314,7 @@ def _calculate_exceedance(
             ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
         )["exceedance_days"]
         .mean()
-        .reset_index(name=f"avg_excd_{timescale}")
+        .reset_index(name=f"avg_exceedance_days_{timescale}")
     )
 
 
@@ -1308,7 +1348,12 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
     )
 
     wdr_agg = wdr_agg[["WDR_base_1", "WDR_40_Med", "geometry"]]
-    wdr_agg = wdr_agg.rename(columns={"WDR_base_1": "wdr_c", "WDR_40_Med": "wdr_f"})
+    wdr_agg = wdr_agg.rename(
+        columns={
+            "WDR_base_1": "wind_driven_rain_index_current",
+            "WDR_40_Med": "wind_driven_rain_index_forecast",
+        }
+    )
     wdr_agg = gpd.GeoDataFrame(wdr_agg, geometry="geometry", crs="EPSG:3857")
     tfn_wdr = clip_to_boundary(wdr_agg, boundary)
     tfn_wdr = explode_to_polygons(tfn_wdr)
@@ -1359,7 +1404,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         "RoFRS",
         "v202501",
         boundary,
-        "TfN RoFRS CC/tfn_rofrs_cc.gpkg",
+        pathlib.Path("TfN RoFRS CC/tfn_rofrs_cc.gpkg"),
         True,
         code_number_map,
     )
@@ -1369,7 +1414,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         "RoFRS",
         "v202501",
         boundary,
-        "TfN RoFRS/tfn_rofrs.gpkg",
+        pathlib.Path("TfN RoFRS/tfn_rofrs.gpkg"),
         False,
         code_number_map,
     )
@@ -1379,7 +1424,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         "RoFSW",
         "v202509",
         boundary,
-        "TfN RoFSW CC/tfn_rofsw_cc.gpkg",
+        pathlib.Path("TfN RoFSW CC/tfn_rofsw_cc.gpkg"),
         True,
         code_number_map,
     )
@@ -1389,7 +1434,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         "RoFSW",
         "v202509",
         boundary,
-        "TfN RoFSW/tfn_rofsw.gpkg",
+        pathlib.Path("TfN RoFSW/tfn_rofsw.gpkg"),
         False,
         code_number_map,
     )
@@ -1495,7 +1540,7 @@ def _clean_flood(
     flood_type: str,
     version: str,
     boundary: gpd.GeoDataFrame,
-    out_path: str,
+    out_path: pathlib.Path,
     climate_change_switch: bool,
     code_number_map: dict[str, list[str]],
 ) -> None:
@@ -1783,51 +1828,12 @@ def _read_noham_h5(
                 ],
             )
 
-    with h5py.File(
-        output_path
-        / "input h5s"
-        / year
-        / f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5",
-        "r",
-    ) as f:
-        # Get OD's
-        od_columns = [x.decode() for x in f["data/OD/block0_items"][:]]
-        od_values = f["data/OD/block0_values"][:]
 
-        od_labels = [
-            f["data/OD/axis1_label0"][:],
-            f["data/OD/axis1_label1"][:],
-            f["data/OD/axis1_label2"][:],
-            f["data/OD/axis1_label3"][:],
-            f["data/OD/axis1_label4"][:],
-        ]
+    noham_demand_path = output_path / "input h5s" / year / f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
 
-        # Get routes
-        route_col = [x.decode() for x in f["data/Route/block0_items"]][:][0]
-        route_values = f["data/Route/block0_values"][:]
-
-        # MultiIndex labels
-        route_label0 = f["data/Route/axis1_label0"][:]
-        route_label1 = f["data/Route/axis1_label1"][:]
-
-        # Get links
-        link_values = f["data/link/block0_values"][:]
-        link_columns = [x.decode() for x in f["data/link/block0_items"][:]]
-
-    # Build OD Dataframe
-    od_multi_index = pd.MultiIndex.from_arrays(
-        od_labels, names=["o", "d", "route", "uc", "total_links"]
-    )
-    od_df = pd.DataFrame(od_values, index=od_multi_index, columns=od_columns)
-
-    # Build Route Dataframe
-    route_multi_index = pd.MultiIndex.from_arrays(
-        [route_label0, route_label1], names=["route", "link_id"]
-    )
-    route_df = pd.DataFrame(route_values, index=route_multi_index, columns=[route_col])
-
-    # Build Link DataFrame
-    link_df = pd.DataFrame(link_values, columns=link_columns)
+    od_df = pd.read_hdf(noham_demand_path, key="/data/OD")
+    route_df = pd.read_hdf(noham_demand_path, key="/data/Route")
+    link_df = pd.read_hdf(noham_demand_path, key="/data/link")
 
     return od_df, route_df, link_df
 

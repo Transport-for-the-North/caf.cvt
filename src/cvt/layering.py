@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
 from cvt import data_cleaning, functional_rules, model_config
+from cvt.data_cleaning import _BNG_CRS
 
 # GENERAL FUNCTIONS
 
@@ -47,7 +48,7 @@ def _reshape_for_current_forecast(
 ) -> gpd.GeoDataFrame:
     """Reshape dataframe by adding a current/forecast column to distinguish identical rows."""
     # Identify risk and descriptive columns
-    risk_cols = [col for col in gdf.columns if col.endswith(("_c", "_f"))]
+    risk_cols = [col for col in gdf.columns if col.endswith(("_current", "_forecast"))]
     id_cols = [id_col]
     descriptive_cols = [
         col
@@ -68,9 +69,13 @@ def _reshape_for_current_forecast(
 
     # Extract scenario and clean variable names
     melted["current_or_forecast"] = (
-        melted["variable"].str.extract(r"_(c|f)$")[0].map({"c": "Current", "f": "Forecast"})
+        melted["variable"]
+        .str.extract(r"_(current|forecast)$")[0]
+        .map({"current": "Current", "forecast": "Forecast"})
     )
-    melted["variable"] = melted["variable"].str.replace(r"_(c|f)$", "", regex=True)
+    melted["variable"] = melted["variable"].str.replace(
+        r"_(current|forecast)$", "", regex=True
+    )
 
     # Pivot back so each risk variable becomes a column
     reshaped = melted.pivot_table(
@@ -99,7 +104,7 @@ def _prepare_model_output(
     gdf = gdf.drop_duplicates(subset=["geometry"])
     gdf = gdf.rename(columns=rename_map)
     gdf[desc_cols] = gdf[desc_cols].replace(0, "N/A")
-    gdf = gdf.to_crs(epsg=27700)
+    gdf = gdf.to_crs(epsg=_BNG_CRS)
     gdf = _reshape_for_current_forecast(gdf, "id", risk_cols_order)
     gdf[risk_cols_order] = gdf[risk_cols_order].round(1)
     return gdf.rename(columns={col: f"{col}_score" for col in risk_cols_order})
@@ -287,45 +292,60 @@ def _noham_road_risk(
     to file.
     """
     tfn_noham = {}
-    tfn_noham_risk_tp = {}
-    for year, tp in {"2023": "c", "2048": "f"}.items():
-        tfn_noham[tp] = gpd.read_file(
+    tfn_noham_risk_scenario = {}
+    for year, scenario in {"2023": "current", "2048": "forecast"}.items():
+        tfn_noham[scenario] = gpd.read_file(
             config.paths.model_input
             / "Impact"
             / "TfN NoHAM Flows"
             / year
-            / f"tfn_noham_net_flows_{tp}.gpkg"
+            / f"tfn_noham_net_flows_{scenario}.gpkg"
         )
-        tfn_noham_risk_tp[tp] = _infrastructure_risk_intersect(tfn_noham[tp], hazard_layers)
-        other_tp = "f" if tp == "c" else "c"
+        tfn_noham_risk_scenario[scenario] = _infrastructure_risk_intersect(
+            tfn_noham[scenario], hazard_layers
+        )
+        other_scenario = "forecast" if scenario == "current" else "current"
         drop_cols = [
-            col for col in tfn_noham_risk_tp[tp].columns if col.endswith(f"_{other_tp}")
+            col
+            for col in tfn_noham_risk_scenario[scenario].columns
+            if col.endswith(f"_{other_scenario}")
         ]
-        tfn_noham_risk_tp[tp] = tfn_noham_risk_tp[tp].drop(columns=drop_cols)
-        tfn_noham_risk_tp[tp] = tfn_noham_risk_tp[tp].drop_duplicates(subset=["geometry"])
-        tfn_noham_risk_tp[tp].columns = [
-            col.removesuffix(f"_{tp}") for col in tfn_noham_risk_tp[tp].columns
+        tfn_noham_risk_scenario[scenario] = tfn_noham_risk_scenario[scenario].drop(
+            columns=drop_cols
+        )
+        tfn_noham_risk_scenario[scenario] = tfn_noham_risk_scenario[scenario].drop_duplicates(
+            subset=["geometry"]
+        )
+        tfn_noham_risk_scenario[scenario].columns = [
+            col.removesuffix(f"_{scenario}")
+            for col in tfn_noham_risk_scenario[scenario].columns
         ]
-        if tp == "c":
-            tfn_noham_risk_tp[tp]["current_or_forecast"] = "Current"
+        if scenario == "current":
+            tfn_noham_risk_scenario[scenario]["current_or_forecast"] = "Current"
         else:
-            tfn_noham_risk_tp[tp]["current_or_forecast"] = "Forecast"
+            tfn_noham_risk_scenario[scenario]["current_or_forecast"] = "Forecast"
 
-    tfn_noham_risk_tp["c"], tfn_noham_risk_tp["f"] = _noham_impact_index(
-        tfn_noham_risk_tp["c"], tfn_noham_risk_tp["f"], impact_weights, risk_cols
+    tfn_noham_risk_scenario["current"], tfn_noham_risk_scenario["forecast"] = (
+        _noham_impact_index(
+            tfn_noham_risk_scenario["current"],
+            tfn_noham_risk_scenario["forecast"],
+            impact_weights,
+            risk_cols,
+        )
     )
 
     # Remove suffixes from risk and impact columns
-    tfn_noham_risk_tp["c"].columns = [
-        col.removesuffix("_c") for col in tfn_noham_risk_tp["c"].columns
+    tfn_noham_risk_scenario["current"].columns = [
+        col.removesuffix("_current") for col in tfn_noham_risk_scenario["current"].columns
     ]
-    tfn_noham_risk_tp["f"].columns = [
-        col.removesuffix("_f") for col in tfn_noham_risk_tp["f"].columns
+    tfn_noham_risk_scenario["forecast"].columns = [
+        col.removesuffix("_forecast") for col in tfn_noham_risk_scenario["forecast"].columns
     ]
 
     # Concatenate
     tfn_noham_risk = pd.concat(
-        [tfn_noham_risk_tp["c"], tfn_noham_risk_tp["f"]], ignore_index=True
+        [tfn_noham_risk_scenario["current"], tfn_noham_risk_scenario["forecast"]],
+        ignore_index=True,
     )
 
     noham_impact_cols = [
@@ -344,7 +364,7 @@ def _noham_road_risk(
         col for col in tfn_noham_risk.columns if col not in ["link_id", "geometry"]
     ]
     tfn_noham_risk[cols_to_round] = tfn_noham_risk[cols_to_round].round(1)
-    tfn_noham_risk = tfn_noham_risk.to_crs(epsg=27700)
+    tfn_noham_risk = tfn_noham_risk.to_crs(epsg=_BNG_CRS)
     tfn_noham_risk = tfn_noham_risk.rename(columns={"link_id": "id"})
     tfn_noham_risk = tfn_noham_risk.rename(
         columns={col: f"{col}_score" for col in cols_to_round}
@@ -375,8 +395,8 @@ def _noham_impact_index(
         tfn_noham_c, tfn_noham_f, user_classes, impact_weights
     )
 
-    impact_cols_c = [f"{uc}_impact_c" for uc in user_classes] + ["impact_c"]
-    impact_cols_f = [f"{uc}_impact_f" for uc in user_classes] + ["impact_f"]
+    impact_cols_c = [f"{uc}_impact_current" for uc in user_classes] + ["impact_current"]
+    impact_cols_f = [f"{uc}_impact_forecast" for uc in user_classes] + ["impact_forecast"]
 
     tfn_noham_c, tfn_noham_f = _normalise_total_cols(
         tfn_noham_c, tfn_noham_f, impact_cols_c, impact_cols_f
@@ -402,9 +422,9 @@ def _normalise_uc_demand(
     )
     scaler = MinMaxScaler(feature_range=(0, 100))
     scaler.fit(combined_values)
-    for df, suffix in [(df_c, "c"), (df_f, "f")]:
+    for df, scenario in [(df_c, "current"), (df_f, "forecast")]:
         scaled = scaler.transform(df[uc_total_cols].values)
-        df[[f"{uc}_demand_{suffix}" for uc in user_classes]] = scaled
+        df[[f"{uc}_demand_{scenario}" for uc in user_classes]] = scaled
     return df_c, df_f
 
 
@@ -421,9 +441,9 @@ def _normalise_total_col(
     )
     scaler = MinMaxScaler(feature_range=(0, 100))
     scaler.fit(combined_values)
-    for df, suffix in [(df_c, "c"), (df_f, "f")]:
+    for df, scenario in [(df_c, "current"), (df_f, "forecast")]:
         scaled = scaler.transform(df[old_column].to_numpy().reshape(-1, 1))
-        df[f"{new_column}_{suffix}"] = scaled
+        df[f"{new_column}_{scenario}"] = scaled
     return df_c, df_f
 
 
@@ -449,18 +469,18 @@ def _calculate_noham_impact(
     """Calculate NoHAM impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
     for uc in user_classes:
-        for df, tp in [(df_c, "c"), (df_f, "f")]:
-            df[f"{uc}_impact_{tp}"] = (
-                df[f"{uc}_demand_{tp}"] * impact_weights["demand"]
+        for df, scenario in [(df_c, "current"), (df_f, "forecast")]:
+            df[f"{uc}_impact_{scenario}"] = (
+                df[f"{uc}_demand_{scenario}"] * impact_weights["demand"]
                 + df["flood_risk"] * impact_weights["flood"]
                 + df["extreme_weather_risk"] * impact_weights["extreme_weather"]
                 + df["ground_stability_risk"] * impact_weights["ground_stability"]
                 + df["coastal_erosion_risk"] * impact_weights["coastal_erosion"]
             )
 
-    for df, tp in [(df_c, "c"), (df_f, "f")]:
-        df[f"impact_{tp}"] = (
-            df[f"demand_{tp}"] * impact_weights["demand"]
+    for df, scenario in [(df_c, "current"), (df_f, "forecast")]:
+        df[f"impact_{scenario}"] = (
+            df[f"demand_{scenario}"] * impact_weights["demand"]
             + df["flood_risk"] * impact_weights["flood"]
             + df["extreme_weather_risk"] * impact_weights["extreme_weather"]
             + df["ground_stability_risk"] * impact_weights["ground_stability"]
@@ -562,12 +582,12 @@ def _freight_rail_risk(
 
     # Set the correct CRS
     tfn_freight_network_risk = tfn_freight_network_risk.set_crs(
-        epsg=27700, allow_override=True
+        epsg=_BNG_CRS, allow_override=True
     )
 
     tfn_freight_network_risk = _prepare_model_output(
         gdf=tfn_freight_network_risk,
-        drop_cols=["dij_id", "distance", "demand_c", "demand_f"],
+        drop_cols=["dij_id", "distance", "demand_current", "demand_forecast"],
         desc_cols=[
             "description",
             "structure",
@@ -604,7 +624,7 @@ def _freight_impact_index(
     )
 
     tfn_freight_network_risk = tfn_freight_network_risk.rename(
-        columns={"2022_23_total": "demand_c", "2050_51 sc2_total": "demand_f"}
+        columns={"2022_23_total": "demand_current", "2050_51 sc2_total": "demand_forecast"}
     )
 
     tfn_freight_network_risk = _calculate_freight_impact(
@@ -612,7 +632,7 @@ def _freight_impact_index(
     )
 
     tfn_freight_network_risk = functional_rules.min_max_scaling_pair(
-        tfn_freight_network_risk, [("impact_c", "impact_f")]
+        tfn_freight_network_risk, [("impact_current", "impact_forecast")]
     )
 
     return gpd.GeoDataFrame(tfn_freight_network_risk, geometry="geometry", crs="EPSG:4326")
@@ -622,13 +642,13 @@ def _calculate_freight_impact(
     df: pd.DataFrame, impact_weights: dict[str, float]
 ) -> pd.DataFrame:
     """Calculate composite impact score for current and forecast years."""
-    for tp in ["c", "f"]:
-        df[f"impact_{tp}"] = (
-            df[f"demand_{tp}"] * impact_weights["demand"]
-            + df[f"flood_risk_{tp}"] * impact_weights["flood"]
-            + df[f"extreme_weather_risk_{tp}"] * impact_weights["extreme_weather"]
-            + df[f"ground_stability_risk_{tp}"] * impact_weights["ground_stability"]
-            + df[f"coastal_erosion_risk_{tp}"] * impact_weights["coastal_erosion"]
+    for scenario in ["current", "forecast"]:
+        df[f"impact_{scenario}"] = (
+            df[f"demand_{scenario}"] * impact_weights["demand"]
+            + df[f"flood_risk_{scenario}"] * impact_weights["flood"]
+            + df[f"extreme_weather_risk_{scenario}"] * impact_weights["extreme_weather"]
+            + df[f"ground_stability_risk_{scenario}"] * impact_weights["ground_stability"]
+            + df[f"coastal_erosion_risk_{scenario}"] * impact_weights["coastal_erosion"]
         )
 
     return df
@@ -659,7 +679,7 @@ def _get_other_risk(
 
 def _buffer_geometry(gdf: gpd.GeoDataFrame, buffer_size_m: int) -> gpd.GeoDataFrame:
     """Buffers the geometries of a given GeoDataFrame to a given size in metres."""
-    gdf = gdf.to_crs(epsg=27700)
+    gdf = gdf.to_crs(epsg=_BNG_CRS)
     gdf["geometry"] = gdf.buffer(buffer_size_m)
     return gdf
 
