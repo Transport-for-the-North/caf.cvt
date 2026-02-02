@@ -16,8 +16,18 @@ from cvt.data_cleaning import _BNG_CRS
 
 LOG = logging.getLogger(__name__)
 
-WIND_RISK_THRESHOLD_LOWER = 13.4  # 30 mph in m/s
-WIND_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s
+_EXTREME_HEAT_RISK_THRESHOLD = 30
+_EXTREME_COLD_RISK_THRESHOLD = 0
+
+_WIND_SPEED_RISK_THRESHOLD_LOWER = 13.4  # 30 mph in m/s (should not exceed the upper threshold)
+_WIND_SPEED_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s (should not exceed 25)
+
+_PCT_OF_MEDIAN_FILTER_THRESHOLD_EXTREME_WEATHER = 0.035
+_PCT_OF_MEDIAN_FILTER_THRESHOLD_STORM = 0.01
+
+_EXTREME_WEATHER_WEIGHTS = {"heat_risk": 0.25, "cold_risk": 0.25, "drought_risk": 0.25, "storm_risk": 0.25}
+_EXTREME_HEAT_WEIGHTS = {"max_temp_summer_risk": 0.5, "hot_summer_days": 0.25, "extreme_summer_days": 0.25}
+_EXTREME_COLD_WEIGHTS = {"min_temp_winter_risk": 0.5, "frost_days": 0.25, "icing_days": 0.25}
 
 ### GENERAL FUNCTIONS
 
@@ -25,13 +35,12 @@ WIND_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s
 def min_max_scaling_pair(
     risk_data: pd.DataFrame, pairs: list[tuple[str, str]], feature_range: tuple[int, int] = (0, 100)
 ) -> pd.DataFrame:
-    """
-    Scale paired columns jointly using Min-Max scaling.
+    """Scale paired columns jointly using Min-Max scaling.
 
-    For each tuple ``(col_current, col_forecast)`` in ``pairs``, this function computes a
+    For each tuple (col_current, col_forecast) in `pairs`, this function computes a
     single minimum and maximum across the combined values of both columns and
-    applies a shared ``MinMaxScaler`` (from scikit-learn) with the provided
-    ``feature_range``. This ensures the two columns in each pair are scaled
+    applies a shared `sklearn.preprocessing.MinMaxScaler` with the provided
+    `feature_range`. This ensures the two columns in each pair are scaled
     using the same mapping so they are directly comparable.
 
     Parameters
@@ -63,12 +72,12 @@ def min_max_scaling_pair(
     return risk_data
 
 
-def _spatial_smooth_zero_grids(
-    gdf: gpd.GeoDataFrame, variables: list[str]
+def _spatial_infill_zero_grids(
+    risk_grid: gpd.GeoDataFrame, variables: list[str]
 ) -> gpd.GeoDataFrame:
-    """Apply spatial smoothing to GeoDataFrame on given variables."""
+    """Apply spatial infilling to GeoDataFrame on given variables."""
     neighbours = gpd.sjoin(
-        gdf, gdf, how="left", predicate="touches"
+        risk_grid, risk_grid, how="left", predicate="touches"
     )  # Find neighbouring grids
 
     # Calculate the average value of the neighbouring grids
@@ -78,30 +87,30 @@ def _spatial_smooth_zero_grids(
 
     for var in variables:
         # Set condition as variable is NA
-        na_condition = gdf[var].isna()
+        na_condition = risk_grid[var].isna()
 
         # Fill with neighbour average
-        gdf.loc[na_condition, var] = gdf.loc[na_condition].index.map(
+        risk_grid.loc[na_condition, var] = risk_grid.loc[na_condition].index.map(
             neighbours_avg[f"{var}_right"]
         )
 
-    return gdf
+    return risk_grid
 
 
-def _iterative_spatial_smoothing(
-    gdf: gpd.GeoDataFrame, variables: list[str], max_iterations: int = 10
+def _iterative_spatial_infilling(
+    risk_grid: gpd.GeoDataFrame, variables: list[str], max_iterations: int = 10
 ) -> gpd.GeoDataFrame:
-    """Apply spatial smoothing iteratively to GeoDataFrame on given variables."""
+    """Apply spatial infilling iteratively to GeoDataFrame on given variables."""
     prev_na_count = None
 
     for i in range(max_iterations):
         # Count current NA values
-        current_na_count = gdf[variables].isna().sum().sum()
+        current_na_count = risk_grid[variables].isna().sum().sum()
 
         # Stop if all filled
         if current_na_count == 0:
             LOG.info("All NA values filled after %s iterations.", i)
-            return gdf
+            return risk_grid
 
         # Stop if no improvement
         if prev_na_count is not None and current_na_count == prev_na_count:
@@ -110,33 +119,33 @@ def _iterative_spatial_smoothing(
 
         prev_na_count = current_na_count
 
-        gdf = _spatial_smooth_zero_grids(gdf, variables)
+        risk_grid = _spatial_infill_zero_grids(risk_grid, variables)
 
     # Fallback: nearest join for remaining NAs
-    remaining_na = gdf[gdf[variables].isna().any(axis=1)]
+    remaining_na = risk_grid[risk_grid[variables].isna().any(axis=1)]
     if not remaining_na.empty:
-        nearest = gpd.sjoin_nearest(remaining_na, gdf.drop(remaining_na.index), how="left")
+        nearest = gpd.sjoin_nearest(remaining_na, risk_grid.drop(remaining_na.index), how="left")
 
         # Calculate the average value of the neighbouring grids
         nearest_avg = nearest.groupby(nearest.index)[
             [f"{var}_right" for var in variables]
         ].mean()
         for var in variables:
-            na_condition = gdf[var].isna()
+            na_condition = risk_grid[var].isna()
             # Fill with neighbour average
-            gdf.loc[na_condition, var] = gdf.loc[na_condition].index.map(
+            risk_grid.loc[na_condition, var] = risk_grid.loc[na_condition].index.map(
                 nearest_avg[f"{var}_right"]
             )
 
-    return gdf
+    return risk_grid
 
 
-def _create_grid(bounds: np.ndarray, cell_size: int) -> gpd.GeoDataFrame:
+def _create_grid(xmin: float, ymin: float, xmax: float, ymax: float, cell_size: int) -> gpd.GeoDataFrame:
     """Take bounds and a cell size and return a grid of the given size within the bounds."""
-    xmin, ymin, xmax, ymax = bounds
     rows = int(np.ceil((ymax - ymin) / cell_size))
     cols = int(np.ceil((xmax - xmin) / cell_size))
     grid_cells = []
+
     for i in range(cols):
         for j in range(rows):
             x0 = xmin + i * cell_size
@@ -148,16 +157,26 @@ def _create_grid(bounds: np.ndarray, cell_size: int) -> gpd.GeoDataFrame:
 
 
 def _merge_on_key(
-    dfs: list[pd.DataFrame], grid: gpd.GeoDataFrame, key: str
+    df_list: list[pd.DataFrame], grid: gpd.GeoDataFrame, key: str
 ) -> gpd.GeoDataFrame:
     """Merge dataframes into single dataframe on common key, then merge onto a common grid."""
-    merged = reduce(lambda left, right: left.merge(right, on=key, how="outer"), dfs)
+    # Check whether the dataframes list is empty:
+    if not df_list:
+        raise ValueError("dfs must contain at least one DataFrame")
+    # Check whether the merge key is present in the DataFrames
+    missing = [i for i, df in enumerate(df_list) if key not in df.columns]
+    if missing:
+        raise KeyError(f"Merge key '{key}' missing in dfs at positions {missing}.")
+    # Check whether the merge key is present in the grid to merge onto
+    if key not in grid.columns:
+        raise KeyError(f"Merge key '{key}' missing in grid.")
+    merged = reduce(lambda left, right: left.merge(right, on=key, how="outer"), df_list)
     merged_df = merged.merge(grid, on=key, how="left", validate="one_to_many")
     return gpd.GeoDataFrame(merged_df, geometry="geometry", crs=grid.crs)
 
 
 def _calculate_risk_threshold(
-    df: pd.DataFrame, base_col: str, output_col: str, threshold: int, invert: bool = False
+    risk_data: pd.DataFrame, base_col: str, output_col: str, threshold: int, invert: bool = False
 ) -> pd.DataFrame:
     """Calculate risk level of a given column based on a threshold."""
     for scenario in ["current", "forecast"]:
@@ -165,11 +184,11 @@ def _calculate_risk_threshold(
         out_name = f"{output_col}_{scenario}"
 
         if invert:
-            df[out_name] = np.where(df[col_name] > threshold, 0, -df[col_name])
+            risk_data[out_name] = np.where(risk_data[col_name] > threshold, 0, -risk_data[col_name])
         else:
-            df[out_name] = np.where(df[col_name] < threshold, 0, df[col_name] - threshold)
+            risk_data[out_name] = np.where(risk_data[col_name] < threshold, 0, risk_data[col_name] - threshold)
 
-    return df
+    return risk_data
 
 
 def _calculate_composite_score(
@@ -182,36 +201,6 @@ def _calculate_composite_score(
         )
 
     return df
-
-
-def _overlay_normalise(
-    gdf1: gpd.GeoDataFrame,
-    gdf2: gpd.GeoDataFrame,
-    risk_cols: list[str],
-    combined_risk_name: str,
-    weights: dict[str, float],
-) -> gpd.GeoDataFrame:
-    """Overlay two GeoDataFrames, then normalise and calculate a combined risk score."""
-    # Overlay two gdf's
-    gdf1 = gdf1.to_crs(gdf2.crs)
-    composite_gdf = gpd.overlay(gdf2, gdf1, how="union")
-
-    composite_gdf = data_cleaning.explode_to_polygons(composite_gdf)
-
-    # Fill NA values with 0, indicating no risk
-    composite_gdf[risk_cols] = composite_gdf[risk_cols].fillna(0)
-
-    # Normalise risk values
-    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=(0, 100))
-    normalised_values = scaler.fit_transform(composite_gdf[risk_cols])
-
-    # Compute composite risk score
-    composite_gdf[combined_risk_name] = (
-        normalised_values[:, 0] * weights[risk_cols[0]]
-        + normalised_values[:, 1] * weights[risk_cols[1]]
-    )
-
-    return composite_gdf
 
 
 def _filter_out_small_geometries(
@@ -296,10 +285,10 @@ def _extreme_weather_index(config: model_config.Config) -> None:
     )
 
     tfn_extreme_weather_overlay = _filter_out_small_geometries(
-        tfn_extreme_weather_overlay, 0.035
+        tfn_extreme_weather_overlay, _PCT_OF_MEDIAN_FILTER_THRESHOLD_EXTREME_WEATHER
     )
 
-    tfn_extreme_weather_risk = _iterative_spatial_smoothing(
+    tfn_extreme_weather_risk = _iterative_spatial_infilling(
         tfn_extreme_weather_overlay,
         [
             "heat_risk_current",
@@ -318,7 +307,7 @@ def _extreme_weather_index(config: model_config.Config) -> None:
 
     tfn_extreme_weather_risk = _calculate_composite_score(
         tfn_extreme_weather_risk,
-        {"heat_risk": 0.25, "cold_risk": 0.25, "drought_risk": 0.25, "storm_risk": 0.25},
+        _EXTREME_WEATHER_WEIGHTS,
         "extreme_weather_risk",
     )
 
@@ -369,7 +358,7 @@ def _extreme_heat_index(
     tfn_extreme_heat = _merge_on_key([tfn_temp_max, tfn_hsd, tfn_esd], common_grid, "grid_id")
 
     tfn_extreme_heat = _calculate_risk_threshold(
-        tfn_extreme_heat, "max_temp_summer", "max_temp_summer_risk", 30
+        tfn_extreme_heat, "max_temp_summer", "max_temp_summer_risk", _EXTREME_HEAT_RISK_THRESHOLD
     )
 
     tfn_extreme_heat = min_max_scaling_pair(
@@ -383,11 +372,7 @@ def _extreme_heat_index(
 
     tfn_extreme_heat = _calculate_composite_score(
         tfn_extreme_heat,
-        {
-            "max_temp_summer_risk": 0.5,
-            "hot_summer_days": 0.25,
-            "extreme_summer_days": 0.25,
-        },
+        _EXTREME_HEAT_WEIGHTS,
         "heat_risk",
     )
 
@@ -432,7 +417,7 @@ def _extreme_cold_index(
     )
 
     tfn_extreme_cold = _calculate_risk_threshold(
-        tfn_extreme_cold, "min_temp_winter", "min_temp_winter_risk", 0, invert=True
+        tfn_extreme_cold, "min_temp_winter", "min_temp_winter_risk", _EXTREME_COLD_RISK_THRESHOLD, invert=True
     )
 
     tfn_extreme_cold = min_max_scaling_pair(
@@ -446,7 +431,7 @@ def _extreme_cold_index(
 
     tfn_extreme_cold = _calculate_composite_score(
         tfn_extreme_cold,
-        {"min_temp_winter_risk": 0.5, "frost_days": 0.25, "icing_days": 0.25},
+        _EXTREME_COLD_WEIGHTS,
         "cold_risk",
     )
 
@@ -491,7 +476,7 @@ def _drought_index(
     tfn_precip_sum_gdf = tfn_precip_sum_gdf.to_crs(_BNG_CRS)
 
     tfn_drought_overlay = gpd.overlay(tfn_precip_sum_gdf, tfn_drought, how="union")
-    tfn_drought_overlay = _iterative_spatial_smoothing(
+    tfn_drought_overlay = _iterative_spatial_infilling(
         tfn_drought_overlay,
         [
             "precip_summer_current",
@@ -609,9 +594,9 @@ def _storm_index(
         ]
     ]
 
-    tfn_storm_overlay = _filter_out_small_geometries(tfn_storm_overlay, 0.01)
+    tfn_storm_overlay = _filter_out_small_geometries(tfn_storm_overlay, _PCT_OF_MEDIAN_FILTER_THRESHOLD_STORM)
 
-    tfn_storm_overlay = _iterative_spatial_smoothing(
+    tfn_storm_overlay = _iterative_spatial_infilling(
         tfn_storm_overlay,
         [
             "rain_days_current",
@@ -674,11 +659,11 @@ def _storm_index(
 
 def _wind_risk_scaled(speed_metres_per_second: float) -> float:
     """Calculate wind risk value given a wind speed, based on classification rule."""
-    if speed_metres_per_second < WIND_RISK_THRESHOLD_LOWER:  # Below 30 mph
+    if speed_metres_per_second < _WIND_SPEED_RISK_THRESHOLD_LOWER:  # Below 30 mph
         return 0
-    if speed_metres_per_second <= WIND_RISK_THRESHOLD_UPPER:  # between 30 and 45 mph
-        return (speed_metres_per_second - 13.4) / (20.1 - 13.4)  # Scale to 0 - 1
-    return 1 + (speed_metres_per_second - 20.1) / (25 - 20.1)  # Scale beyond 1
+    if speed_metres_per_second <= _WIND_SPEED_RISK_THRESHOLD_UPPER:  # between 30 and 45 mph
+        return (speed_metres_per_second - _WIND_SPEED_RISK_THRESHOLD_LOWER) / (_WIND_SPEED_RISK_THRESHOLD_UPPER - _WIND_SPEED_RISK_THRESHOLD_LOWER)  # Scale to 0 - 1
+    return 1 + (speed_metres_per_second - _WIND_SPEED_RISK_THRESHOLD_UPPER) / (25 - _WIND_SPEED_RISK_THRESHOLD_UPPER)  # Scale beyond 1
 
 
 ### FLOODING
@@ -750,8 +735,8 @@ def _create_flood_grid(
     config: model_config.Config, size_m: int, boundary: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
     """Create a grid of a given size in metres, within a given boundary."""
-    bounds = boundary.total_bounds
-    grid = _create_grid(bounds, size_m)
+    xmin, ymin, xmax, ymax = boundary.total_bounds
+    grid = _create_grid(xmin, ymin, xmax, ymax, size_m)
     flood_grid = data_cleaning.clip_to_boundary(grid, boundary)
     data_cleaning.write_to_file(
         flood_grid, config.paths.model_interim_output / "Other" / "flood_grid.gpkg"
@@ -907,7 +892,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
     for col in risk_cols:
         tfn_ground_stability[col] = pd.to_numeric(tfn_ground_stability[col], errors="coerce")
 
-    tfn_ground_stability = _iterative_spatial_smoothing(tfn_ground_stability, risk_cols)
+    tfn_ground_stability = _iterative_spatial_infilling(tfn_ground_stability, risk_cols)
 
     gs_pairs = [(f"{col}_risk_current", f"{col}_risk_forecast") for col in hazards]
 
@@ -967,13 +952,22 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
             / f"tfn_ncerm_smp_{year}_70CC.gpkg"
         )
         tfn_ncerm[year]["coastal_erosion_risk"] = 1
-        tfn_erosion_risk[scenario] = _overlay_normalise(
-            tfn_ncerm_giz,
-            tfn_ncerm[year],
-            ["coastal_erosion_risk", "giz_risk"],
-            "coastal_erosion_risk",
-            {"coastal_erosion_risk": 0.9, "giz_risk": 0.1},
+
+        tfn_ncerm_giz = tfn_ncerm_giz.to_crs(tfn_ncerm[year].crs)
+        tfn_erosion_risk[scenario] = gpd.overlay(tfn_ncerm_giz, tfn_ncerm[year], how='union')
+
+        tfn_erosion_risk[scenario] = data_cleaning.explode_to_polygons(tfn_erosion_risk[scenario])
+         # Normalise risk values
+        scaler = sklearn.preprocessing.MinMaxScaler(feature_range=(0, 100))
+        normalised_values = scaler.fit_transform(tfn_erosion_risk[scenario][["coastal_erosion_risk", "giz_risk"]])
+
+        coastal_erosion_weights = {"coastal_erosion_risk": 0.9, "giz_risk": 0.1}
+        # Compute composite risk score
+        tfn_erosion_risk[scenario]["coastal_erosion_risk"] = (
+            normalised_values[:, 0] * coastal_erosion_weights["coastal_erosion_risk"]
+            + normalised_values[:, 1] * coastal_erosion_weights["giz_risk"]
         )
+
         tfn_erosion_risk[scenario] = tfn_erosion_risk[scenario].rename(
             columns={"coastal_erosion_risk": f"coastal_erosion_risk_{scenario}"}
         )
