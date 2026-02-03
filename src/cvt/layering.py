@@ -1,12 +1,15 @@
 """Intersect infrastructure with hazard layers to assign risk scores to infrastructure."""
 
+import pathlib
+
+import data_cleaning
+import file_paths
+import functional_rules
 import geopandas as gpd
+import model_config
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
-
-import data_cleaning, functional_rules, model_config
-from data_cleaning import _BNG_CRS
 
 # GENERAL FUNCTIONS
 
@@ -104,7 +107,7 @@ def _prepare_model_output(
     gdf = gdf.drop_duplicates(subset=["geometry"])
     gdf = gdf.rename(columns=rename_map)
     gdf[desc_cols] = gdf[desc_cols].replace(0, "N/A")
-    gdf = gdf.to_crs(epsg=_BNG_CRS)
+    gdf = gdf.to_crs(epsg=data_cleaning._BNG_CRS)
     gdf = _reshape_for_current_forecast(gdf, "id", risk_cols_order)
     gdf[risk_cols_order] = gdf[risk_cols_order].round(1)
     return gdf.rename(columns={col: f"{col}_score" for col in risk_cols_order})
@@ -114,9 +117,7 @@ def _split_csv_shapefile(
     config: model_config.Config,
     gdf: gpd.GeoDataFrame,
     id_col: str,
-    inf_type: str,
-    folder: str,
-    filename: str,
+    out_path_no_suffix: pathlib.Path,
 ) -> None:
     """Split GeoDataFrame into a CSV and Shapefile, then write to file.
 
@@ -129,10 +130,10 @@ def _split_csv_shapefile(
 
     # Save to file
     data_cleaning.write_to_file(
-        spatial_gdf, config.paths.model_output / inf_type / folder / f"{filename}.shp"
+        spatial_gdf, config.paths.model_output / out_path_no_suffix.with_suffix(".shp")
     )
     data_cleaning.write_to_file(
-        attribute_df, config.paths.model_output / inf_type / folder / f"{filename}.csv"
+        attribute_df, config.paths.model_output / out_path_no_suffix.with_suffix(".csv")
     )
 
 
@@ -197,21 +198,18 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
     return {
         "Extreme Weather": gpd.read_file(
             config.paths.model_interim_output
-            / "TfN Extreme Weather Risk"
-            / "tfn_extreme_weather_risk.gpkg"
+            / file_paths.EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH
         ),
         "Flooding": gpd.read_file(
-            config.paths.model_interim_output / "TfN Flood Risk" / "tfn_flood_risk.gpkg"
+            config.paths.model_interim_output / file_paths.FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH
         ),
         "Ground Stability": gpd.read_file(
             config.paths.model_interim_output
-            / "TfN Ground Stability Risk"
-            / "tfn_ground_stability_risk.gpkg"
+            / file_paths.GROUND_STABILITY_MODEL_INTERIM_OUTPUT_PATH
         ),
         "Coastal Erosion": gpd.read_file(
             config.paths.model_interim_output
-            / "TfN Coastal Erosion Risk"
-            / "tfn_coastal_erosion_risk.gpkg"
+            / file_paths.COASTAL_EROSION_MODEL_INTERIM_OUTPUT_PATH
         ),
     }
 
@@ -254,13 +252,7 @@ def _os_open_road_risk(
     risk_cols: list[str],
 ) -> None:
     """Intersect OS Road infrastructure with hazards, clean output, and write to file."""
-    tfn_os_road = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Road"
-        / "TfN OS Road"
-        / "tfn_os_road.gpkg"
-    )
+    tfn_os_road = gpd.read_file(config.paths.model_input / file_paths.OS_ROAD_MODEL_INPUT_PATH)
 
     tfn_os_road_risk = _infrastructure_risk_intersect(tfn_os_road, hazard_layers)
 
@@ -273,7 +265,7 @@ def _os_open_road_risk(
     )
 
     _split_csv_shapefile(
-        config, tfn_os_road_risk, "id", "Road", "OS Roads", "tfn_os_road_risk"
+        config, tfn_os_road_risk, "id", pathlib.Path("Road") / "OS Roads" / "tfn_os_road_risk"
     )
 
 
@@ -293,12 +285,10 @@ def _noham_road_risk(
     """
     tfn_noham = {}
     tfn_noham_risk_scenario = {}
-    for year, scenario in {"2023": "current", "2048": "forecast"}.items():
+    for _, scenario in {"2023": "current", "2048": "forecast"}.items():
         tfn_noham[scenario] = gpd.read_file(
             config.paths.model_input
-            / "Impact"
-            / "TfN NoHAM Flows"
-            / year
+            / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
             / f"tfn_noham_net_flows_{scenario}.gpkg"
         )
         tfn_noham_risk_scenario[scenario] = _infrastructure_risk_intersect(
@@ -364,13 +354,15 @@ def _noham_road_risk(
         col for col in tfn_noham_risk.columns if col not in ["link_id", "geometry"]
     ]
     tfn_noham_risk[cols_to_round] = tfn_noham_risk[cols_to_round].round(1)
-    tfn_noham_risk = tfn_noham_risk.to_crs(epsg=_BNG_CRS)
+    tfn_noham_risk = tfn_noham_risk.to_crs(epsg=data_cleaning._BNG_CRS)
     tfn_noham_risk = tfn_noham_risk.rename(columns={"link_id": "id"})
     tfn_noham_risk = tfn_noham_risk.rename(
         columns={col: f"{col}_score" for col in cols_to_round}
     )
 
-    _split_csv_shapefile(config, tfn_noham_risk, "id", "Road", "NoHAM", "tfn_noham_risk")
+    _split_csv_shapefile(
+        config, tfn_noham_risk, "id", pathlib.Path("Road") / "NoHAM" / "tfn_noham_risk"
+    )
 
 
 def _noham_impact_index(
@@ -514,11 +506,7 @@ def _passenger_rail_risk(
 ) -> None:
     """Intersect passenger rail network with hazard to assign risk, clean and write to file."""
     tfn_rail_network = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Rail"
-        / "TfN OS Passenger Rail"
-        / "tfn_pass_rail_links.gpkg"
+        config.paths.model_input / file_paths.PASSENGER_RAIL_MODEL_INPUT_PATH
     )
 
     tfn_rail_network_risk = _infrastructure_risk_intersect(tfn_rail_network, hazard_layers)
@@ -547,9 +535,7 @@ def _passenger_rail_risk(
         config,
         tfn_rail_network_risk,
         "id",
-        "Rail",
-        "Passenger Rail",
-        "tfn_passenger_rail_network_risk",
+        pathlib.Path("Rail") / "Passenger Rail" / "tfn_passenger_rail_network_risk",
     )
 
 
@@ -568,10 +554,7 @@ def _freight_rail_risk(
     file.
     """
     tfn_freight_network = gpd.read_file(
-        config.paths.model_input
-        / "Impact"
-        / "TfN Freight Flows"
-        / "tfn_freight_network_demand.gpkg"
+        config.paths.model_input / file_paths.FREIGHT_DEMAND_MODEL_INPUT_PATH
     )
 
     tfn_freight_network_risk = _infrastructure_risk_intersect(
@@ -582,7 +565,7 @@ def _freight_rail_risk(
 
     # Set the correct CRS
     tfn_freight_network_risk = tfn_freight_network_risk.set_crs(
-        epsg=_BNG_CRS, allow_override=True
+        epsg=data_cleaning._BNG_CRS, allow_override=True
     )
 
     tfn_freight_network_risk = _prepare_model_output(
@@ -609,9 +592,7 @@ def _freight_rail_risk(
         config,
         tfn_freight_network_risk,
         "id",
-        "Rail",
-        "Freight Rail",
-        "tfn_freight_rail_network_risk",
+        pathlib.Path("Rail") / "Freight Rail" / "tfn_freight_rail_network_risk",
     )
 
 
@@ -679,7 +660,7 @@ def _get_other_risk(
 
 def _buffer_geometry(gdf: gpd.GeoDataFrame, buffer_size_m: int) -> gpd.GeoDataFrame:
     """Buffers the geometries of a given GeoDataFrame to a given size in metres."""
-    gdf = gdf.to_crs(epsg=_BNG_CRS)
+    gdf = gdf.to_crs(epsg=data_cleaning._BNG_CRS)
     gdf["geometry"] = gdf.buffer(buffer_size_m)
     return gdf
 
@@ -697,11 +678,7 @@ def _train_stations_risk(
     Buffer train stations, then intersect with hazard risk, clean output, and write to file.
     """
     tfn_train_stations = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Train Stations"
-        / "tfn_train_stations.gpkg"
+        config.paths.model_input / file_paths.TRAIN_STATIONS_MODEL_INPUT_PATH
     )
 
     tfn_train_stations = _buffer_geometry(tfn_train_stations, 100)
@@ -720,9 +697,7 @@ def _train_stations_risk(
         config,
         tfn_train_stations_risk,
         "id",
-        "Other",
-        "Train Stations",
-        "tfn_train_stations_risk",
+        pathlib.Path("Other") / "Train Stations" / "tfn_train_stations_risk",
     )
 
 
@@ -739,11 +714,7 @@ def _ev_charging_sites_risk(
     Buffer charging sites, then intersect with hazard risk, clean output, and write to file.
     """
     tfn_chg_sites = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN EV Charging Sites"
-        / "tfn_chg_sites.gpkg"
+        config.paths.model_input / file_paths.CHARGING_SITES_MODEL_INPUT_PATH
     )
 
     tfn_chg_sites = _buffer_geometry(tfn_chg_sites, 25)
@@ -759,7 +730,10 @@ def _ev_charging_sites_risk(
     )
 
     _split_csv_shapefile(
-        config, tfn_chg_sites_risk, "id", "Other", "EV Charging Sites", "tfn_chg_sites_risk"
+        config,
+        tfn_chg_sites_risk,
+        "id",
+        pathlib.Path("Other") / "EV Charging Sites" / "tfn_chg_sites_risk",
     )
 
 
@@ -776,11 +750,7 @@ def _airports_risk(
     Intersect airports with hazard risk, clean output, and write to file.
     """
     tfn_airports = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN Airports"
-        / "tfn_airports.gpkg"
+        config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH
     )
 
     tfn_airports_risk = _infrastructure_risk_intersect(tfn_airports, hazard_layers)
@@ -794,7 +764,10 @@ def _airports_risk(
     )
 
     _split_csv_shapefile(
-        config, tfn_airports_risk, "id", "Other", "Airports", "tfn_airports_risk"
+        config,
+        tfn_airports_risk,
+        "id",
+        pathlib.Path("Other") / "Airports" / "tfn_airports_risk",
     )
 
 
@@ -812,11 +785,7 @@ def _bus_coach_stations_risk(
     file.
     """
     tfn_bus_coach_stations = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Bus Coach Stations"
-        / "tfn_bus_coach_stations.gpkg"
+        config.paths.model_input / file_paths.BUS_COACH_STATIONS_MODEL_INPUT_PATH
     )
 
     tfn_bus_coach_stations = _buffer_geometry(tfn_bus_coach_stations, 50)
@@ -837,9 +806,7 @@ def _bus_coach_stations_risk(
         config,
         tfn_bus_coach_stations_risk,
         "id",
-        "Other",
-        "Bus and Coach Stations",
-        "tfn_bus_coach_stations_risk",
+        pathlib.Path("Other") / "Bus and Coach Stations" / "tfn_bus_coach_stations_risk",
     )
 
 
@@ -853,11 +820,7 @@ def _bus_stops_risk(
 ) -> None:
     """Intersect bus stops with hazard risk, clean output, and write to file."""
     tfn_bus_stops = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN Bus Stops"
-        / "tfn_bus_stops.gpkg"
+        config.paths.model_input / file_paths.BUS_STOPS_MODEL_INPUT_PATH
     )
 
     tfn_bus_stops_risk = _infrastructure_risk_intersect(tfn_bus_stops, hazard_layers)
@@ -871,7 +834,10 @@ def _bus_stops_risk(
     )
 
     _split_csv_shapefile(
-        config, tfn_bus_stops_risk, "id", "Other", "Bus Stops", "tfn_bus_stops_risk"
+        config,
+        tfn_bus_stops_risk,
+        "id",
+        pathlib.Path("Other") / "Bus Stops" / "tfn_bus_stops_risk",
     )
 
 
@@ -888,11 +854,7 @@ def _tram_stations_risk(
     Buffer tram stations, then intersect with hazard risk, clean output, and write to file.
     """
     tfn_tram_stations = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Tram Stations"
-        / "tfn_tram_stations.gpkg"
+        config.paths.model_input / file_paths.TRAM_STATIONS_MODEL_INPUT_PATH
     )
 
     tfn_tram_stations = _buffer_geometry(tfn_tram_stations, 25)
@@ -911,9 +873,7 @@ def _tram_stations_risk(
         config,
         tfn_tram_stations_risk,
         "id",
-        "Other",
-        "Tram Stations",
-        "tfn_tram_stations_risk",
+        pathlib.Path("Other") / "Tram Stations" / "tfn_tram_stations_risk",
     )
 
 
@@ -930,20 +890,18 @@ def _rapid_transport_stations_risk(
     Buffer rapid transport stations, then interrsect with hazard risk, clean output, and write
     to file.
     """
-    tfn_metro_stations = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Rapid Transport Stations"
-        / "tfn_rapid_transport_stations.gpkg"
+    tfn_rapid_transport_stations = gpd.read_file(
+        config.paths.model_input / file_paths.RAPID_TRANSPORT_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_metro_stations = _buffer_geometry(tfn_metro_stations, 50)
+    tfn_rapid_transport_stations = _buffer_geometry(tfn_rapid_transport_stations, 50)
 
-    tfn_metro_stations_risk = _infrastructure_risk_intersect(tfn_metro_stations, hazard_layers)
+    tfn_rapid_transport_stations_risk = _infrastructure_risk_intersect(
+        tfn_rapid_transport_stations, hazard_layers
+    )
 
-    tfn_metro_stations_risk = _prepare_model_output(
-        gdf=tfn_metro_stations_risk,
+    tfn_rapid_transport_stations_risk = _prepare_model_output(
+        gdf=tfn_rapid_transport_stations_risk,
         drop_cols=[],
         desc_cols=[],
         rename_map={"nodeid": "id"},
@@ -952,11 +910,11 @@ def _rapid_transport_stations_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_metro_stations_risk,
+        tfn_rapid_transport_stations_risk,
         "id",
-        "Other",
-        "Rapid Transport Stations",
-        "tfn_rapid_transport_stations_risk",
+        pathlib.Path("Other")
+        / "Rapid Transport Stations"
+        / "tfn_rapid_transport_stations_risk",
     )
 
 
@@ -973,11 +931,7 @@ def _ferry_terminals_risk(
     Buffer ferry terminals, then intersect with hazard risk, clean output, and write to file.
     """
     tfn_ferry_terminals = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Ferry Terminals"
-        / "tfn_ferry_terminals.gpkg"
+        config.paths.model_input / file_paths.FERRY_TERMINALS_MODEL_INPUT_PATH
     )
 
     tfn_ferry_terminals = _buffer_geometry(tfn_ferry_terminals, 50)
@@ -998,9 +952,7 @@ def _ferry_terminals_risk(
         config,
         tfn_ferry_terminals_risk,
         "id",
-        "Other",
-        "Ferry Terminals",
-        "tfn_ferry_terminals_risk",
+        pathlib.Path("Other") / "Ferry Terminals" / "tfn_ferry_terminals_risk",
     )
 
 
@@ -1017,11 +969,7 @@ def _petrol_stations_risk(
     Buffer petrol stations, then intersect with hazard risk, clean output, and write to file.
     """
     tfn_petrol_stations = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN Petrol Stations"
-        / "tfn_petrol_stations.gpkg"
+        config.paths.model_input / file_paths.PETROL_STATIONS_MODEL_INPUT_PATH
     )
 
     tfn_petrol_stations = _buffer_geometry(tfn_petrol_stations, 50)
@@ -1042,9 +990,7 @@ def _petrol_stations_risk(
         config,
         tfn_petrol_stations_risk,
         "id",
-        "Other",
-        "Petrol Stations",
-        "tfn_petrol_stations_risk",
+        pathlib.Path("Other") / "Petrol Stations" / "tfn_petrol_stations_risk",
     )
 
 
@@ -1061,7 +1007,7 @@ def _ncn_risk(
     Intersect National Cycle Network with hazard risk, clean output, then write to file.
     """
     tfn_ncn = gpd.read_file(
-        config.paths.model_input / "Infrastructure" / "Other" / "TfN NCN" / "tfn_ncn.gpkg"
+        config.paths.model_input / file_paths.NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH
     )
 
     tfn_ncn_risk = _infrastructure_risk_intersect(tfn_ncn, hazard_layers)
@@ -1096,7 +1042,10 @@ def _ncn_risk(
     )
 
     _split_csv_shapefile(
-        config, tfn_ncn_risk, "id", "Other", "National Cycle Network", "tfn_ncn_risk"
+        config,
+        tfn_ncn_risk,
+        "id",
+        pathlib.Path("Other") / "National Cycle Network" / "tfn_ncn_risk",
     )
 
 
@@ -1113,11 +1062,7 @@ def _tram_network_risk(
     Intersect tram network with hazard risk, clean output, then write to file.
     """
     tfn_tram_network = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Tram Network"
-        / "tfn_os_tram_links.gpkg"
+        config.paths.model_input / file_paths.TRAM_NETWORK_MODEL_INPUT_PATH
     )
 
     tfn_tram_risk = _infrastructure_risk_intersect(tfn_tram_network, hazard_layers)
@@ -1143,7 +1088,10 @@ def _tram_network_risk(
     )
 
     _split_csv_shapefile(
-        config, tfn_tram_risk, "id", "Other", "Tram Network", "tfn_tram_links_risk"
+        config,
+        tfn_tram_risk,
+        "id",
+        pathlib.Path("Other") / "Tram Network" / "tfn_tram_links_risk",
     )
 
 
@@ -1160,11 +1108,7 @@ def _rapid_transport_network_risk(
     Intersect rapid transport network with hazard risk, clean output, then write to file.
     """
     tfn_rapid_transport = gpd.read_file(
-        config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN Rapid Transport Network"
-        / "tfn_rapid_transport_links.gpkg"
+        config.paths.model_input / file_paths.RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH
     )
 
     tfn_rapid_transport_risk = _infrastructure_risk_intersect(
@@ -1195,7 +1139,5 @@ def _rapid_transport_network_risk(
         config,
         tfn_rapid_transport_risk,
         "id",
-        "Other",
-        "Rapid Transport Network",
-        "tfn_rapid_transport_risk",
+        pathlib.Path("Other") / "Rapid Transport Network" / "tfn_rapid_transport_risk",
     )

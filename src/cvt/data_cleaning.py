@@ -232,8 +232,8 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    #_clean_infrastructure(config, boundary)
-    #_clean_hazards(config, boundary)
+    # _clean_infrastructure(config, boundary)
+    # _clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
 
@@ -319,6 +319,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
             / f"tfn_noham_{scenario}.gpkg",
         )
 
+
 ### RAIL
 
 
@@ -402,9 +403,9 @@ def _clean_passenger_rail(
     )
     write_to_file(
         tfn_pass_rail,
-        config.paths.model_input
-        / file_paths.PASSENGER_RAIL_MODEL_INPUT_PATH,
+        config.paths.model_input / file_paths.PASSENGER_RAIL_MODEL_INPUT_PATH,
     )
+
 
 def _clean_freight_rail(config: model_config.Config, tfn_rail_links: gpd.GeoDataFrame) -> None:
     """Filter OS rail data to freight rail network, then write to file."""
@@ -421,9 +422,9 @@ def _clean_freight_rail(config: model_config.Config, tfn_rail_links: gpd.GeoData
     )
     write_to_file(
         tfn_freight_rail,
-        config.paths.model_input
-        / file_paths.FREIGHT_RAIL_MODEL_INPUT_PATH,
+        config.paths.model_input / file_paths.FREIGHT_RAIL_MODEL_INPUT_PATH,
     )
+
 
 ### OTHER
 
@@ -451,11 +452,7 @@ def _clean_other(
 def _clean_airports(config: model_config.Config) -> None:
     """Read TfN airports dataset, then write to file in new directory."""
     airports = gpd.read_file(config.infrastructure.other.uk_airports)
-    write_to_file(
-        airports,
-        config.paths.model_input
-        / file_paths.AIRPORTS_MODEL_INPUT_PATH
-    )
+    write_to_file(airports, config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH)
 
 
 def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -487,8 +484,7 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     )
     write_to_file(
         tfn_bus_stops,
-        config.paths.model_input
-        / file_paths.BUS_STOPS_MODEL_INPUT_PATH,
+        config.paths.model_input / file_paths.BUS_STOPS_MODEL_INPUT_PATH,
     )
 
 
@@ -511,8 +507,7 @@ def _clean_petrol_stations(config: model_config.Config, boundary: gpd.GeoDataFra
     )
     write_to_file(
         tfn_petrol,
-        config.paths.model_input
-        / file_paths.PETROL_STATIONS_MODEL_INPUT_PATH,
+        config.paths.model_input / file_paths.PETROL_STATIONS_MODEL_INPUT_PATH,
     )
 
 
@@ -551,8 +546,7 @@ def _clean_train_stations(
     )
     write_to_file(
         tfn_train_stations,
-        config.paths.model_input
-        / file_paths.TRAIN_STATIONS_MODEL_INPUT_PATH,
+        config.paths.model_input / file_paths.TRAIN_STATIONS_MODEL_INPUT_PATH,
     )
 
 
@@ -574,9 +568,7 @@ def _clean_tram_stations(
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_tram_stations,
-        config.paths.model_input
-        / file_paths.TRAM_STATIONS_MODEL_INPUT_PATH
+        tfn_tram_stations, config.paths.model_input / file_paths.TRAM_STATIONS_MODEL_INPUT_PATH
     )
 
 
@@ -599,8 +591,7 @@ def _clean_rapid_transport_stations(
     )
     write_to_file(
         tfn_rapid_transport_stations,
-        config.paths.model_input
-        / file_paths.RAPID_TRANSPORT_STATIONS_MODEL_INPUT_PATH
+        config.paths.model_input / file_paths.RAPID_TRANSPORT_STATIONS_MODEL_INPUT_PATH,
     )
 
 
@@ -623,8 +614,7 @@ def _clean_ferry_terminals(
     )
     write_to_file(
         tfn_ferry_terminals,
-        config.paths.model_input
-        / file_paths.FERRY_TERMINALS_MODEL_INPUT_PATH,
+        config.paths.model_input / file_paths.FERRY_TERMINALS_MODEL_INPUT_PATH,
     )
 
 
@@ -648,8 +638,7 @@ def _clean_bus_coach_stations(
     )
     write_to_file(
         tfn_bus_coach_stations,
-        config.paths.model_input
-        / file_paths.BUS_COACH_STATIONS_MODEL_INPUT_PATH
+        config.paths.model_input / file_paths.BUS_COACH_STATIONS_MODEL_INPUT_PATH,
     )
 
 
@@ -670,9 +659,7 @@ def _clean_tram_network(config: model_config.Config, tfn_rail_links: gpd.GeoData
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_tram_links,
-        config.paths.model_input
-        / file_paths.TRAM_NETWORK_MODEL_INPUT_PATH
+        tfn_tram_links, config.paths.model_input / file_paths.TRAM_NETWORK_MODEL_INPUT_PATH
     )
 
 
@@ -698,8 +685,7 @@ def _clean_rapid_transport_network(
     )
     write_to_file(
         tfn_rapid_transport,
-        config.paths.model_input
-        / file_paths.RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH
+        config.paths.model_input / file_paths.RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH,
     )
 
 
@@ -728,9 +714,7 @@ def _clean_charging_sites(config: model_config.Config, boundary: gpd.GeoDataFram
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_chg_sites,
-        config.paths.model_input
-            / file_paths.CHARGING_SITES_MODEL_INPUT_PATH
+        tfn_chg_sites, config.paths.model_input / file_paths.CHARGING_SITES_MODEL_INPUT_PATH
     )
 
 
@@ -764,7 +748,6 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
         tfn_ncn,
         config.paths.model_input / file_paths.NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH,
     )
-
 
 
 ## HAZARDS
@@ -846,9 +829,7 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_temp_max,
-        config.paths.model_input
-        / file_paths.TEMP_MAX_MODEL_INPUT_PATH
+        tfn_temp_max, config.paths.model_input / file_paths.TEMP_MAX_MODEL_INPUT_PATH
     )
 
 
@@ -881,8 +862,7 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     )
     write_to_file(
         tfn_temp_min,
-        config.paths.model_input
-        / file_paths.TEMP_MIN_MODEL_INPUT_PATH,
+        config.paths.model_input / file_paths.TEMP_MIN_MODEL_INPUT_PATH,
     )
 
 
@@ -915,9 +895,7 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_precip_sum,
-        config.paths.model_input
-        / file_paths.SUMMER_PRECIP_MODEL_INPUT_PATH
+        tfn_precip_sum, config.paths.model_input / file_paths.SUMMER_PRECIP_MODEL_INPUT_PATH
     )
 
 
@@ -950,9 +928,7 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_precip_win,
-        config.paths.model_input
-        / file_paths.WINTER_PRECIP_MODEL_INPUT_PATH
+        tfn_precip_win, config.paths.model_input / file_paths.WINTER_PRECIP_MODEL_INPUT_PATH
     )
 
 
@@ -975,9 +951,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_rain_days,
-        config.paths.model_input
-        / file_paths.RAIN_DAYS_MODEL_INPUT_PATH
+        tfn_rain_days, config.paths.model_input / file_paths.RAIN_DAYS_MODEL_INPUT_PATH
     )
 
 
@@ -1006,9 +980,7 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_drought,
-        config.paths.model_input
-        / file_paths.DROUGHT_INDEX_MODEL_INPUT_PATH
+        tfn_drought, config.paths.model_input / file_paths.DROUGHT_INDEX_MODEL_INPUT_PATH
     )
 
 
@@ -1036,9 +1008,7 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_hot_days,
-        config.paths.model_input
-        / file_paths.HOT_SUMMER_DAYS_MODEL_INPUT_PATH
+        tfn_hot_days, config.paths.model_input / file_paths.HOT_SUMMER_DAYS_MODEL_INPUT_PATH
     )
 
 
@@ -1067,8 +1037,7 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
     )
     write_to_file(
         tfn_extr_days,
-        config.paths.model_input
-        / file_paths.EXTREME_SUMMER_DAYS_MODEL_INPUT_PATH
+        config.paths.model_input / file_paths.EXTREME_SUMMER_DAYS_MODEL_INPUT_PATH,
     )
 
 
@@ -1093,9 +1062,7 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_frost_days,
-        config.paths.model_input
-        / file_paths.FROST_DAYS_MODEL_INPUT_PATH
+        tfn_frost_days, config.paths.model_input / file_paths.FROST_DAYS_MODEL_INPUT_PATH
     )
 
 
@@ -1120,9 +1087,7 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_ice_days,
-        config.paths.model_input
-        / file_paths.ICING_DAYS_MODEL_INPUT_PATH
+        tfn_ice_days, config.paths.model_input / file_paths.ICING_DAYS_MODEL_INPUT_PATH
     )
 
 
@@ -1149,9 +1114,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
             strict=False,
         )
     ]
-    windspd_combined = gpd.GeoDataFrame(
-        windspd_combined, geometry="geometry", crs=_BNG_CRS
-    )
+    windspd_combined = gpd.GeoDataFrame(windspd_combined, geometry="geometry", crs=_BNG_CRS)
     windspd_combined = windspd_combined[
         [
             "wind_speed_99th_percentile_current",
@@ -1172,9 +1135,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        tfn_windspd,
-        config.paths.model_input
-        / file_paths.WIND_SPEED_MODEL_INPUT_PATH
+        tfn_windspd, config.paths.model_input / file_paths.WIND_SPEED_MODEL_INPUT_PATH
     )
 
 
@@ -1288,10 +1249,8 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
     )
     write_to_file(
         tfn_wdr,
-        config.paths.model_input
-        / file_paths.WIND_DRIVEN_RAIN_MODEL_INPUT_PATH,
+        config.paths.model_input / file_paths.WIND_DRIVEN_RAIN_MODEL_INPUT_PATH,
     )
-
 
 
 ### FLOODING
@@ -1482,9 +1441,8 @@ def _clean_flood(
     flood_data_combined = _extract_poly_from_geomcollection(flood_data_combined)
     flood_data_combined = flood_data_combined[["Risk_band", "geometry"]]
 
-    write_to_file(
-        flood_data_combined, config.paths.model_input / out_path
-    )
+    write_to_file(flood_data_combined, config.paths.model_input / out_path)
+
 
 ### GROUND STABILITY
 
@@ -1559,11 +1517,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
     ]
     write_to_file(
         tfn_geosure,
-        config.paths.model_input
-        / "Hazards"
-        / "Ground Stability"
-        / "TfN GeoSure"
-        / "tfn_geosure.gpkg",
+        config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH,
     )
 
 
@@ -1578,10 +1532,7 @@ def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -
         write_to_file(
             tfn_gdf,
             config.paths.model_input
-            / "Hazards"
-            / "Ground Stability"
-            / "BGS Shrink Swell"
-            / year
+            / file_paths.GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH
             / f"tfn_bgs_ss_{year}.gpkg",
         )
 
@@ -1591,11 +1542,13 @@ def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -
 
 def _clean_coastal_erosion(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean coastal erosion data ready for analysis."""
-    _clean_giz(config, boundary)
+    _clean_ground_instability_zones(config, boundary)
     _clean_ncerm(config, boundary)
 
 
-def _clean_giz(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_ground_instability_zones(
+    config: model_config.Config, boundary: gpd.GeoDataFrame
+) -> None:
     """Clean Ground Instability Zones data from NCERM, then write to file."""
     ncerm_giz = gpd.read_file(
         f"zip://{config.hazards.coastal_erosion.zip_path}!{config.hazards.coastal_erosion.giz}"
@@ -1605,12 +1558,7 @@ def _clean_giz(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     tfn_ncerm_giz = explode_to_polygons(tfn_ncerm_giz)
     write_to_file(
         tfn_ncerm_giz,
-        config.paths.model_input
-        / "Hazards"
-        / "Coastal Erosion"
-        / "NCERM"
-        / "Ground Instability Zones"
-        / "tfn_ncerm_giz.gpkg",
+        config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH,
     )
 
 
@@ -1627,10 +1575,7 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
         write_to_file(
             tfn_gdf,
             config.paths.model_input
-            / "Hazards"
-            / "Coastal Erosion"
-            / "NCERM"
-            / f"SMP_{year}_70CC"
+            / file_paths.NCERM_MODEL_INPUT_PATH
             / f"tfn_ncerm_smp_{year}_70CC.gpkg",
         )
 
@@ -1640,7 +1585,7 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
 
 def _clean_impact(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean impact datasets ready for analysis."""
-    #_clean_freight_demand(config, boundary)
+    # _clean_freight_demand(config, boundary)
     _clean_noham_flows(config)
 
 
@@ -1653,19 +1598,12 @@ def _clean_freight_demand(config: model_config.Config, boundary: gpd.GeoDataFram
 
     tfn_os_freight_network_demand = _map_freight_networks(
         tfn_freight_network_demand,
-        config.paths.model_input
-        / "Infrastructure"
-        / "Rail"
-        / "TfN OS Freight Rail"
-        / "tfn_freight_rail_links.gpkg",
+        config.paths.model_input / file_paths.FREIGHT_RAIL_MODEL_INPUT_PATH,
     )
 
     write_to_file(
         tfn_os_freight_network_demand,
-        config.paths.model_input
-        / "Impact"
-        / "TfN Freight Flows"
-        / "tfn_freight_network_demand.gpkg",
+        config.paths.model_input / file_paths.FREIGHT_DEMAND_MODEL_INPUT_PATH,
     )
 
 
@@ -1716,9 +1654,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         write_to_file(
             tfn_noham_net_flows,
             config.paths.model_input
-            / "Impact"
-            / "TfN NoHAM Flows"
-            / year
+            / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
             / f"tfn_noham_net_flows_{scenario}.gpkg",
         )
 
@@ -1745,8 +1681,12 @@ def _read_noham_h5(
                 ],
             )
 
-
-    noham_demand_path = output_path / "input h5s" / year / f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
+    noham_demand_path = (
+        output_path
+        / "input h5s"
+        / year
+        / f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
+    )
 
     od_df = pd.read_hdf(noham_demand_path, key="/data/OD")
     route_df = pd.read_hdf(noham_demand_path, key="/data/Route")

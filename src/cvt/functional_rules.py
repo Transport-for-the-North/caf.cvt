@@ -5,36 +5,90 @@ import logging
 import pathlib
 from functools import reduce
 
+import data_cleaning
+import file_paths
 import geopandas as gpd
+import model_config
 import numpy as np
 import pandas as pd
 import sklearn
 from shapely.geometry import box
 
-import data_cleaning, model_config
-from data_cleaning import _BNG_CRS
-
 LOG = logging.getLogger(__name__)
+
+_SCENARIO_SUFFIXES = ["_current", "_forecast"]
 
 _EXTREME_HEAT_RISK_THRESHOLD = 30
 _EXTREME_COLD_RISK_THRESHOLD = 0
 
-_WIND_SPEED_RISK_THRESHOLD_LOWER = 13.4  # 30 mph in m/s (should not exceed the upper threshold)
+_WIND_SPEED_RISK_THRESHOLD_LOWER = (
+    13.4  # 30 mph in m/s (should not exceed the upper threshold)
+)
 _WIND_SPEED_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s (should not exceed 25)
 
 _PCT_OF_MEDIAN_FILTER_THRESHOLD_EXTREME_WEATHER = 0.035
 _PCT_OF_MEDIAN_FILTER_THRESHOLD_STORM = 0.01
 
-_EXTREME_WEATHER_WEIGHTS = {"heat_risk": 0.25, "cold_risk": 0.25, "drought_risk": 0.25, "storm_risk": 0.25}
-_EXTREME_HEAT_WEIGHTS = {"max_temp_summer_risk": 0.5, "hot_summer_days": 0.25, "extreme_summer_days": 0.25}
+_EXTREME_WEATHER_WEIGHTS = {
+    "heat_risk": 0.25,
+    "cold_risk": 0.25,
+    "drought_risk": 0.25,
+    "storm_risk": 0.25,
+}
+_EXTREME_HEAT_WEIGHTS = {
+    "max_temp_summer_risk": 0.5,
+    "hot_summer_days": 0.25,
+    "extreme_summer_days": 0.25,
+}
 _EXTREME_COLD_WEIGHTS = {"min_temp_winter_risk": 0.5, "frost_days": 0.25, "icing_days": 0.25}
 _DROUGHT_WEIGHTS = {"drought_severity_index": 0.75, "precip_summer": 0.25}
+_STORM_WEIGHTS = {
+    "wind_speed_risk": 0.3,
+    "avg_exceedance_days": 0.2,
+    "precip_winter": 0.15,
+    "rain_days": 0.15,
+    "wind_driven_rain_index": 0.2,
+}
+
+_FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
+_FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
+
+_GROUND_STABILITY_RISK_SCORE_MAP = {  # Map risk scores to normalised values (0-100)
+    "Probable": 100,
+    "Possible": 66,
+    "Improbable": 33,
+    "Unavailable": 50,  # Assign neutral value
+}
+_GEOSURE_HAZARDS = [
+    "collapsible_deposits",
+    "compressible_ground",
+    "landslides",
+    "running_sand",
+    "shrink_swell",
+    "soluble_rocks",
+    "shrink_swell_geoclimate",
+]
+_GEOCLIMATE_YEAR_SCENARIO_MAP = {"2030": "current", "2070": "forecast"}
+_GROUND_STABILITY_WEIGHTS = {
+    "shrink_swell_geoclimate_risk": 0.40,
+    "landslides_risk": 0.10,
+    "shrink_swell_risk": 0.10,
+    "compressible_ground_risk": 0.10,
+    "collapsible_deposits_risk": 0.10,
+    "running_sand_risk": 0.10,
+    "soluble_rocks_risk": 0.10,
+}
+
+_COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": "current", "2105": "forecast"}
+_COASTAL_EROSION_WEIGHTS = {"coastal_erosion_risk": 0.9, "giz_risk": 0.1}
 
 ### GENERAL FUNCTIONS
 
 
 def min_max_scaling_pair(
-    risk_data: pd.DataFrame, pairs: list[tuple[str, str]], feature_range: tuple[int, int] = (0, 100)
+    risk_data: pd.DataFrame,
+    pairs: list[tuple[str, str]],
+    feature_range: tuple[int, int] = (0, 100),
 ) -> pd.DataFrame:
     """Scale paired columns jointly using Min-Max scaling.
 
@@ -61,7 +115,9 @@ def min_max_scaling_pair(
     """
     for col_current, col_forecast in pairs:
         # Combine both columns into one array for global min/max
-        combined_values = risk_data[[col_current, col_forecast]].to_numpy().flatten().reshape(-1, 1)
+        combined_values = (
+            risk_data[[col_current, col_forecast]].to_numpy().flatten().reshape(-1, 1)
+        )
 
         scaler = sklearn.preprocessing.MinMaxScaler(feature_range=feature_range)
         scaler.fit(combined_values)
@@ -125,7 +181,9 @@ def _iterative_spatial_infilling(
     # Fallback: nearest join for remaining NAs
     remaining_na = risk_grid[risk_grid[variables].isna().any(axis=1)]
     if not remaining_na.empty:
-        nearest = gpd.sjoin_nearest(remaining_na, risk_grid.drop(remaining_na.index), how="left")
+        nearest = gpd.sjoin_nearest(
+            remaining_na, risk_grid.drop(remaining_na.index), how="left"
+        )
 
         # Calculate the average value of the neighbouring grids
         nearest_avg = nearest.groupby(nearest.index)[
@@ -141,7 +199,9 @@ def _iterative_spatial_infilling(
     return risk_grid
 
 
-def _create_grid(xmin: float, ymin: float, xmax: float, ymax: float, cell_size: int) -> gpd.GeoDataFrame:
+def _create_grid(
+    xmin: float, ymin: float, xmax: float, ymax: float, cell_size: int
+) -> gpd.GeoDataFrame:
     """Take bounds and a cell size and return a grid of the given size within the bounds."""
     rows = int(np.ceil((ymax - ymin) / cell_size))
     cols = int(np.ceil((xmax - xmin) / cell_size))
@@ -154,7 +214,7 @@ def _create_grid(xmin: float, ymin: float, xmax: float, ymax: float, cell_size: 
             x1 = x0 + cell_size
             y1 = y0 + cell_size
             grid_cells.append(box(x0, y0, x1, y1))
-    return gpd.GeoDataFrame(geometry=grid_cells, crs=_BNG_CRS)
+    return gpd.GeoDataFrame(geometry=grid_cells, crs=data_cleaning._BNG_CRS)
 
 
 def _merge_on_key(
@@ -177,7 +237,11 @@ def _merge_on_key(
 
 
 def _calculate_risk_threshold(
-    risk_data: pd.DataFrame, base_col: str, output_col: str, threshold: int, invert: bool = False
+    risk_data: pd.DataFrame,
+    base_col: str,
+    output_col: str,
+    threshold: int,
+    invert: bool = False,
 ) -> pd.DataFrame:
     """Calculate risk level of a given column based on a threshold."""
     for scenario in ["current", "forecast"]:
@@ -185,9 +249,13 @@ def _calculate_risk_threshold(
         out_name = f"{output_col}_{scenario}"
 
         if invert:
-            risk_data[out_name] = np.where(risk_data[col_name] > threshold, 0, -risk_data[col_name])
+            risk_data[out_name] = np.where(
+                risk_data[col_name] > threshold, 0, -risk_data[col_name]
+            )
         else:
-            risk_data[out_name] = np.where(risk_data[col_name] < threshold, 0, risk_data[col_name] - threshold)
+            risk_data[out_name] = np.where(
+                risk_data[col_name] < threshold, 0, risk_data[col_name] - threshold
+            )
 
     return risk_data
 
@@ -246,7 +314,7 @@ def apply_functional_rules(config: model_config.Config) -> None:
 def _extreme_weather_index(config: model_config.Config) -> None:
     """Combine extreme heat, extreme cold, drought and storm indexes into a single index."""
     tfn_hazard_grid = gpd.read_file(
-        config.paths.model_input / "Other" / "TfN Hazard Grid" / "tfn_hazard_grid.gpkg"
+        config.paths.model_input / file_paths.HAZARD_GRID_MODEL_INPUT_PATH
     )
 
     tfn_extreme_heat = _extreme_heat_index(config, tfn_hazard_grid)
@@ -269,9 +337,9 @@ def _extreme_weather_index(config: model_config.Config) -> None:
     )
     tfn_extreme_weather_merge = tfn_extreme_weather_merge.drop(columns=["grid_id", "part"])
 
-    tfn_extreme_weather_merge = tfn_extreme_weather_merge.to_crs(_BNG_CRS)
-    tfn_drought = tfn_drought.to_crs(_BNG_CRS)
-    tfn_storm = tfn_storm.to_crs(_BNG_CRS)
+    tfn_extreme_weather_merge = tfn_extreme_weather_merge.to_crs(data_cleaning._BNG_CRS)
+    tfn_drought = tfn_drought.to_crs(data_cleaning._BNG_CRS)
+    tfn_storm = tfn_storm.to_crs(data_cleaning._BNG_CRS)
 
     tfn_extreme_weather_overlay = gpd.overlay(
         tfn_extreme_weather_merge,
@@ -322,8 +390,7 @@ def _extreme_weather_index(config: model_config.Config) -> None:
     data_cleaning.write_to_file(
         tfn_extreme_weather_risk,
         config.paths.model_interim_output
-        / "TfN Extreme Weather Risk"
-        / "tfn_extreme_weather_risk.gpkg",
+        / file_paths.EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH,
     )
 
 
@@ -334,32 +401,21 @@ def _extreme_heat_index(
     config: model_config.Config, hazard_grid: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
     """Combine several datasets into extreme heat index by merging on their hazard grid."""
-    tfn_temp_max = pd.read_csv(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Summer Max Temperature Change Projections"
-        / "tfn_temp_max.csv"
-    )
+    tfn_temp_max = pd.read_csv(config.paths.model_input / file_paths.TEMP_MAX_MODEL_INPUT_PATH)
     tfn_hsd = pd.read_csv(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Hot Summer Days Projections"
-        / "tfn_hot_days.csv"
+        config.paths.model_input / file_paths.HOT_SUMMER_DAYS_MODEL_INPUT_PATH
     )
     tfn_esd = pd.read_csv(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Extreme Summer Days Projections"
-        / "tfn_extr_days.csv"
+        config.paths.model_input / file_paths.EXTREME_SUMMER_DAYS_MODEL_INPUT_PATH
     )
 
     tfn_extreme_heat = _merge_on_key([tfn_temp_max, tfn_hsd, tfn_esd], hazard_grid, "grid_id")
 
     tfn_extreme_heat = _calculate_risk_threshold(
-        tfn_extreme_heat, "max_temp_summer", "max_temp_summer_risk", _EXTREME_HEAT_RISK_THRESHOLD
+        tfn_extreme_heat,
+        "max_temp_summer",
+        "max_temp_summer_risk",
+        _EXTREME_HEAT_RISK_THRESHOLD,
     )
 
     tfn_extreme_heat = min_max_scaling_pair(
@@ -391,34 +447,20 @@ def _extreme_cold_index(
     config: model_config.Config, hazard_grid: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
     """Combine several datasets into extreme cold index by merging on their hazard grid."""
-    tfn_temp_min = pd.read_csv(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Winter Min Temperature Change Projections"
-        / "tfn_temp_min.csv"
-    )
-    tfn_frost = pd.read_csv(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Frost Days Projections"
-        / "tfn_frost_days.csv"
-    )
-    tfn_icing = pd.read_csv(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Icing Days Projections"
-        / "tfn_ice_days.csv"
-    )
+    tfn_temp_min = pd.read_csv(config.paths.model_input / file_paths.TEMP_MIN_MODEL_INPUT_PATH)
+    tfn_frost = pd.read_csv(config.paths.model_input / file_paths.FROST_DAYS_MODEL_INPUT_PATH)
+    tfn_icing = pd.read_csv(config.paths.model_input / file_paths.ICING_DAYS_MODEL_INPUT_PATH)
 
     tfn_extreme_cold = _merge_on_key(
         [tfn_temp_min, tfn_frost, tfn_icing], hazard_grid, "grid_id"
     )
 
     tfn_extreme_cold = _calculate_risk_threshold(
-        tfn_extreme_cold, "min_temp_winter", "min_temp_winter_risk", _EXTREME_COLD_RISK_THRESHOLD, invert=True
+        tfn_extreme_cold,
+        "min_temp_winter",
+        "min_temp_winter_risk",
+        _EXTREME_COLD_RISK_THRESHOLD,
+        invert=True,
     )
 
     tfn_extreme_cold = min_max_scaling_pair(
@@ -451,18 +493,10 @@ def _drought_index(
 ) -> gpd.GeoDataFrame:
     """Combine several datasets into single drought index with spatial overlay."""
     tfn_drought = gpd.read_file(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Drought Severity Index"
-        / "tfn_drought_index.gpkg"
+        config.paths.model_input / file_paths.DROUGHT_INDEX_MODEL_INPUT_PATH
     )
     tfn_precip_sum = pd.read_csv(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Summer Precipitation Change Projections"
-        / "tfn_precip_sum.csv"
+        config.paths.model_input / file_paths.SUMMER_PRECIP_MODEL_INPUT_PATH
     )
 
     tfn_precip_sum_grid = tfn_precip_sum.merge(hazard_grid, on="grid_id")
@@ -473,8 +507,8 @@ def _drought_index(
         ["precip_summer_current", "precip_summer_forecast", "geometry"]
     ]
 
-    tfn_drought = tfn_drought.to_crs(_BNG_CRS)
-    tfn_precip_sum_gdf = tfn_precip_sum_gdf.to_crs(_BNG_CRS)
+    tfn_drought = tfn_drought.to_crs(data_cleaning._BNG_CRS)
+    tfn_precip_sum_gdf = tfn_precip_sum_gdf.to_crs(data_cleaning._BNG_CRS)
 
     tfn_drought_overlay = gpd.overlay(tfn_precip_sum_gdf, tfn_drought, how="union")
     tfn_drought_overlay = _iterative_spatial_infilling(
@@ -533,32 +567,16 @@ def _storm_index(
 ) -> gpd.GeoDataFrame:
     """Combine several datasets into a single storm index with a spatial overlay."""
     tfn_precip_win = pd.read_csv(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Winter Precipitation Change Projections"
-        / "tfn_precip_win.csv"
+        config.paths.model_input / file_paths.WINTER_PRECIP_MODEL_INPUT_PATH
     )
     tfn_rain_days = gpd.read_file(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN 10mm Rain Days 1991-2020"
-        / "tfn_rain_days.gpkg"
+        config.paths.model_input / file_paths.RAIN_DAYS_MODEL_INPUT_PATH
     )
     tfn_wind_spd = gpd.read_file(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Wind Speed Projections"
-        / "tfn_windspd.gpkg"
+        config.paths.model_input / file_paths.WIND_SPEED_MODEL_INPUT_PATH
     )
     tfn_wdr = gpd.read_file(
-        config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Wind Driven Rain Index"
-        / "tfn_wdr.gpkg"
+        config.paths.model_input / file_paths.WIND_DRIVEN_RAIN_MODEL_INPUT_PATH
     )
 
     tfn_precip_win_grid = tfn_precip_win.merge(
@@ -571,10 +589,10 @@ def _storm_index(
         ["precip_winter_current", "precip_winter_forecast", "geometry"]
     ]
 
-    tfn_wind_spd = tfn_wind_spd.to_crs(_BNG_CRS)
-    tfn_rain_days = tfn_rain_days.to_crs(_BNG_CRS)
-    tfn_precip_win_gdf = tfn_precip_win_gdf.to_crs(_BNG_CRS)
-    tfn_wdr = tfn_wdr.to_crs(_BNG_CRS)
+    tfn_wind_spd = tfn_wind_spd.to_crs(data_cleaning._BNG_CRS)
+    tfn_rain_days = tfn_rain_days.to_crs(data_cleaning._BNG_CRS)
+    tfn_precip_win_gdf = tfn_precip_win_gdf.to_crs(data_cleaning._BNG_CRS)
+    tfn_wdr = tfn_wdr.to_crs(data_cleaning._BNG_CRS)
 
     tfn_storm_overlay = gpd.overlay(tfn_wind_spd, tfn_rain_days, how="union")
     tfn_storm_overlay = gpd.overlay(tfn_storm_overlay, tfn_precip_win_gdf, how="union")
@@ -595,7 +613,9 @@ def _storm_index(
         ]
     ]
 
-    tfn_storm_overlay = _filter_out_small_geometries(tfn_storm_overlay, _PCT_OF_MEDIAN_FILTER_THRESHOLD_STORM)
+    tfn_storm_overlay = _filter_out_small_geometries(
+        tfn_storm_overlay, _PCT_OF_MEDIAN_FILTER_THRESHOLD_STORM
+    )
 
     tfn_storm_overlay = _iterative_spatial_infilling(
         tfn_storm_overlay,
@@ -641,13 +661,7 @@ def _storm_index(
 
     tfn_storm_risk = _calculate_composite_score(
         tfn_storm_risk,
-        {
-            "wind_speed_risk": 0.3,
-            "avg_exceedance_days": 0.2,
-            "precip_winter": 0.15,
-            "rain_days": 0.15,
-            "wind_driven_rain_index": 0.2,
-        },
+        _STORM_WEIGHTS,
         "storm_risk",
     )
 
@@ -663,8 +677,12 @@ def _wind_risk_scaled(speed_metres_per_second: float) -> float:
     if speed_metres_per_second < _WIND_SPEED_RISK_THRESHOLD_LOWER:  # Below 30 mph
         return 0
     if speed_metres_per_second <= _WIND_SPEED_RISK_THRESHOLD_UPPER:  # between 30 and 45 mph
-        return (speed_metres_per_second - _WIND_SPEED_RISK_THRESHOLD_LOWER) / (_WIND_SPEED_RISK_THRESHOLD_UPPER - _WIND_SPEED_RISK_THRESHOLD_LOWER)  # Scale to 0 - 1
-    return 1 + (speed_metres_per_second - _WIND_SPEED_RISK_THRESHOLD_UPPER) / (25 - _WIND_SPEED_RISK_THRESHOLD_UPPER)  # Scale beyond 1
+        return (speed_metres_per_second - _WIND_SPEED_RISK_THRESHOLD_LOWER) / (
+            _WIND_SPEED_RISK_THRESHOLD_UPPER - _WIND_SPEED_RISK_THRESHOLD_LOWER
+        )  # Scale to 0 - 1
+    return 1 + (speed_metres_per_second - _WIND_SPEED_RISK_THRESHOLD_UPPER) / (
+        25 - _WIND_SPEED_RISK_THRESHOLD_UPPER
+    )  # Scale beyond 1
 
 
 ### FLOODING
@@ -672,35 +690,43 @@ def _wind_risk_scaled(speed_metres_per_second: float) -> float:
 
 def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Combine RoFRS & RoFSW into a single risk score by upscaling them to a common grid."""
-    risk_score_map = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
-
     if config.switches.create_flood_grid:
         flood_grid = _create_flood_grid(config, 1000, boundary)
     else:
         flood_grid = gpd.read_file(
-            config.paths.model_interim_output / "Other" / "flood_grid.gpkg"
+            config.paths.model_interim_output / file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH
         )
 
     tfn_flood_risk_c = _upscale_to_grid(
         config,
-        risk_score_map,
         flood_grid,
         {
             "current": [
-                ("TfN RoFRS", "tfn_rofrs.gpkg", "rivers_sea_flood_risk_current"),
-                ("TfN RoFSW", "tfn_rofsw.gpkg", "surface_water_flood_risk_current"),
+                (
+                    file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
+                    "rivers_sea_flood_risk_current",
+                ),
+                (
+                    file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
+                    "surface_water_flood_risk_current",
+                ),
             ]
         },
     )
 
     tfn_flood_risk_f = _upscale_to_grid(
         config,
-        risk_score_map,
         flood_grid,
         {
             "forecast": [
-                ("TfN RoFRS CC", "tfn_rofrs_cc.gpkg", "rivers_sea_flood_risk_forecast"),
-                ("TfN RoFSW CC", "tfn_rofsw_cc.gpkg", "surface_water_flood_risk_forecast"),
+                (
+                    file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+                    "rivers_sea_flood_risk_forecast",
+                ),
+                (
+                    file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+                    "surface_water_flood_risk_forecast",
+                ),
             ]
         },
     )
@@ -718,7 +744,7 @@ def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
 
     tfn_flood_risk = _calculate_composite_score(
         tfn_flood_risk,
-        {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5},
+        _FLOOD_WEIGHTS,
         "flood_risk",
     )
 
@@ -728,7 +754,7 @@ def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
 
     data_cleaning.write_to_file(
         tfn_flood_risk,
-        config.paths.model_interim_output / "TfN Flood Risk" / "tfn_flood_risk.gpkg",
+        config.paths.model_interim_output / file_paths.FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH,
     )
 
 
@@ -740,7 +766,8 @@ def _create_flood_grid(
     grid = _create_grid(xmin, ymin, xmax, ymax, size_m)
     flood_grid = data_cleaning.clip_to_boundary(grid, boundary)
     data_cleaning.write_to_file(
-        flood_grid, config.paths.model_interim_output / "Other" / "flood_grid.gpkg"
+        flood_grid,
+        config.paths.model_interim_output / file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH,
     )
     return flood_grid
 
@@ -749,35 +776,32 @@ def _process_flood_layer(
     flood_grid: gpd.GeoDataFrame,
     file_path: pathlib.Path,
     risk_column: str,
-    risk_score_map: dict[str, int],
 ) -> gpd.GeoDataFrame:
     """Read a flood layer, assigns risk, and return area-weighted flood risk."""
     layer = gpd.read_file(file_path)
-    layer[risk_column] = layer["Risk_band"].map(risk_score_map)
+    layer[risk_column] = layer["Risk_band"].map(_FLOOD_RISK_SCORE_MAP)
     return _area_weighted_flood_assignment(flood_grid, layer, risk_column)
 
 
 def _upscale_to_grid(
     config: model_config.Config,
-    risk_score_map: dict[str, int],
     flood_grid: gpd.GeoDataFrame,
-    scenario_map: dict[str, list[tuple[str, str, str]]],
+    scenario_map: dict[str, list[tuple[pathlib.Path, str]]],
 ) -> gpd.GeoDataFrame:
     """Upscales each flood layer to the common grid and writes to file."""
     for scenario, layers in scenario_map.items():
         result = flood_grid.copy()
-        for folder, file, risk_col in layers:
+        for path, risk_col in layers:
             result = _process_flood_layer(
                 result,
-                config.paths.model_input / "Hazards" / "Flooding" / folder / file,
+                config.paths.model_input / path,
                 risk_col,
-                risk_score_map,
             )
 
         data_cleaning.write_to_file(
             result,
             config.paths.model_interim_output
-            / "TfN Flood Risk"
+            / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
             / f"tfn_flood_risk_{scenario[0]}.gpkg",
         )
 
@@ -818,7 +842,9 @@ def _area_weighted_flood_assignment(
     grid[risk_column] = weighted_avg_flood
 
     # Fill missing values with 0 (no risk)
+    num_na_rows = grid[risk_column].isna().sum()
     grid[risk_column] = grid[risk_column].fillna(0)
+    LOG.info("Filled %s NA values in %s with 0.", num_na_rows, risk_column)
 
     return grid
 
@@ -828,38 +854,22 @@ def _area_weighted_flood_assignment(
 
 def _ground_stability_index(config: model_config.Config) -> None:
     """Combine GeoSure & GeoClimate risk into a single index, using a spatial overlay."""
-    risk_scores = {  # Map risk scores to normalised values (0-100)
-        "Probable": 100,
-        "Possible": 66,
-        "Improbable": 33,
-        "Unavailable": 50,  # Assign neutral value
-    }
-
-    tfn_geosure = gpd.read_file(
-        config.paths.model_input
-        / "Hazards"
-        / "Ground Stability"
-        / "TfN Geosure"
-        / "tfn_geosure.gpkg"
-    )
-    tfn_geosure = tfn_geosure.to_crs(_BNG_CRS)
+    tfn_geosure = gpd.read_file(config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH)
+    tfn_geosure = tfn_geosure.to_crs(data_cleaning._BNG_CRS)
 
     tfn_ss = {}
     ground_stability = {}
-    for year, scenario in {"2030": "current", "2070": "forecast"}.items():
+    for year, scenario in _GEOCLIMATE_YEAR_SCENARIO_MAP.items():
         tfn_ss[year] = gpd.read_file(
             config.paths.model_input
-            / "Hazards"
-            / "Ground Stability"
-            / "BGS Shrink Swell"
-            / year
+            / file_paths.GEOCLIMATE_MODEL_INPUT_PATH
             / f"tfn_bgs_ss_{year}.gpkg"
         )
         tfn_ss[year]["shrink_swell_geoclimate_risk"] = tfn_ss[year][
             "shrink_swell_geoclimate_risk"
-        ].map(risk_scores)
+        ].map(_GROUND_STABILITY_RISK_SCORE_MAP)
         tfn_ss[year] = tfn_ss[year][["shrink_swell_geoclimate_risk", "geometry"]]
-        tfn_ss[year] = tfn_ss[year].to_crs(_BNG_CRS)
+        tfn_ss[year] = tfn_ss[year].to_crs(data_cleaning._BNG_CRS)
         ground_stability[scenario] = gpd.overlay(tfn_geosure, tfn_ss[year], how="union")
         ground_stability[scenario] = ground_stability[scenario].rename(
             columns={
@@ -868,7 +878,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
                 if col != "geometry"
             }
         )
-        ground_stability[scenario] = ground_stability[scenario].to_crs(_BNG_CRS)
+        ground_stability[scenario] = ground_stability[scenario].to_crs(data_cleaning._BNG_CRS)
 
     tfn_ground_stability = gpd.overlay(
         ground_stability["current"], ground_stability["forecast"], how="union"
@@ -876,40 +886,24 @@ def _ground_stability_index(config: model_config.Config) -> None:
 
     tfn_ground_stability = data_cleaning.explode_to_polygons(tfn_ground_stability)
 
-    hazards = [
-        "collapsible_deposits",
-        "compressible_ground",
-        "landslides",
-        "running_sand",
-        "shrink_swell",
-        "soluble_rocks",
-        "shrink_swell_geoclimate",
+    risk_cols = [
+        f"{hazard}_risk{suffix}"
+        for hazard in _GEOSURE_HAZARDS
+        for suffix in _SCENARIO_SUFFIXES
     ]
-
-    suffixes = ["_current", "_forecast"]
-
-    risk_cols = [f"{hazard}_risk{suffix}" for hazard in hazards for suffix in suffixes]
 
     for col in risk_cols:
         tfn_ground_stability[col] = pd.to_numeric(tfn_ground_stability[col], errors="coerce")
 
     tfn_ground_stability = _iterative_spatial_infilling(tfn_ground_stability, risk_cols)
 
-    gs_pairs = [(f"{col}_risk_current", f"{col}_risk_forecast") for col in hazards]
+    gs_pairs = [(f"{col}_risk_current", f"{col}_risk_forecast") for col in _GEOSURE_HAZARDS]
 
     tfn_ground_stability = min_max_scaling_pair(tfn_ground_stability, gs_pairs)
 
     tfn_ground_stability = _calculate_composite_score(
         tfn_ground_stability,
-        {
-            "shrink_swell_geoclimate_risk": 0.40,
-            "landslides_risk": 0.10,
-            "shrink_swell_risk": 0.10,
-            "compressible_ground_risk": 0.10,
-            "collapsible_deposits_risk": 0.10,
-            "running_sand_risk": 0.10,
-            "soluble_rocks_risk": 0.10,
-        },
+        _GROUND_STABILITY_WEIGHTS,
         "ground_stability_risk",
     )
 
@@ -921,8 +915,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
     data_cleaning.write_to_file(
         tfn_ground_stability,
         config.paths.model_interim_output
-        / "TfN Ground Stability Risk"
-        / "tfn_ground_stability_risk.gpkg",
+        / file_paths.GROUND_STABILITY_MODEL_INTERIM_OUTPUT_PATH,
     )
 
 
@@ -932,41 +925,36 @@ def _ground_stability_index(config: model_config.Config) -> None:
 def _coastal_erosion_index(config: model_config.Config) -> None:
     """Combine erosion and ground stability risk into single index using a spatial overlay."""
     tfn_ncerm_giz = gpd.read_file(
-        config.paths.model_input
-        / "Hazards"
-        / "Coastal Erosion"
-        / "NCERM"
-        / "Ground Instability Zones"
-        / "tfn_ncerm_giz.gpkg"
+        config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH
     )
     tfn_ncerm_giz["giz_risk"] = 1
 
     tfn_ncerm = {}
     tfn_erosion_risk = {}
-    for year, scenario in {"2055": "current", "2105": "forecast"}.items():
+    for year, scenario in _COASTAL_EROSION_YEAR_SCENARIO_MAP.items():
         tfn_ncerm[year] = gpd.read_file(
             config.paths.model_input
-            / "Hazards"
-            / "Coastal Erosion"
-            / "NCERM"
-            / f"SMP_{year}_70CC"
+            / file_paths.COASTAL_EROSION_MODEL_INPUT_PATH
             / f"tfn_ncerm_smp_{year}_70CC.gpkg"
         )
         tfn_ncerm[year]["coastal_erosion_risk"] = 1
 
         tfn_ncerm_giz = tfn_ncerm_giz.to_crs(tfn_ncerm[year].crs)
-        tfn_erosion_risk[scenario] = gpd.overlay(tfn_ncerm_giz, tfn_ncerm[year], how='union')
+        tfn_erosion_risk[scenario] = gpd.overlay(tfn_ncerm_giz, tfn_ncerm[year], how="union")
 
-        tfn_erosion_risk[scenario] = data_cleaning.explode_to_polygons(tfn_erosion_risk[scenario])
-         # Normalise risk values
+        tfn_erosion_risk[scenario] = data_cleaning.explode_to_polygons(
+            tfn_erosion_risk[scenario]
+        )
+        # Normalise risk values
         scaler = sklearn.preprocessing.MinMaxScaler(feature_range=(0, 100))
-        normalised_values = scaler.fit_transform(tfn_erosion_risk[scenario][["coastal_erosion_risk", "giz_risk"]])
+        normalised_values = scaler.fit_transform(
+            tfn_erosion_risk[scenario][["coastal_erosion_risk", "giz_risk"]]
+        )
 
-        coastal_erosion_weights = {"coastal_erosion_risk": 0.9, "giz_risk": 0.1}
         # Compute composite risk score
         tfn_erosion_risk[scenario]["coastal_erosion_risk"] = (
-            normalised_values[:, 0] * coastal_erosion_weights["coastal_erosion_risk"]
-            + normalised_values[:, 1] * coastal_erosion_weights["giz_risk"]
+            normalised_values[:, 0] * _COASTAL_EROSION_WEIGHTS["coastal_erosion_risk"]
+            + normalised_values[:, 1] * _COASTAL_EROSION_WEIGHTS["giz_risk"]
         )
 
         tfn_erosion_risk[scenario] = tfn_erosion_risk[scenario].rename(
@@ -986,6 +974,5 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
     data_cleaning.write_to_file(
         tfn_coastal_erosion_risk,
         config.paths.model_interim_output
-        / "TfN Coastal Erosion Risk"
-        / "tfn_coastal_erosion_risk.gpkg",
+        / file_paths.COASTAL_EROSION_MODEL_INTERIM_OUTPUT_PATH,
     )
