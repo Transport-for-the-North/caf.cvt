@@ -8,8 +8,7 @@ import caf.toolkit as ctk
 from data_cleaning import data_cleaning
 from functional_rules import apply_functional_rules
 from layering import layering
-
-from cvt.model_config import Config
+from model_config import Config
 
 LOG = logging.getLogger(__name__)
 

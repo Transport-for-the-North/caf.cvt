@@ -4,8 +4,8 @@
 switches:
   # If running from scratch using only the raw input files these switches should all be true
   run_data_cleaning: true
-  run_functional_rules: true
-  run_layering: true
+  run_functional_rules: false
+  run_layering: false
 
   # True if the raw flood data from Defra data services needs to be extracted from the zip files (this is time consuming)
   flood_zip_extract: false

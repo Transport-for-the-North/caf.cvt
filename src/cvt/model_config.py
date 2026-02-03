@@ -78,7 +78,7 @@ class OtherInput(ctk.BaseConfig):
     boundary_path: pathlib.Path
 
 
-class NoHAMEntry:
+class NoHAMEntry(ctk.BaseConfig):
     """Configuration for a NoHAM data entry.
 
     Attributes

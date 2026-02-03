@@ -11,8 +11,8 @@ import pandas as pd
 import sklearn
 from shapely.geometry import box
 
-from cvt import data_cleaning, model_config
-from cvt.data_cleaning import _BNG_CRS
+import data_cleaning, model_config
+from data_cleaning import _BNG_CRS
 
 LOG = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ _PCT_OF_MEDIAN_FILTER_THRESHOLD_STORM = 0.01
 _EXTREME_WEATHER_WEIGHTS = {"heat_risk": 0.25, "cold_risk": 0.25, "drought_risk": 0.25, "storm_risk": 0.25}
 _EXTREME_HEAT_WEIGHTS = {"max_temp_summer_risk": 0.5, "hot_summer_days": 0.25, "extreme_summer_days": 0.25}
 _EXTREME_COLD_WEIGHTS = {"min_temp_winter_risk": 0.5, "frost_days": 0.25, "icing_days": 0.25}
+_DROUGHT_WEIGHTS = {"drought_severity_index": 0.75, "precip_summer": 0.25}
 
 ### GENERAL FUNCTIONS
 
@@ -244,14 +245,14 @@ def apply_functional_rules(config: model_config.Config) -> None:
 
 def _extreme_weather_index(config: model_config.Config) -> None:
     """Combine extreme heat, extreme cold, drought and storm indexes into a single index."""
-    tfn_common_grid = gpd.read_file(
-        config.paths.model_input / "Other" / "TfN Common Grid" / "tfn_common_grid.gpkg"
+    tfn_hazard_grid = gpd.read_file(
+        config.paths.model_input / "Other" / "TfN Hazard Grid" / "tfn_hazard_grid.gpkg"
     )
 
-    tfn_extreme_heat = _extreme_heat_index(config, tfn_common_grid)
-    tfn_extreme_cold = _extreme_cold_index(config, tfn_common_grid)
-    tfn_drought = _drought_index(config, tfn_common_grid)
-    tfn_storm = _storm_index(config, tfn_common_grid)
+    tfn_extreme_heat = _extreme_heat_index(config, tfn_hazard_grid)
+    tfn_extreme_cold = _extreme_cold_index(config, tfn_hazard_grid)
+    tfn_drought = _drought_index(config, tfn_hazard_grid)
+    tfn_storm = _storm_index(config, tfn_hazard_grid)
 
     tfn_extreme_weather_merge = tfn_extreme_heat[
         ["grid_id", "part", "heat_risk_current", "heat_risk_forecast"]
@@ -330,9 +331,9 @@ def _extreme_weather_index(config: model_config.Config) -> None:
 
 
 def _extreme_heat_index(
-    config: model_config.Config, common_grid: gpd.GeoDataFrame
+    config: model_config.Config, hazard_grid: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
-    """Combine several datasets into extreme heat index by merging on their common grid."""
+    """Combine several datasets into extreme heat index by merging on their hazard grid."""
     tfn_temp_max = pd.read_csv(
         config.paths.model_input
         / "Hazards"
@@ -355,7 +356,7 @@ def _extreme_heat_index(
         / "tfn_extr_days.csv"
     )
 
-    tfn_extreme_heat = _merge_on_key([tfn_temp_max, tfn_hsd, tfn_esd], common_grid, "grid_id")
+    tfn_extreme_heat = _merge_on_key([tfn_temp_max, tfn_hsd, tfn_esd], hazard_grid, "grid_id")
 
     tfn_extreme_heat = _calculate_risk_threshold(
         tfn_extreme_heat, "max_temp_summer", "max_temp_summer_risk", _EXTREME_HEAT_RISK_THRESHOLD
@@ -387,9 +388,9 @@ def _extreme_heat_index(
 
 
 def _extreme_cold_index(
-    config: model_config.Config, common_grid: gpd.GeoDataFrame
+    config: model_config.Config, hazard_grid: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
-    """Combine several datasets into extreme cold index by merging on their common grid."""
+    """Combine several datasets into extreme cold index by merging on their hazard grid."""
     tfn_temp_min = pd.read_csv(
         config.paths.model_input
         / "Hazards"
@@ -413,7 +414,7 @@ def _extreme_cold_index(
     )
 
     tfn_extreme_cold = _merge_on_key(
-        [tfn_temp_min, tfn_frost, tfn_icing], common_grid, "grid_id"
+        [tfn_temp_min, tfn_frost, tfn_icing], hazard_grid, "grid_id"
     )
 
     tfn_extreme_cold = _calculate_risk_threshold(
@@ -446,7 +447,7 @@ def _extreme_cold_index(
 
 
 def _drought_index(
-    config: model_config.Config, common_grid: gpd.GeoDataFrame
+    config: model_config.Config, hazard_grid: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
     """Combine several datasets into single drought index with spatial overlay."""
     tfn_drought = gpd.read_file(
@@ -464,9 +465,9 @@ def _drought_index(
         / "tfn_precip_sum.csv"
     )
 
-    tfn_precip_sum_grid = tfn_precip_sum.merge(common_grid, on="grid_id")
+    tfn_precip_sum_grid = tfn_precip_sum.merge(hazard_grid, on="grid_id")
     tfn_precip_sum_gdf = gpd.GeoDataFrame(
-        tfn_precip_sum_grid, geometry="geometry", crs=common_grid.crs
+        tfn_precip_sum_grid, geometry="geometry", crs=hazard_grid.crs
     )
     tfn_precip_sum_gdf = tfn_precip_sum_gdf[
         ["precip_summer_current", "precip_summer_forecast", "geometry"]
@@ -513,7 +514,7 @@ def _drought_index(
 
     tfn_drought_risk = _calculate_composite_score(
         tfn_drought_risk,
-        {"drought_severity_index": 0.75, "precip_summer": 0.25},
+        _DROUGHT_WEIGHTS,
         "drought_risk",
     )
 
@@ -528,7 +529,7 @@ def _drought_index(
 
 
 def _storm_index(
-    config: model_config.Config, common_grid: gpd.GeoDataFrame
+    config: model_config.Config, hazard_grid: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
     """Combine several datasets into a single storm index with a spatial overlay."""
     tfn_precip_win = pd.read_csv(
@@ -561,10 +562,10 @@ def _storm_index(
     )
 
     tfn_precip_win_grid = tfn_precip_win.merge(
-        common_grid, on="grid_id", how="left", validate="one_to_many"
+        hazard_grid, on="grid_id", how="left", validate="one_to_many"
     )
     tfn_precip_win_gdf = gpd.GeoDataFrame(
-        tfn_precip_win_grid, geometry="geometry", crs=common_grid.crs
+        tfn_precip_win_grid, geometry="geometry", crs=hazard_grid.crs
     )
     tfn_precip_win_gdf = tfn_precip_win_gdf[
         ["precip_winter_current", "precip_winter_forecast", "geometry"]

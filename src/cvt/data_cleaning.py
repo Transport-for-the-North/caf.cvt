@@ -6,14 +6,14 @@ import os
 import pathlib
 from zipfile import ZipFile
 
+import file_paths
 import fiona
 import geopandas as gpd
+import model_config
 import pandas as pd
 import py7zr
 import xarray as xr
 from shapely import geometry
-
-from cvt import model_config
 
 LOG = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ MMRN_NODE_TYPES = {
         "Railway Station (Principal);Tram Station;Modal Change",
     ]
 }
+
 
 ### GENERAL FUNCTIONS
 
@@ -231,8 +232,8 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    _clean_infrastructure(config, boundary)
-    _clean_hazards(config, boundary)
+    #_clean_infrastructure(config, boundary)
+    #_clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
 
@@ -279,17 +280,13 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     )
     write_to_file(
         tfn_os_road,
-        config.paths.model_input
-        / "Infrastructure"
-        / "Road"
-        / "TfN OS Road"
-        / "tfn_os_road.gpkg",
+        config.paths.model_input / file_paths.OS_ROAD_MODEL_INPUT_PATH,
     )
 
 
 def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean 2023 and 2048 NoHAM network datasets, then write to file."""
-    for _scenario, noham_entry in config.infrastructure.road.noham.items():
+    for scenario, noham_entry in config.infrastructure.road.noham.items():
         year = noham_entry.year
         file_path = noham_entry.file_path
         noham_network = gpd.read_file(file_path)
@@ -318,12 +315,9 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         write_to_file(
             tfn_noham_network,
             config.paths.model_input
-            / "Infrastructure"
-            / "Road"
-            / f"TfN NoHAM {year}"
-            / f"tfn_noham_{year}.gpkg",
+            / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
+            / f"tfn_noham_{scenario}.gpkg",
         )
-
 
 ### RAIL
 
@@ -337,7 +331,7 @@ def _clean_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> No
 def _get_rail_links(
     boundary: gpd.GeoDataFrame, os_rail_path: pathlib.Path
 ) -> gpd.GeoDataFrame:
-    """Read and clean OS Rail Network data."""
+    """Read and clean OS Rail Network data from the Mutli-Modal Routing Network."""
     tfn_rail_links = gpd.read_file(os_rail_path)
     len_before_filter = len(tfn_rail_links)
     tfn_rail_links = tfn_rail_links[
@@ -409,12 +403,8 @@ def _clean_passenger_rail(
     write_to_file(
         tfn_pass_rail,
         config.paths.model_input
-        / "Infrastructure"
-        / "Rail"
-        / "TfN OS Passenger Rail"
-        / "tfn_pass_rail_links.gpkg",
+        / file_paths.PASSENGER_RAIL_MODEL_INPUT_PATH,
     )
-
 
 def _clean_freight_rail(config: model_config.Config, tfn_rail_links: gpd.GeoDataFrame) -> None:
     """Filter OS rail data to freight rail network, then write to file."""
@@ -432,12 +422,8 @@ def _clean_freight_rail(config: model_config.Config, tfn_rail_links: gpd.GeoData
     write_to_file(
         tfn_freight_rail,
         config.paths.model_input
-        / "Infrastructure"
-        / "Rail"
-        / "TfN OS Freight Rail"
-        / "tfn_freight_rail_links.gpkg",
+        / file_paths.FREIGHT_RAIL_MODEL_INPUT_PATH,
     )
-
 
 ### OTHER
 
@@ -468,10 +454,7 @@ def _clean_airports(config: model_config.Config) -> None:
     write_to_file(
         airports,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN Airports"
-        / "tfn_airports.gpkg",
+        / file_paths.AIRPORTS_MODEL_INPUT_PATH
     )
 
 
@@ -505,10 +488,7 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     write_to_file(
         tfn_bus_stops,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN Bus Stops"
-        / "tfn_bus_stops.gpkg",
+        / file_paths.BUS_STOPS_MODEL_INPUT_PATH,
     )
 
 
@@ -532,10 +512,7 @@ def _clean_petrol_stations(config: model_config.Config, boundary: gpd.GeoDataFra
     write_to_file(
         tfn_petrol,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN Petrol Stations"
-        / "tfn_petrol_stations.gpkg",
+        / file_paths.PETROL_STATIONS_MODEL_INPUT_PATH,
     )
 
 
@@ -575,10 +552,7 @@ def _clean_train_stations(
     write_to_file(
         tfn_train_stations,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Train Stations"
-        / "tfn_train_stations.gpkg",
+        / file_paths.TRAIN_STATIONS_MODEL_INPUT_PATH,
     )
 
 
@@ -602,10 +576,7 @@ def _clean_tram_stations(
     write_to_file(
         tfn_tram_stations,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Tram Stations"
-        / "tfn_tram_stations.gpkg",
+        / file_paths.TRAM_STATIONS_MODEL_INPUT_PATH
     )
 
 
@@ -629,10 +600,7 @@ def _clean_rapid_transport_stations(
     write_to_file(
         tfn_rapid_transport_stations,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Rapid Transport Stations"
-        / "tfn_rapid_transport_stations.gpkg",
+        / file_paths.RAPID_TRANSPORT_STATIONS_MODEL_INPUT_PATH
     )
 
 
@@ -656,10 +624,7 @@ def _clean_ferry_terminals(
     write_to_file(
         tfn_ferry_terminals,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Ferry Terminals"
-        / "tfn_ferry_terminals.gpkg",
+        / file_paths.FERRY_TERMINALS_MODEL_INPUT_PATH,
     )
 
 
@@ -684,10 +649,7 @@ def _clean_bus_coach_stations(
     write_to_file(
         tfn_bus_coach_stations,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Bus Coach Stations"
-        / "tfn_bus_coach_stations.gpkg",
+        / file_paths.BUS_COACH_STATIONS_MODEL_INPUT_PATH
     )
 
 
@@ -710,10 +672,7 @@ def _clean_tram_network(config: model_config.Config, tfn_rail_links: gpd.GeoData
     write_to_file(
         tfn_tram_links,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN OS Tram Network"
-        / "tfn_os_tram_links.gpkg",
+        / file_paths.TRAM_NETWORK_MODEL_INPUT_PATH
     )
 
 
@@ -740,10 +699,7 @@ def _clean_rapid_transport_network(
     write_to_file(
         tfn_rapid_transport,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN Rapid Transport Network"
-        / "tfn_rapid_transport_links.gpkg",
+        / file_paths.RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH
     )
 
 
@@ -774,10 +730,7 @@ def _clean_charging_sites(config: model_config.Config, boundary: gpd.GeoDataFram
     write_to_file(
         tfn_chg_sites,
         config.paths.model_input
-        / "Infrastructure"
-        / "Other"
-        / "TfN EV Charging Sites"
-        / "tfn_chg_sites.gpkg",
+            / file_paths.CHARGING_SITES_MODEL_INPUT_PATH
     )
 
 
@@ -809,8 +762,9 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     )
     write_to_file(
         tfn_ncn,
-        config.paths.model_input / "Infrastructure" / "Other" / "TfN NCN" / "tfn_ncn.gpkg",
+        config.paths.model_input / file_paths.NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH,
     )
+
 
 
 ## HAZARDS
@@ -829,39 +783,39 @@ def _clean_hazards(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
 
 def _clean_extreme_weather(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all extreme weather datasets ready for analysis."""
-    tfn_common_grid = _clean_common_grid(config, boundary)
+    tfn_hazard_grid = _clean_hazard_grid(config, boundary)
 
-    _clean_temp_max(config, tfn_common_grid)
-    _clean_temp_min(config, tfn_common_grid)
-    _clean_summer_precip(config, tfn_common_grid)
-    _clean_winter_precip(config, tfn_common_grid)
+    _clean_temp_max(config, tfn_hazard_grid)
+    _clean_temp_min(config, tfn_hazard_grid)
+    _clean_summer_precip(config, tfn_hazard_grid)
+    _clean_winter_precip(config, tfn_hazard_grid)
     _clean_rain_days(config, boundary)
     _clean_drought_index(config, boundary)
-    _clean_hot_summer_days(config, tfn_common_grid)
-    _clean_extreme_summer_days(config, tfn_common_grid)
-    _clean_frost_days(config, tfn_common_grid)
-    _clean_icing_days(config, tfn_common_grid)
+    _clean_hot_summer_days(config, tfn_hazard_grid)
+    _clean_extreme_summer_days(config, tfn_hazard_grid)
+    _clean_frost_days(config, tfn_hazard_grid)
+    _clean_icing_days(config, tfn_hazard_grid)
     _clean_wind_speed(config, boundary)
     _clean_wind_driven_rain(config, boundary)
 
 
-def _clean_common_grid(
+def _clean_hazard_grid(
     config: model_config.Config, boundary: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
-    """Create and prepare common grid DataFrame for variables on same 12km BNG."""
+    """Create and prepare common hazard grid DataFrame for variables on same 12km BNG."""
     temp_max = gpd.read_file(
         f"zip://{config.hazards.extreme_weather.max_temp_summer.zip_path}!"
         f"{config.hazards.extreme_weather.max_temp_summer.file_path}"
     )
     temp_max["grid_id"] = range(1, len(temp_max) + 1)
-    common_grid = temp_max[["grid_id", "geometry"]]
-    tfn_common_grid = clip_to_boundary(common_grid, boundary)
-    tfn_common_grid = explode_to_polygons(tfn_common_grid)
+    hazard_grid = temp_max[["grid_id", "geometry"]]
+    tfn_hazard_grid = clip_to_boundary(hazard_grid, boundary)
+    tfn_hazard_grid = explode_to_polygons(tfn_hazard_grid)
     write_to_file(
-        tfn_common_grid,
-        config.paths.model_input / "Other" / "TfN Common Grid" / "tfn_common_grid.gpkg",
+        tfn_hazard_grid,
+        config.paths.model_input / file_paths.HAZARD_GRID_MODEL_INPUT_PATH,
     )
-    return tfn_common_grid
+    return tfn_hazard_grid
 
 
 def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -894,10 +848,7 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     write_to_file(
         tfn_temp_max,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Summer Max Temperature Change Projections"
-        / "tfn_temp_max.csv",
+        / file_paths.TEMP_MAX_MODEL_INPUT_PATH
     )
 
 
@@ -931,10 +882,7 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     write_to_file(
         tfn_temp_min,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Winter Min Temperature Change Projections"
-        / "tfn_temp_min.csv",
+        / file_paths.TEMP_MIN_MODEL_INPUT_PATH,
     )
 
 
@@ -969,10 +917,7 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     write_to_file(
         tfn_precip_sum,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Summer Precipitation Change Projections"
-        / "tfn_precip_sum.csv",
+        / file_paths.SUMMER_PRECIP_MODEL_INPUT_PATH
     )
 
 
@@ -1007,10 +952,7 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     write_to_file(
         tfn_precip_win,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Winter Precipitation Change Projections"
-        / "tfn_precip_win.csv",
+        / file_paths.WINTER_PRECIP_MODEL_INPUT_PATH
     )
 
 
@@ -1035,10 +977,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     write_to_file(
         tfn_rain_days,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN 10mm Rain Days 1991-2020"
-        / "tfn_rain_days.gpkg",
+        / file_paths.RAIN_DAYS_MODEL_INPUT_PATH
     )
 
 
@@ -1069,10 +1008,7 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
     write_to_file(
         tfn_drought,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Drought Severity Index"
-        / "tfn_drought_index.gpkg",
+        / file_paths.DROUGHT_INDEX_MODEL_INPUT_PATH
     )
 
 
@@ -1102,10 +1038,7 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
     write_to_file(
         tfn_hot_days,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Hot Summer Days Projections"
-        / "tfn_hot_days.csv",
+        / file_paths.HOT_SUMMER_DAYS_MODEL_INPUT_PATH
     )
 
 
@@ -1135,10 +1068,7 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
     write_to_file(
         tfn_extr_days,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Extreme Summer Days Projections"
-        / "tfn_extr_days.csv",
+        / file_paths.EXTREME_SUMMER_DAYS_MODEL_INPUT_PATH
     )
 
 
@@ -1165,10 +1095,7 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     write_to_file(
         tfn_frost_days,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Frost Days Projections"
-        / "tfn_frost_days.csv",
+        / file_paths.FROST_DAYS_MODEL_INPUT_PATH
     )
 
 
@@ -1195,10 +1122,7 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     write_to_file(
         tfn_ice_days,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Icing Days Projections"
-        / "tfn_ice_days.csv",
+        / file_paths.ICING_DAYS_MODEL_INPUT_PATH
     )
 
 
@@ -1250,10 +1174,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     write_to_file(
         tfn_windspd,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Wind Speed Projections"
-        / "tfn_windspd.gpkg",
+        / file_paths.WIND_SPEED_MODEL_INPUT_PATH
     )
 
 
@@ -1368,11 +1289,9 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
     write_to_file(
         tfn_wdr,
         config.paths.model_input
-        / "Hazards"
-        / "Extreme Weather"
-        / "TfN Wind Driven Rain Index"
-        / "tfn_wdr.gpkg",
+        / file_paths.WIND_DRIVEN_RAIN_MODEL_INPUT_PATH,
     )
+
 
 
 ### FLOODING
@@ -1404,7 +1323,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         "RoFRS",
         "v202501",
         boundary,
-        pathlib.Path("TfN RoFRS CC/tfn_rofrs_cc.gpkg"),
+        file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         True,
         code_number_map,
     )
@@ -1414,7 +1333,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         "RoFRS",
         "v202501",
         boundary,
-        pathlib.Path("TfN RoFRS/tfn_rofrs.gpkg"),
+        file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
         False,
         code_number_map,
     )
@@ -1424,7 +1343,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         "RoFSW",
         "v202509",
         boundary,
-        pathlib.Path("TfN RoFSW CC/tfn_rofsw_cc.gpkg"),
+        file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         True,
         code_number_map,
     )
@@ -1434,7 +1353,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         "RoFSW",
         "v202509",
         boundary,
-        pathlib.Path("TfN RoFSW/tfn_rofsw.gpkg"),
+        file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
         False,
         code_number_map,
     )
@@ -1562,10 +1481,10 @@ def _clean_flood(
     )
     flood_data_combined = _extract_poly_from_geomcollection(flood_data_combined)
     flood_data_combined = flood_data_combined[["Risk_band", "geometry"]]
-    write_to_file(
-        flood_data_combined, config.paths.model_input / "Hazards" / "Flooding" / out_path
-    )
 
+    write_to_file(
+        flood_data_combined, config.paths.model_input / out_path
+    )
 
 ### GROUND STABILITY
 
@@ -1721,7 +1640,7 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
 
 def _clean_impact(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean impact datasets ready for analysis."""
-    _clean_freight_demand(config, boundary)
+    #_clean_freight_demand(config, boundary)
     _clean_noham_flows(config)
 
 
@@ -1791,10 +1710,8 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         tfn_noham_net_flows = _merge_noham_flow_network(
             tfn_noham_flows,
             config.paths.model_input
-            / "Infrastructure"
-            / "Road"
-            / f"TfN NoHAM {year}"
-            / f"tfn_noham_{year}.gpkg",
+            / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
+            / f"tfn_noham_{scenario}.gpkg",
         )
         write_to_file(
             tfn_noham_net_flows,

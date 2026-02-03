@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
-from cvt import data_cleaning, functional_rules, model_config
-from cvt.data_cleaning import _BNG_CRS
+import data_cleaning, functional_rules, model_config
+from data_cleaning import _BNG_CRS
 
 # GENERAL FUNCTIONS
 
