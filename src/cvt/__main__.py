@@ -18,13 +18,13 @@ def _main() -> None:
     parser = argparse.ArgumentParser(
         __package__, description="CLI for the Climate Vulnerability Tool"
     )
-    parser.add_argument("config", help="Config file to use", type=pathlib.Path)
+    parser.add_argument("-c", "--config", help="Config file to use", type=pathlib.Path, default="config.yml")
 
     args = parser.parse_args()
     config = Config.load_yaml(args.config)
     details = ctk.log_helpers.ToolDetails(__name__, "1.0.0", full_version=None)
 
-    with ctk.LogHelper(__name__, details, log_file=config.paths.log_path):
+    with ctk.LogHelper(__name__, details, log_file=config.paths.log_path / "cvt.log"):
         if config.switches.run_data_cleaning:
             LOG.info("Starting data cleaning step...")
             data_cleaning(config)

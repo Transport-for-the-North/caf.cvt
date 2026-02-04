@@ -1,5 +1,6 @@
 """Intersect infrastructure with hazard layers to assign risk scores to infrastructure."""
 
+import logging
 import pathlib
 
 import data_cleaning
@@ -10,6 +11,48 @@ import model_config
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+
+LOG = logging.getLogger(__name__)
+
+_HAZARD_RISK_COLS = [
+    # Extreme Weather risk columns
+    "heat_risk",
+    "cold_risk",
+    "drought_risk",
+    "storm_risk",
+    "extreme_weather_risk",
+    # Flooding risk columns
+    "rivers_sea_flood_risk",
+    "surface_water_flood_risk",
+    "flood_risk",
+    # Ground Stability risk columns
+    "collapsible_deposits_risk",
+    "compressible_ground_risk",
+    "landslides_risk",
+    "running_sand_risk",
+    "shrink_swell_risk",
+    "soluble_rocks_risk",
+    "shrink_swell_geoclimate_risk",
+    "ground_stability_risk",
+    # Coastal Erosion risk columns
+    "coastal_erosion_risk",
+]
+
+_IMPACT_WEIGHTS = {
+    "demand": 0.5,  # Weight demand as half of impact score
+    "flood": 0.125,  # Weight hazards as 0.125 each to make up half
+    "extreme_weather": 0.125,
+    "ground_stability": 0.125,
+    "coastal_erosion": 0.125,
+    }
+
+_TRAIN_STATIONS_BUFFER_SIZE_M = 100
+_CHARGING_SITES_BUFFER_SIZE_M = 25
+_BUS_COACH_STATIONS_BUFFER_SIZE_M = 50
+_TRAM_STATIONS_BUFFER_SIZE_M = 25
+_RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M = 50
+_FERRY_TERMINALS_BUFFER_SIZE_M = 50
+_PETROL_STATIONS_BUFFER_SIZE_M = 50
 
 # GENERAL FUNCTIONS
 
@@ -25,9 +68,9 @@ def _infrastructure_risk_intersect(
     """
     gdf_with_risk = gdf.copy()
 
-    for _hazard, hazard_gdf in hazards_dict.items():
+    for _hazard_name, hazard_data in hazards_dict.items():
         # Spatial join to find intersections with hazards
-        hazard_gdf_match = hazard_gdf.to_crs(gdf_with_risk.crs)  # Match CRS
+        hazard_gdf_match = hazard_data.to_crs(gdf_with_risk.crs)  # Match CRS
         intersections = gpd.sjoin(
             gdf_with_risk, hazard_gdf_match, how="left", predicate="intersects"
         )
@@ -47,24 +90,23 @@ def _infrastructure_risk_intersect(
 
 
 def _reshape_for_current_forecast(
-    gdf: gpd.GeoDataFrame, id_col: str, risk_cols_order: list[str]
+    risk_data: gpd.GeoDataFrame, id_col: str, risk_cols_order: list[str]
 ) -> gpd.GeoDataFrame:
     """Reshape dataframe by adding a current/forecast column to distinguish identical rows."""
     # Identify risk and descriptive columns
-    risk_cols = [col for col in gdf.columns if col.endswith(("_current", "_forecast"))]
-    id_cols = [id_col]
+    risk_cols = [col for col in risk_data.columns if col.endswith(("_current", "_forecast"))]
     descriptive_cols = [
         col
-        for col in gdf.columns
-        if col not in risk_cols and col not in id_cols and col != "geometry"
+        for col in risk_data.columns
+        if col not in risk_cols and col not in [id_col] and col != "geometry"
     ]
 
     # Separate geometry for later
-    geometry = gdf[[id_col, "geometry"]].copy()
+    geometry = risk_data[[id_col, "geometry"]].copy()
 
     # Melt only risk columns
-    melted = gdf.melt(
-        id_vars=id_cols + descriptive_cols,
+    melted = risk_data.melt(
+        id_vars=[id_col, *descriptive_cols],
         value_vars=risk_cols,
         var_name="variable",
         value_name="value",
@@ -82,35 +124,37 @@ def _reshape_for_current_forecast(
 
     # Pivot back so each risk variable becomes a column
     reshaped = melted.pivot_table(
-        index=[*id_cols, "current_or_forecast", *descriptive_cols],
+        index=[id_col, "current_or_forecast", *descriptive_cols],
         columns="variable",
         values="value",
     ).reset_index()
 
     # Reorder risk columns based on original order
-    reshaped = reshaped[[*id_cols, "current_or_forecast", *descriptive_cols, *risk_cols_order]]
+    reshaped = reshaped[id_col, "current_or_forecast", *descriptive_cols, *risk_cols_order]
 
     # Merge geometry back
     reshaped_gdf = reshaped.merge(geometry, on=id_col)
-    return gpd.GeoDataFrame(reshaped_gdf, geometry="geometry", crs=gdf.crs)
+    return gpd.GeoDataFrame(reshaped_gdf, geometry="geometry", crs=risk_data.crs)
 
 
 def _prepare_model_output(
-    gdf: gpd.GeoDataFrame,
+    risk_data: gpd.GeoDataFrame,
     drop_cols: list[str],
     desc_cols: list[str],
     rename_map: dict[str, str],
     risk_cols_order: list[str],
 ) -> gpd.GeoDataFrame:
-    """Perform standard cleaning operations on GeoDataFrame to prepare for model output."""
-    gdf = gdf.drop(columns=drop_cols)
-    gdf = gdf.drop_duplicates(subset=["geometry"])
-    gdf = gdf.rename(columns=rename_map)
-    gdf[desc_cols] = gdf[desc_cols].replace(0, "N/A")
-    gdf = gdf.to_crs(epsg=data_cleaning._BNG_CRS)
-    gdf = _reshape_for_current_forecast(gdf, "id", risk_cols_order)
-    gdf[risk_cols_order] = gdf[risk_cols_order].round(1)
-    return gdf.rename(columns={col: f"{col}_score" for col in risk_cols_order})
+    """Perform standard cleaning operations on risk data to prepare for model output."""
+    risk_data = risk_data.drop(columns=drop_cols)
+    risk_data = risk_data.drop_duplicates(subset=["geometry"])
+    risk_data = risk_data.rename(columns=rename_map)
+    num_zeroes = (risk_data[desc_cols] == "0").sum()
+    risk_data[desc_cols] = risk_data[desc_cols].replace(0, "N/A")
+    LOG.info("Replaced %s zero values with 'N/A' in descriptive columns.", num_zeroes)
+    risk_data = risk_data.to_crs(epsg=data_cleaning._BNG_CRS)
+    risk_data = _reshape_for_current_forecast(risk_data, "id", risk_cols_order)
+    risk_data[risk_cols_order] = risk_data[risk_cols_order].round(1)
+    return risk_data.rename(columns={col: f"{col}_score" for col in risk_cols_order})
 
 
 def _split_csv_shapefile(
@@ -154,40 +198,7 @@ def layering(config: model_config.Config) -> None:
         Main config for the model, containing paths and settings.
     """
     hazard_layers = _read_hazard_layers(config)
-
-    risk_cols = [
-        # Extreme Weather risk columns
-        "heat_risk",
-        "cold_risk",
-        "drought_risk",
-        "storm_risk",
-        "extreme_weather_risk",
-        # Flooding risk columns
-        "rivers_sea_flood_risk",
-        "surface_water_flood_risk",
-        "flood_risk",
-        # Ground Stability risk columns
-        "collapsible_deposits_risk",
-        "compressible_ground_risk",
-        "landslides_risk",
-        "running_sand_risk",
-        "shrink_swell_risk",
-        "soluble_rocks_risk",
-        "shrink_swell_geoclimate_risk",
-        "ground_stability_risk",
-        # Coastal Erosion risk columns
-        "coastal_erosion_risk",
-    ]
-
-    impact_weights = {
-        "demand": 0.5,  # Weight demand as half of impact score
-        "flood": 0.125,  # Weight hazards as 0.125 each to make up half
-        "extreme_weather": 0.125,
-        "ground_stability": 0.125,
-        "coastal_erosion": 0.125,
-    }
-
-    _infrastructure_layering(config, hazard_layers, risk_cols, impact_weights)
+    _infrastructure_layering(config, hazard_layers, _HAZARD_RISK_COLS, _IMPACT_WEIGHTS)
 
 
 ## HAZARD LAYERS
@@ -257,7 +268,7 @@ def _os_open_road_risk(
     tfn_os_road_risk = _infrastructure_risk_intersect(tfn_os_road, hazard_layers)
 
     tfn_os_road_risk = _prepare_model_output(
-        gdf=tfn_os_road_risk,
+        risk_data=tfn_os_road_risk,
         drop_cols=[],
         desc_cols=["road_number", "name", "function"],
         rename_map={"identifier": "id"},
@@ -512,7 +523,7 @@ def _passenger_rail_risk(
     tfn_rail_network_risk = _infrastructure_risk_intersect(tfn_rail_network, hazard_layers)
 
     tfn_rail_network_risk = _prepare_model_output(
-        gdf=tfn_rail_network_risk,
+        risk_data=tfn_rail_network_risk,
         drop_cols=[],
         desc_cols=[
             "description",
@@ -569,7 +580,7 @@ def _freight_rail_risk(
     )
 
     tfn_freight_network_risk = _prepare_model_output(
-        gdf=tfn_freight_network_risk,
+        risk_data=tfn_freight_network_risk,
         drop_cols=["dij_id", "distance", "demand_current", "demand_forecast"],
         desc_cols=[
             "description",
@@ -681,12 +692,12 @@ def _train_stations_risk(
         config.paths.model_input / file_paths.TRAIN_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_train_stations = _buffer_geometry(tfn_train_stations, 100)
+    tfn_train_stations = _buffer_geometry(tfn_train_stations, _TRAIN_STATIONS_BUFFER_SIZE_M)
 
     tfn_train_stations_risk = _infrastructure_risk_intersect(tfn_train_stations, hazard_layers)
 
     tfn_train_stations_risk = _prepare_model_output(
-        gdf=tfn_train_stations_risk,
+        risk_data=tfn_train_stations_risk,
         drop_cols=[],
         desc_cols=[],
         rename_map={"nodeid": "id"},
@@ -717,12 +728,12 @@ def _ev_charging_sites_risk(
         config.paths.model_input / file_paths.CHARGING_SITES_MODEL_INPUT_PATH
     )
 
-    tfn_chg_sites = _buffer_geometry(tfn_chg_sites, 25)
+    tfn_chg_sites = _buffer_geometry(tfn_chg_sites, _CHARGING_SITES_BUFFER_SIZE_M)
 
     tfn_chg_sites_risk = _infrastructure_risk_intersect(tfn_chg_sites, hazard_layers)
 
     tfn_chg_sites_risk = _prepare_model_output(
-        gdf=tfn_chg_sites_risk,
+        risk_data=tfn_chg_sites_risk,
         drop_cols=[],
         desc_cols=["name", "speed"],
         rename_map={"devices": "installed_devices"},
@@ -756,7 +767,7 @@ def _airports_risk(
     tfn_airports_risk = _infrastructure_risk_intersect(tfn_airports, hazard_layers)
 
     tfn_airports_risk = _prepare_model_output(
-        gdf=tfn_airports_risk,
+        risk_data=tfn_airports_risk,
         drop_cols=[],
         desc_cols=["name"],
         rename_map={},
@@ -788,14 +799,14 @@ def _bus_coach_stations_risk(
         config.paths.model_input / file_paths.BUS_COACH_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_bus_coach_stations = _buffer_geometry(tfn_bus_coach_stations, 50)
+    tfn_bus_coach_stations = _buffer_geometry(tfn_bus_coach_stations, _BUS_COACH_STATIONS_BUFFER_SIZE_M)
 
     tfn_bus_coach_stations_risk = _infrastructure_risk_intersect(
         tfn_bus_coach_stations, hazard_layers
     )
 
     tfn_bus_coach_stations_risk = _prepare_model_output(
-        gdf=tfn_bus_coach_stations_risk,
+        risk_data=tfn_bus_coach_stations_risk,
         drop_cols=[],
         desc_cols=[],
         rename_map={"nodeid": "id"},
@@ -826,7 +837,7 @@ def _bus_stops_risk(
     tfn_bus_stops_risk = _infrastructure_risk_intersect(tfn_bus_stops, hazard_layers)
 
     tfn_bus_stops_risk = _prepare_model_output(
-        gdf=tfn_bus_stops_risk,
+        risk_data=tfn_bus_stops_risk,
         drop_cols=[],
         desc_cols=[],
         rename_map={"stop_id": "id"},
@@ -857,12 +868,12 @@ def _tram_stations_risk(
         config.paths.model_input / file_paths.TRAM_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_tram_stations = _buffer_geometry(tfn_tram_stations, 25)
+    tfn_tram_stations = _buffer_geometry(tfn_tram_stations, _TRAM_STATIONS_BUFFER_SIZE_M)
 
     tfn_tram_stations_risk = _infrastructure_risk_intersect(tfn_tram_stations, hazard_layers)
 
     tfn_tram_stations_risk = _prepare_model_output(
-        gdf=tfn_tram_stations_risk,
+        risk_data=tfn_tram_stations_risk,
         drop_cols=[],
         desc_cols=[],
         rename_map={"nodeid": "id"},
@@ -894,14 +905,14 @@ def _rapid_transport_stations_risk(
         config.paths.model_input / file_paths.RAPID_TRANSPORT_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_rapid_transport_stations = _buffer_geometry(tfn_rapid_transport_stations, 50)
+    tfn_rapid_transport_stations = _buffer_geometry(tfn_rapid_transport_stations, _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M)
 
     tfn_rapid_transport_stations_risk = _infrastructure_risk_intersect(
         tfn_rapid_transport_stations, hazard_layers
     )
 
     tfn_rapid_transport_stations_risk = _prepare_model_output(
-        gdf=tfn_rapid_transport_stations_risk,
+        risk_data=tfn_rapid_transport_stations_risk,
         drop_cols=[],
         desc_cols=[],
         rename_map={"nodeid": "id"},
@@ -934,14 +945,14 @@ def _ferry_terminals_risk(
         config.paths.model_input / file_paths.FERRY_TERMINALS_MODEL_INPUT_PATH
     )
 
-    tfn_ferry_terminals = _buffer_geometry(tfn_ferry_terminals, 50)
+    tfn_ferry_terminals = _buffer_geometry(tfn_ferry_terminals, _FERRY_TERMINALS_BUFFER_SIZE_M)
 
     tfn_ferry_terminals_risk = _infrastructure_risk_intersect(
         tfn_ferry_terminals, hazard_layers
     )
 
     tfn_ferry_terminals_risk = _prepare_model_output(
-        gdf=tfn_ferry_terminals_risk,
+        risk_data=tfn_ferry_terminals_risk,
         drop_cols=[],
         desc_cols=[],
         rename_map={"nodeid": "id"},
@@ -972,14 +983,14 @@ def _petrol_stations_risk(
         config.paths.model_input / file_paths.PETROL_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_petrol_stations = _buffer_geometry(tfn_petrol_stations, 50)
+    tfn_petrol_stations = _buffer_geometry(tfn_petrol_stations, _PETROL_STATIONS_BUFFER_SIZE_M)
 
     tfn_petrol_stations_risk = _infrastructure_risk_intersect(
         tfn_petrol_stations, hazard_layers
     )
 
     tfn_petrol_stations_risk = _prepare_model_output(
-        gdf=tfn_petrol_stations_risk,
+        risk_data=tfn_petrol_stations_risk,
         drop_cols=[],
         desc_cols=[],
         rename_map={},
@@ -1013,7 +1024,7 @@ def _ncn_risk(
     tfn_ncn_risk = _infrastructure_risk_intersect(tfn_ncn, hazard_layers)
 
     tfn_ncn_risk = _prepare_model_output(
-        gdf=tfn_ncn_risk,
+        risk_data=tfn_ncn_risk,
         drop_cols=[],
         desc_cols=[
             "description",
@@ -1068,7 +1079,7 @@ def _tram_network_risk(
     tfn_tram_risk = _infrastructure_risk_intersect(tfn_tram_network, hazard_layers)
 
     tfn_tram_risk = _prepare_model_output(
-        gdf=tfn_tram_risk,
+        risk_data=tfn_tram_risk,
         drop_cols=[],
         desc_cols=[
             "description",
@@ -1116,7 +1127,7 @@ def _rapid_transport_network_risk(
     )
 
     tfn_rapid_transport_risk = _prepare_model_output(
-        gdf=tfn_rapid_transport_risk,
+        risk_data=tfn_rapid_transport_risk,
         drop_cols=[],
         desc_cols=[
             "description",

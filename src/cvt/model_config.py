@@ -61,7 +61,7 @@ class PathConfig(ctk.BaseConfig):
     @property
     def log_path(self) -> pathlib.Path:
         """Create logging directory and return path."""
-        log_path = self.root / "Logging"
+        log_path = self.root / "Logging" 
         log_path.mkdir(parents=True, exist_ok=True)
         return log_path
 
@@ -372,6 +372,7 @@ class Config(ctk.BaseConfig):
 
     switches: SwitchConfig
     paths: PathConfig
+    other_input: OtherInput
     infrastructure: InfrastructureConfig
     hazards: HazardsConfig
     impact: ImpactConfig

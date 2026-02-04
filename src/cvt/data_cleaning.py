@@ -1704,7 +1704,7 @@ def _aggregate_link_flows(
     route_flat = routes.reset_index()[["route", "link_id"]]
 
     # Merge OD demand with route links
-    od_links = od_flat.merge(route_flat, on="route")
+    od_links = od_flat.merge(route_flat, on="route", how="inner", validate="one_to_many")
 
     # Aggregate demand per link_id
     link_demand = od_links.groupby("link_id")["abs_demand"].sum().reset_index()
