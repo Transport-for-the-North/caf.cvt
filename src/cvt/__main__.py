@@ -18,7 +18,9 @@ def _main() -> None:
     parser = argparse.ArgumentParser(
         __package__, description="CLI for the Climate Vulnerability Tool"
     )
-    parser.add_argument("-c", "--config", help="Config file to use", type=pathlib.Path, default="config.yml")
+    parser.add_argument(
+        "-c", "--config", help="Config file to use", type=pathlib.Path, default="config.yml"
+    )
 
     args = parser.parse_args()
     config = Config.load_yaml(args.config)

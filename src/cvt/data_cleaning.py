@@ -232,8 +232,8 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    # _clean_infrastructure(config, boundary)
-    # _clean_hazards(config, boundary)
+    _clean_infrastructure(config, boundary)
+    _clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
 
@@ -1585,7 +1585,7 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
 
 def _clean_impact(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean impact datasets ready for analysis."""
-    # _clean_freight_demand(config, boundary)
+    _clean_freight_demand(config, boundary)
     _clean_noham_flows(config)
 
 

@@ -44,7 +44,7 @@ _IMPACT_WEIGHTS = {
     "extreme_weather": 0.125,
     "ground_stability": 0.125,
     "coastal_erosion": 0.125,
-    }
+}
 
 _TRAIN_STATIONS_BUFFER_SIZE_M = 100
 _CHARGING_SITES_BUFFER_SIZE_M = 25
@@ -799,7 +799,9 @@ def _bus_coach_stations_risk(
         config.paths.model_input / file_paths.BUS_COACH_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_bus_coach_stations = _buffer_geometry(tfn_bus_coach_stations, _BUS_COACH_STATIONS_BUFFER_SIZE_M)
+    tfn_bus_coach_stations = _buffer_geometry(
+        tfn_bus_coach_stations, _BUS_COACH_STATIONS_BUFFER_SIZE_M
+    )
 
     tfn_bus_coach_stations_risk = _infrastructure_risk_intersect(
         tfn_bus_coach_stations, hazard_layers
@@ -905,7 +907,9 @@ def _rapid_transport_stations_risk(
         config.paths.model_input / file_paths.RAPID_TRANSPORT_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_rapid_transport_stations = _buffer_geometry(tfn_rapid_transport_stations, _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M)
+    tfn_rapid_transport_stations = _buffer_geometry(
+        tfn_rapid_transport_stations, _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M
+    )
 
     tfn_rapid_transport_stations_risk = _infrastructure_risk_intersect(
         tfn_rapid_transport_stations, hazard_layers
