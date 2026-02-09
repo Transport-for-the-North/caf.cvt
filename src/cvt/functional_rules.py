@@ -50,6 +50,7 @@ _STORM_WEIGHTS = {
     "wind_driven_rain_index": 0.2,
 }
 
+_FLOOD_GRID_SIZE_M = 1000
 _FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
 _FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
 
@@ -691,7 +692,7 @@ def _wind_risk_scaled(speed_metres_per_second: float) -> float:
 def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Combine RoFRS & RoFSW into a single risk score by upscaling them to a common grid."""
     if config.switches.create_flood_grid:
-        flood_grid = _create_flood_grid(config, 1000, boundary)
+        flood_grid = _create_flood_grid(config, _FLOOD_GRID_SIZE_M, boundary)
     else:
         flood_grid = gpd.read_file(
             config.paths.model_interim_output / file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH

@@ -30,12 +30,28 @@ MMRN_NODE_TYPES = {
     "Train Stations": [
         "Railway Station;Modal Change",
         "Railway Station;Railway Station (Underground System);Modal Change",
+        "Railway Station (Principal);Modal Change",
+        "Railway Station (Principal);Railway Station (Underground System);Modal Change",
         "Railway Station;Tram Station;Modal Change",
         "Railway Station (Non Public Accessible);Modal Change",
         "Railway Station (Principal);Tram Station;Modal Change",
     ]
 }
 
+_FLOOD_CODE_NUMBER_MAP = {
+    "NT": ["50", "55"],
+    "NU": ["00", "05"],
+    "NX": ["50"],
+    "NY": ["00", "05", "50", "55"],
+    "NZ": ["00", "05", "50"],
+    "OV": ["00"],
+    "SD": ["00", "05", "50", "55"],
+    "SE": ["00", "05", "50", "55"],
+    "SJ": ["00", "05", "50", "55"],
+    "SK": ["00", "05", "50", "55"],
+    "TA": ["00", "05"],
+    "TF": ["00", "05", "50", "55"],
+}
 
 ### GENERAL FUNCTIONS
 
@@ -242,11 +258,14 @@ def data_cleaning(config: model_config.Config) -> None:
 
 def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all infrastructure datasets ready for analysis."""
+    LOG.info("Cleaning infrastructure data...")
     tfn_rail_links = _get_rail_links(boundary, config.infrastructure.rail.tfn_rail_links)
 
     _clean_roads(config, boundary)
     _clean_rail(config, tfn_rail_links)
     _clean_other(config, boundary, tfn_rail_links)
+
+    LOG.info("Finished cleaning infrastructure data.")
 
 
 ### ROAD
@@ -254,8 +273,10 @@ def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFram
 
 def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all roads datasets ready for analysis."""
+    LOG.info("Cleaning roads data...")
     _clean_os_roads(config, boundary)
     _clean_noham_roads(config, boundary)
+    LOG.info("Finished cleaning roads data.")
 
 
 def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -325,8 +346,10 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
 
 def _clean_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
     """Clean all rail datasets ready for analysis."""
+    LOG.info("Cleaning rail data...")
     _clean_passenger_rail(config, rail_links)
     _clean_freight_rail(config, rail_links)
+    LOG.info("Finished cleaning rail data.")
 
 
 def _get_rail_links(
@@ -433,6 +456,7 @@ def _clean_other(
     config: model_config.Config, boundary: gpd.GeoDataFrame, rail_links: gpd.GeoDataFrame
 ) -> None:
     """Clean all other datasets ready for analysis."""
+    LOG.info("Cleaning other infrastructure data...")
     _clean_airports(config)
     _clean_bus_stops(config, boundary)
     _clean_petrol_stations(config, boundary)
@@ -447,12 +471,14 @@ def _clean_other(
     _clean_bus_coach_stations(config, os_mm_net_node, boundary)
     _clean_tram_network(config, rail_links)
     _clean_rapid_transport_network(config, rail_links)
+    LOG.info("Finished cleaning other infrastructure data.")
 
 
 def _clean_airports(config: model_config.Config) -> None:
     """Read TfN airports dataset, then write to file in new directory."""
     airports = gpd.read_file(config.infrastructure.other.uk_airports)
     write_to_file(airports, config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH)
+    LOG.info("Cleaned airports data.")
 
 
 def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -755,10 +781,12 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
 
 def _clean_hazards(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean hazard data ready for analysis."""
+    LOG.info("Cleaning hazard data...")
     _clean_extreme_weather(config, boundary)
     _clean_flooding(config, boundary)
     _clean_ground_stability(config, boundary)
     _clean_coastal_erosion(config, boundary)
+    LOG.info("Finished cleaning hazard data.")
 
 
 ### EXTREME WEATHER
@@ -766,6 +794,7 @@ def _clean_hazards(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
 
 def _clean_extreme_weather(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all extreme weather datasets ready for analysis."""
+    LOG.info("Cleaning extreme weather data...")
     tfn_hazard_grid = _clean_hazard_grid(config, boundary)
 
     _clean_temp_max(config, tfn_hazard_grid)
@@ -780,6 +809,7 @@ def _clean_extreme_weather(config: model_config.Config, boundary: gpd.GeoDataFra
     _clean_icing_days(config, tfn_hazard_grid)
     _clean_wind_speed(config, boundary)
     _clean_wind_driven_rain(config, boundary)
+    LOG.info("Finished cleaning extreme weather data.")
 
 
 def _clean_hazard_grid(
@@ -792,8 +822,14 @@ def _clean_hazard_grid(
     )
     temp_max["grid_id"] = range(1, len(temp_max) + 1)
     hazard_grid = temp_max[["grid_id", "geometry"]]
+    len_before_filter = len(hazard_grid)
     tfn_hazard_grid = clip_to_boundary(hazard_grid, boundary)
     tfn_hazard_grid = explode_to_polygons(tfn_hazard_grid)
+    filter_removed = len_before_filter - len(tfn_hazard_grid)
+    LOG.info(
+        "Hazard grid filtered - % s of %s (%s percent) rows removed",
+        filter_removed, len_before_filter,
+        (filter_removed / len_before_filter) * 100)
     write_to_file(
         tfn_hazard_grid,
         config.paths.model_input / file_paths.HAZARD_GRID_MODEL_INPUT_PATH,
@@ -1258,24 +1294,12 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
 
 def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean flooding data ready for analysis."""
-    code_number_map = {
-        "NT": ["50", "55"],
-        "NU": ["00", "05"],
-        "NX": ["50"],
-        "NY": ["00", "05", "50", "55"],
-        "NZ": ["00", "05", "50"],
-        "OV": ["00"],
-        "SD": ["00", "05", "50", "55"],
-        "SE": ["00", "05", "50", "55"],
-        "SJ": ["00", "05", "50", "55"],
-        "SK": ["00", "05", "50", "55"],
-        "TA": ["00", "05"],
-        "TF": ["00", "05", "50", "55"],
-    }
+    LOG.info("Cleaning flooding data...")
 
     if config.switches.flood_zip_extract:
-        _extract_flood_data(config, code_number_map)
+        _extract_flood_data(config, _FLOOD_CODE_NUMBER_MAP)
 
+    LOG.info("Cleaning climate change river and sea flooding data...")
     _clean_flood(
         config,
         "RoFRS",
@@ -1284,8 +1308,11 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         boundary,
         file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         True,
-        code_number_map,
+        _FLOOD_CODE_NUMBER_MAP,
     )
+    LOG.info("Finished cleaning climate change river and sea flooding data.")
+
+    LOG.info("Cleaning river and sea flooding data...")
     _clean_flood(
         config,
         "RoFRS",
@@ -1294,8 +1321,11 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         boundary,
         file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
         False,
-        code_number_map,
+        _FLOOD_CODE_NUMBER_MAP,
     )
+    LOG.info("Finished cleaning river and sea flooding data.")
+
+    LOG.info("Cleaning climate change surface water flooding data...")
     _clean_flood(
         config,
         "RoFSW CC",
@@ -1304,8 +1334,11 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         boundary,
         file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         True,
-        code_number_map,
+        _FLOOD_CODE_NUMBER_MAP,
     )
+    LOG.info("Finished cleaning climate change surface water flooding data.")
+
+    LOG.info("Cleaning surface water flooding data...")
     _clean_flood(
         config,
         "RoFSW",
@@ -1314,8 +1347,10 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         boundary,
         file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
         False,
-        code_number_map,
+        _FLOOD_CODE_NUMBER_MAP,
     )
+    LOG.info("Finished cleaning surface water flooding data.")
+    LOG.info("Finished cleaning flooding data.")
 
 
 def _extract_flood_gdb_file(
@@ -1373,7 +1408,7 @@ def _read_flood_gdb(
     code: str,
     number: str,
     file_name: str,
-    flood_data: str,
+    flood_type: str,
     version: str,
     climate_change_switch: bool,
 ) -> gpd.GeoDataFrame | None:
@@ -1381,9 +1416,9 @@ def _read_flood_gdb(
     base_path = config.paths.raw_input / "Hazards" / "Flooding" / file_name / code
 
     if climate_change_switch:
-        gdb_path = base_path / f"{flood_data}_Climate_Change_01_{code}{number}_{version}.gdb"
+        gdb_path = base_path / f"{flood_type}_Climate_Change_01_{code}{number}_{version}.gdb"
     else:
-        gdb_path = base_path / f"{flood_data}_{code}{number}_{version}.gdb"
+        gdb_path = base_path / f"{flood_type}_{code}{number}_{version}.gdb"
 
     # Check if GDB folder exists
     if not gdb_path.exists():
@@ -1393,7 +1428,7 @@ def _read_flood_gdb(
     if not layers:
         raise ValueError(f"No layers found in GDB: {gdb_path}")
 
-    LOG.info("Available layers: %s", layers)
+    LOG.info("Available layers for %s %s%s: %s", flood_type, code, number, layers)
     return gpd.read_file(gdb_path, layer=layers[0])
 
 
@@ -1449,8 +1484,10 @@ def _clean_flood(
 
 def _clean_ground_stability(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean ground stability data ready for analysis."""
+    LOG.info("Cleaning ground stability data...")
     _clean_geosure(config, boundary)
     _clean_geoclimate(config, boundary)
+    LOG.info("Finished cleaning ground stability data.")
 
 
 def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -1483,10 +1520,19 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
     }
 
     tfn_geosure_layers = {}
-    for code, df in geosure_layers.items():
-        df_clean = df.rename(columns={"CLASS": f"{code}_risk"})
-        tfn_geosure_layers[code] = clip_to_boundary(df_clean, boundary)
+    for code, geosure_data in geosure_layers.items():
+        len_before_filter = len(geosure_data)
+        geosure_data_clean = geosure_data.rename(columns={"CLASS": f"{code}_risk"})
+        tfn_geosure_layers[code] = clip_to_boundary(geosure_data_clean, boundary)
         tfn_geosure_layers[code] = explode_to_polygons(tfn_geosure_layers[code])
+        filter_removed = len_before_filter - len(tfn_geosure_layers[code])
+        LOG.info(
+            "GeoSure %s filtered - %s of %s (%s percent) rows removed",
+            code.replace("_", " ").title(),
+            filter_removed,
+            len_before_filter,
+            (filter_removed / len_before_filter) * 100)
+
 
     # Merge layers based on nearest centroids
     base_code = next(iter(geosure_layers.keys()))
@@ -1503,6 +1549,13 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
         tfn_geosure[f"{code}_risk"] = matched[
             f"{code}_risk"
         ]  # Add the matched CLASS column to the base dataframe
+
+    filter_removed = len_before_filter - len(tfn_geosure)
+    LOG.info(
+        "GeoSure layers filtered - %s of %s (%s percent) rows removed",
+        filter_removed,
+        len_before_filter,
+        (filter_removed / len_before_filter) * 100)
 
     tfn_geosure = tfn_geosure[
         [
@@ -1524,13 +1577,23 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
 def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean GeoClimate Shrink-Swell data, then write to file."""
     for year, filepath in config.hazards.ground_stability.geo_shrink_swell:
-        gdf = gpd.read_file(filepath)
-        gdf = gdf.rename(columns={"CLASS": "shrink_swell_geoclimate_risk"})
-        gdf = gdf[["shrink_swell_geoclimate_risk", "geometry"]]
-        tfn_gdf = clip_to_boundary(gdf, boundary)
-        tfn_gdf = explode_to_polygons(tfn_gdf)
+        geoclimate_data = gpd.read_file(filepath)
+        geoclimate_data = geoclimate_data.rename(
+            columns={"CLASS": "shrink_swell_geoclimate_risk"})
+        geoclimate_data = geoclimate_data[["shrink_swell_geoclimate_risk", "geometry"]]
+        len_before_filter = len(geoclimate_data)
+        tfn_geoclimate_data = clip_to_boundary(geoclimate_data, boundary)
+        tfn_geoclimate_data = explode_to_polygons(tfn_geoclimate_data)
+        filter_removed = len_before_filter - len(tfn_geoclimate_data)
+        LOG.info(
+            "GeoClimate %s filtered - %s of %s (%s percent) rows removed",
+            year,
+            filter_removed,
+            len_before_filter,
+            (filter_removed / len_before_filter) * 100)
+
         write_to_file(
-            tfn_gdf,
+            tfn_geoclimate_data,
             config.paths.model_input
             / file_paths.GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH
             / f"tfn_bgs_ss_{year}.gpkg",
@@ -1542,8 +1605,10 @@ def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -
 
 def _clean_coastal_erosion(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean coastal erosion data ready for analysis."""
+    LOG.info("Cleaning coastal erosion data...")
     _clean_ground_instability_zones(config, boundary)
     _clean_ncerm(config, boundary)
+    LOG.info("Finished cleaning coastal erosion data.")
 
 
 def _clean_ground_instability_zones(
@@ -1554,8 +1619,16 @@ def _clean_ground_instability_zones(
         f"zip://{config.hazards.coastal_erosion.zip_path}!{config.hazards.coastal_erosion.giz}"
     )
     ncerm_giz = ncerm_giz[["smp_no", "geometry"]]
+    len_before_filter = len(ncerm_giz)
     tfn_ncerm_giz = clip_to_boundary(ncerm_giz, boundary)
     tfn_ncerm_giz = explode_to_polygons(tfn_ncerm_giz)
+    filter_removed = len_before_filter - len(tfn_ncerm_giz)
+    LOG.info(
+        "Ground Instability Zones filtered - %s of %s (%s percent) rows removed",
+        filter_removed,
+        len_before_filter,
+        (filter_removed / len_before_filter) * 100)
+
     write_to_file(
         tfn_ncerm_giz,
         config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH,
@@ -1565,15 +1638,24 @@ def _clean_ground_instability_zones(
 def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean erosion data from NCERM for 2055, and 2105, then write to file."""
     for year in ["2055", "2105"]:
-        gdf = gpd.read_file(
+        erosion_data = gpd.read_file(
             f"zip://{config.hazards.coastal_erosion.zip_path}!/"
             + config.hazards.coastal_erosion.smp[year]
         )
-        gdf = gdf[["smp_name", "geometry"]]
-        tfn_gdf = clip_to_boundary(gdf, boundary)
-        tfn_gdf = explode_to_polygons(tfn_gdf)
+        erosion_data = erosion_data[["smp_name", "geometry"]]
+        len_before_filter = len(erosion_data)
+        tfn_erosion_data = clip_to_boundary(erosion_data, boundary)
+        tfn_erosion_data = explode_to_polygons(tfn_erosion_data)
+        filter_removed = len_before_filter - len(tfn_erosion_data)
+        LOG.info(
+            "NCERM %s filtered - %s of %s (%s percent) rows removed",
+            year,
+            filter_removed,
+            len_before_filter,
+            (filter_removed / len_before_filter) * 100)
+
         write_to_file(
-            tfn_gdf,
+            tfn_erosion_data,
             config.paths.model_input
             / file_paths.NCERM_MODEL_INPUT_PATH
             / f"tfn_ncerm_smp_{year}_70CC.gpkg",
@@ -1585,8 +1667,10 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
 
 def _clean_impact(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean impact datasets ready for analysis."""
+    LOG.info("Cleaning impact data...")
     _clean_freight_demand(config, boundary)
     _clean_noham_flows(config)
+    LOG.info("Finished cleaning impact data.")
 
 
 ### FREIGHT
@@ -1613,7 +1697,16 @@ def _read_freight_demand(path: pathlib.Path, boundary: gpd.GeoDataFrame) -> gpd.
     freight_network_demand = freight_network_demand[
         ["dij_id", "2022_23_total", "2050_51 sc2_total", "geometry"]
     ]
-    return clip_to_boundary(freight_network_demand, boundary)
+    len_before_filter = len(freight_network_demand)
+    tfn_freight_network_demand = clip_to_boundary(freight_network_demand, boundary)
+    filter_removed = len_before_filter - len(tfn_freight_network_demand)
+    LOG.info(
+        "Freight demand filtered - %s of %s (%s percent) rows removed",
+        filter_removed,
+        len_before_filter,
+        (filter_removed / len_before_filter) * 100)
+
+    return tfn_freight_network_demand
 
 
 def _map_freight_networks(
@@ -1622,6 +1715,7 @@ def _map_freight_networks(
     """Map freight demand data onto OS network, then clean and return."""
     tfn_os_freight_rail = gpd.read_file(os_path)
     tfn_os_freight_rail = tfn_os_freight_rail.to_crs(tfn_freight_network_demand.crs)
+    len_before_mapping = len(tfn_freight_network_demand)
     tfn_os_freight_network_demand = gpd.sjoin_nearest(
         tfn_os_freight_rail,
         tfn_freight_network_demand,
@@ -1629,6 +1723,12 @@ def _map_freight_networks(
         max_distance=500,
         distance_col="distance",
     )
+    len_after_mapping = len(tfn_os_freight_network_demand)
+    LOG.info(
+        "Freight demand mapped to OS network - %s segments mapped onto %s OS network segments",
+        len_before_mapping,
+        len_after_mapping)
+
     tfn_os_freight_network_demand[["2022_23_total", "2050_51 sc2_total"]] = (
         tfn_os_freight_network_demand[["2022_23_total", "2050_51 sc2_total"]].fillna(0)
     )
@@ -1727,7 +1827,7 @@ def _aggregate_link_flows_year(config: model_config.Config) -> dict[str, pd.Data
         for time_period in time_periods:
             uc_dfs = []
             for user_class in user_classes:
-                LOG.info("Processing: %s %s %s", year, time_period, user_class)
+                LOG.info("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
                 od_df, route_df, link_df = _read_noham_h5(
                     year,
                     time_period,
