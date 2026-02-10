@@ -174,7 +174,12 @@ def _iterative_spatial_infilling(
 
         # Stop if no improvement
         if prev_na_count is not None and current_na_count == prev_na_count:
-            LOG.info("No further improvement  after %s iterations using spatial infilling. Switching to nearest join to fill remaining %s NA values.", i, current_na_count)
+            LOG.info(
+                "No further improvement  after %s iterations using spatial infilling. " \
+                "Switching to nearest join to fill remaining %s NA values.",
+                i,
+                current_na_count,
+            )
             break
 
         prev_na_count = current_na_count
@@ -285,7 +290,8 @@ def _filter_out_small_geometries(
     risk_data = risk_data[risk_data["area"] > threshold]  # Filter out tiny geometries
     filter_removed = len_before_filter - len(risk_data)
     LOG.info(
-        "Filtered out %s geometries of %s total geometries below area threshold of %s (%s of median area).",
+        "Filtered out %s geometries of %s total geometries below area threshold of %s "
+        "(%s of median area).",
         filter_removed,
         len_before_filter,
         threshold,
@@ -384,7 +390,6 @@ def _extreme_weather_index(config: model_config.Config) -> None:
             "storm_risk_forecast",
         ],
     )
-
 
     tfn_extreme_weather_risk = data_cleaning.explode_to_polygons(tfn_extreme_weather_risk)
     tfn_extreme_weather_risk = tfn_extreme_weather_risk.drop(columns=["part"])
@@ -722,30 +727,30 @@ def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         )
 
     current_flood_scenario_map = [
-                (file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH, "rivers_sea_flood_risk_current"),
-                (file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH, "surface_water_flood_risk_current")
-            ]
+        (file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH, "rivers_sea_flood_risk_current"),
+        (file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH, "surface_water_flood_risk_current"),
+    ]
 
     forecast_flood_scenario_map = [
-                (file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH, "rivers_sea_flood_risk_forecast"),
-                (file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH, "surface_water_flood_risk_forecast")
-            ]
+        (
+            file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+            "rivers_sea_flood_risk_forecast",
+        ),
+        (
+            file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+            "surface_water_flood_risk_forecast",
+        ),
+    ]
 
     LOG.info("Proccessing current flood risk...")
     tfn_flood_risk_c = _upscale_to_grid(
-        config,
-        flood_grid,
-        current_flood_scenario_map,
-        "current"
+        config, flood_grid, current_flood_scenario_map, "current"
     )
     LOG.info("Current flood risk processing complete.")
 
     LOG.info("Proccessing forecast flood risk...")
     tfn_flood_risk_f = _upscale_to_grid(
-        config,
-        flood_grid,
-        forecast_flood_scenario_map,
-        "forecast"
+        config, flood_grid, forecast_flood_scenario_map, "forecast"
     )
     LOG.info("Forecast flood risk processing complete.")
 
@@ -808,7 +813,7 @@ def _upscale_to_grid(
     config: model_config.Config,
     flood_grid: gpd.GeoDataFrame,
     scenario_map: list[tuple[pathlib.Path, str]],
-    scenario: str
+    scenario: str,
 ) -> gpd.GeoDataFrame:
     """Upscales each flood layer to the common grid and writes to file."""
     result = flood_grid.copy()
@@ -870,7 +875,8 @@ def _area_weighted_flood_assignment(
 
     len_after_upscale = len(grid)
     LOG.info(
-        "Upscaled flood layer %s from %s geometries to %s grid cells using area-weighted average.",
+        "Upscaled flood layer %s from %s geometries to %s grid cells " \
+        "using area-weighted average.",
         risk_column,
         len_before_upscale,
         len_after_upscale,

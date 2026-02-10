@@ -388,7 +388,7 @@ def _get_rail_links(
     len_before_filter = len(tfn_rail_links)
     tfn_rail_links = tfn_rail_links[
         tfn_rail_links["operationalstatus"] == "Active"
-    ]  # Exclude inactive links
+    ]
     tfn_rail_links = tfn_rail_links[
         [
             "osid",
@@ -582,14 +582,16 @@ def _read_os_mm_node_network(path: pathlib.Path) -> gpd.GeoDataFrame:
 
 
 def _clean_train_stations(
-    config: model_config.Config, os_mm_net_node: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame
+    config: model_config.Config, os_mmrn_path: pathlib.Path, boundary: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MMRN for train stations, then clip to boundary and write to file."""
-    len_before_filter = len(os_mm_net_node)
-    train_stations = os_mm_net_node[
-        os_mm_net_node["os_nodetype"].isin(MMRN_NODE_TYPES["Train Stations"])
+    os_mmrn_railway_stations = gpd.read_file(os_mmrn_path, layer="mrn_ntwk_transportnode", where="os_nodetype LIKE '%Railway Station%'")
+    len_before_filter = len(os_mmrn_railway_stations)
+    train_stations = os_mmrn_railway_stations[
+        os_mmrn_railway_stations["os_nodetype"].isin(MMRN_NODE_TYPES["Train Stations"])
     ]
-    train_stations = train_stations.drop(columns=["os_nodetype"])
+    train_stations = train_stations.drop(columns=["os_nodetype", "os_parentid", "name"])
+    train_stations = train_stations.drop_duplicates(subset=["nodeid", "geometry"])
     tfn_train_stations = clip_to_boundary(train_stations, boundary)
     filter_removed = len_before_filter - len(tfn_train_stations)
     LOG.info(
@@ -605,14 +607,13 @@ def _clean_train_stations(
 
 
 def _clean_tram_stations(
-    config: model_config.Config, os_mm_net_node: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame
+    config: model_config.Config, os_mmrn_path: pathlib.Path, boundary: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MMRN for tram stations, then clip to boundary and write to file."""
-    len_before_filter = len(os_mm_net_node)
-    tram_stations = os_mm_net_node[
-        os_mm_net_node["os_nodetype"].str.contains("Tram Station", case=False, na=False)
-    ]
-    tram_stations = tram_stations.drop(columns=["os_nodetype"])
+    tram_stations = gpd.read_file(os_mmrn_path, layer="mrn_ntwk_transportnode", where="os_nodetype LIKE '%Tram Station%'")
+    len_before_filter = len(tram_stations)
+    tram_stations = tram_stations.drop(columns=["os_nodetype", "os_parentid", "name"])
+    tram_stations = tram_stations.drop_duplicates(["nodeid", "geometry"])
     tfn_tram_stations = clip_to_boundary(tram_stations, boundary)
     filter_removed = len_before_filter - len(tfn_tram_stations)
     LOG.info(
@@ -1167,7 +1168,8 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     len_before_filter = len_before_filter_current + len_before_filter_future
 
     windspd_combined = _merge_and_fill(
-        windspd_c_combined, windspd_f_combined, "avg_exceedance_days_forecast", ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
+        windspd_c_combined, windspd_f_combined, "avg_exceedance_days_forecast",
+        ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
     )
 
     windspd_combined["geometry"] = [
@@ -1217,7 +1219,8 @@ def _read_wind_speed_reduce(xr_path: pathlib.Path, scenario: str) -> pd.DataFram
         f"wind_speed_99th_percentile_{scenario}",
     ]
     return _merge_and_fill(
-        pct, exc, f"avg_exceedance_days_{scenario}", ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
+        pct, exc, f"avg_exceedance_days_{scenario}",
+        ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
     ), len_before_filter
 
 
@@ -1254,7 +1257,8 @@ def _calculate_windspd_exceedance(
     )
 
 
-def _calculate_windspd_percentile(windspd_data: pd.DataFrame, quantile: float, variable: str) -> pd.DataFrame:
+def _calculate_windspd_percentile(windspd_data: pd.DataFrame, quantile: float, variable: str
+                                  ) -> pd.DataFrame:
     """Calculate the wind speed percentiles per geometry for a given variable."""
     return windspd_data.pivot_table(
         index=[

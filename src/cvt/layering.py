@@ -618,7 +618,9 @@ def _freight_rail_risk(
         "id",
         pathlib.Path("Rail") / "Freight Rail" / "tfn_freight_rail_network_risk",
     )
-    LOG.info("Finished layering freight rail network with hazard risk and calculating impact index.")
+    LOG.info(
+        "Finished layering freight rail network with hazard risk and calculating impact index."
+    )
 
 
 def _freight_impact_index(
@@ -652,9 +654,12 @@ def _calculate_freight_impact(
         freight_data[f"impact_{scenario}"] = (
             freight_data[f"demand_{scenario}"] * impact_weights["demand"]
             + freight_data[f"flood_risk_{scenario}"] * impact_weights["flood"]
-            + freight_data[f"extreme_weather_risk_{scenario}"] * impact_weights["extreme_weather"]
-            + freight_data[f"ground_stability_risk_{scenario}"] * impact_weights["ground_stability"]
-            + freight_data[f"coastal_erosion_risk_{scenario}"] * impact_weights["coastal_erosion"]
+            + freight_data[f"extreme_weather_risk_{scenario}"]
+            * impact_weights["extreme_weather"]
+            + freight_data[f"ground_stability_risk_{scenario}"]
+            * impact_weights["ground_stability"]
+            + freight_data[f"coastal_erosion_risk_{scenario}"]
+            * impact_weights["coastal_erosion"]
         )
 
     return freight_data
