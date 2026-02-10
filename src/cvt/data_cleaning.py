@@ -143,6 +143,12 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         A new GeoDataFrame containing only Polygon geometries, with a new column 'part' to keep
         track.
     """
+    multipolygon_count = 0
+    multipolygon_polygon_count = 0
+
+    geometry_collection_count = 0
+    geometry_collection_polygon_count = 0
+
     rows = []
     for _idx, row in gdf.iterrows():
         geom = row.geometry
@@ -151,20 +157,31 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
             new_row["part"] = 0
             rows.append(new_row)
         elif geom.geom_type == "MultiPolygon":
+            multipolygon_count += 1
             for i, poly in enumerate(geom.geoms):
+                multipolygon_polygon_count += 1
                 new_row = row.copy()
                 new_row.geometry = poly
                 new_row["part"] = i
                 rows.append(new_row)
         elif geom.geom_type == "GeometryCollection":
+            geometry_collection_count += 1
             poly_count = 0
             for part in geom.geoms:
                 if part.geom_type == "Polygon":
+                    geometry_collection_polygon_count += 1
                     new_row = row.copy()
                     new_row.geometry = part
                     new_row["part"] = poly_count
                     rows.append(new_row)
                     poly_count += 1
+
+    LOG.info(
+        "Exploded %s MultiPolygons and %s GeometryCollections into %s Polygons.",
+        multipolygon_count,
+        geometry_collection_count,
+        multipolygon_polygon_count + geometry_collection_polygon_count,
+    )
 
     return gpd.GeoDataFrame(rows, crs=gdf.crs).reset_index(drop=True)
 
@@ -230,6 +247,17 @@ def _nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.Ge
 
     # Merge back with original gdf1 to restore original geometry
     return gdf1.merge(nearest.drop(columns="geometry"), left_index=True, right_index=True)
+
+
+def _merge_and_fill(
+    df1: pd.DataFrame, df2: pd.DataFrame, fill_col: str, merge_cols: list[str]
+) -> pd.DataFrame:
+    """Merge two dataframes on common coordinates, fill a given column with 0 values."""
+    return df1.merge(
+        df2,
+        on=merge_cols,
+        how="outer",
+    ).fillna({fill_col: 0})
 
 
 # DATA CLEANING
@@ -1138,8 +1166,8 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
 
     len_before_filter = len_before_filter_current + len_before_filter_future
 
-    windspd_combined = _windspd_merge_and_fill(
-        windspd_c_combined, windspd_f_combined, "avg_exceedance_days_forecast"
+    windspd_combined = _merge_and_fill(
+        windspd_c_combined, windspd_f_combined, "avg_exceedance_days_forecast", ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
     )
 
     windspd_combined["geometry"] = [
@@ -1179,8 +1207,8 @@ def _read_wind_speed_reduce(xr_path: pathlib.Path, scenario: str) -> pd.DataFram
     """Read wind speed projections, calculate metrics and return a merged dataframe."""
     windspd = xr.open_dataset(xr_path).to_dataframe()
     len_before_filter = len(windspd)
-    exc = _calculate_exceedance(20, windspd, "wsgmax10m", scenario)
-    pct = _calculate_percentile(windspd, 0.99, "wsgmax10m")
+    exc = _calculate_windspd_exceedance(20, windspd, "wsgmax10m", scenario)
+    pct = _calculate_windspd_percentile(windspd, 0.99, "wsgmax10m")
     pct.columns = [
         "projection_y_coordinate",
         "projection_x_coordinate",
@@ -1188,31 +1216,21 @@ def _read_wind_speed_reduce(xr_path: pathlib.Path, scenario: str) -> pd.DataFram
         "longitude",
         f"wind_speed_99th_percentile_{scenario}",
     ]
-    return _windspd_merge_and_fill(
-        pct, exc, f"avg_exceedance_days_{scenario}"
+    return _merge_and_fill(
+        pct, exc, f"avg_exceedance_days_{scenario}", ["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"]
     ), len_before_filter
 
 
-def _windspd_merge_and_fill(
-    df1: pd.DataFrame, df2: pd.DataFrame, fill_col: str
-) -> pd.DataFrame:
-    """Merge two dataframes on common coordinates, fill a given column with 0 values."""
-    return df1.merge(
-        df2,
-        on=["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"],
-        how="outer",
-    ).fillna({fill_col: 0})
 
-
-def _calculate_exceedance(
-    threshold: int, df: pd.DataFrame, variable: str, timescale: str
+def _calculate_windspd_exceedance(
+    threshold: int, windspd_data: pd.DataFrame, variable: str, timescale: str
 ) -> pd.DataFrame:
     """Compute average exceedance days per geometry for values above a threshold."""
-    df["exceedance"] = df[variable] > threshold
+    windspd_data["exceedance"] = windspd_data[variable] > threshold
 
     # Group by grid square and year, and count exceedance days
     exceedance_counts = (
-        df[df["exceedance"]]
+        windspd_data[windspd_data["exceedance"]]
         .groupby(
             [
                 "projection_y_coordinate",
@@ -1236,9 +1254,9 @@ def _calculate_exceedance(
     )
 
 
-def _calculate_percentile(df: pd.DataFrame, quantile: float, variable: str) -> pd.DataFrame:
-    """Calculate the percentiles per geometry for a given variable."""
-    return df.pivot_table(
+def _calculate_windspd_percentile(windspd_data: pd.DataFrame, quantile: float, variable: str) -> pd.DataFrame:
+    """Calculate the wind speed percentiles per geometry for a given variable."""
+    return windspd_data.pivot_table(
         index=[
             "projection_y_coordinate",
             "projection_x_coordinate",
@@ -1788,11 +1806,11 @@ def _read_noham_h5(
         / f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
     )
 
-    od_df = pd.read_hdf(noham_demand_path, key="/data/OD")
-    route_df = pd.read_hdf(noham_demand_path, key="/data/Route")
-    link_df = pd.read_hdf(noham_demand_path, key="/data/link")
+    noham_ods = pd.read_hdf(noham_demand_path, key="/data/OD")
+    noham_routes = pd.read_hdf(noham_demand_path, key="/data/Route")
+    noham_links = pd.read_hdf(noham_demand_path, key="/data/link")
 
-    return od_df, route_df, link_df
+    return noham_ods, noham_routes, noham_links
 
 
 def _aggregate_link_flows(
@@ -1828,7 +1846,7 @@ def _aggregate_link_flows_year(config: model_config.Config) -> dict[str, pd.Data
             uc_dfs = []
             for user_class in user_classes:
                 LOG.info("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
-                od_df, route_df, link_df = _read_noham_h5(
+                noham_ods, noham_routes, noham_links = _read_noham_h5(
                     year,
                     time_period,
                     user_class,
@@ -1837,7 +1855,7 @@ def _aggregate_link_flows_year(config: model_config.Config) -> dict[str, pd.Data
                     config.switches.noham_zip_extract,
                 )
                 link_demand = _aggregate_link_flows(
-                    od_df, route_df, link_df
+                    noham_ods, noham_routes, noham_links
                 )  # Get link based demand
                 link_demand = link_demand.rename(
                     columns={"abs_demand": f"{user_class}_{time_period}"}
