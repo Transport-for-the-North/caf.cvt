@@ -309,9 +309,12 @@ def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
 
 def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean OS Open Roads dataset, then write to file."""
-    os_road = gpd.read_file(config.infrastructure.road.os_road)
+    os_road = gpd.read_file(
+        config.infrastructure.road.os_road,
+        mask=boundary,
+        columns=["identifier", "roadNumber", "name1", "function", "geometry"]
+    )
     os_road = os_road.drop_duplicates(subset=["identifier", "geometry"])
-    os_road = os_road[["identifier", "roadNumber", "name1", "function", "geometry"]]
     os_road = os_road.rename(columns={"name1": "name", "roadNumber": "road_number"})
     os_road[["road_number", "name", "function"]] = os_road[
         ["road_number", "name", "function"]
@@ -338,7 +341,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     for scenario, noham_entry in config.infrastructure.road.noham.items():
         year = noham_entry.year
         file_path = noham_entry.file_path
-        noham_network = gpd.read_file(file_path)
+        noham_network = gpd.read_file(file_path, mask=boundary, columns=["link_id", "geometry"])
         len_before_filter = len(noham_network)
         noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
         noham_network_clean[["a", "b"]] = (
@@ -349,7 +352,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
             (noham_network_clean["a"] >= _NOHAM_ROAD_THRESHOLD)
             & (noham_network_clean["b"] >= _NOHAM_ROAD_THRESHOLD)
         ]
-        noham_network_clean = noham_network_clean[["link_id", "geometry"]]
+        noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
         noham_network_clean = noham_network_clean[~noham_network_clean.geometry.is_empty]
         noham_network_clean = noham_network_clean[noham_network_clean.geometry.notna()]
         tfn_noham_network = clip_to_boundary(noham_network_clean, boundary)
@@ -384,22 +387,15 @@ def _get_rail_links(
     boundary: gpd.GeoDataFrame, os_rail_path: pathlib.Path
 ) -> gpd.GeoDataFrame:
     """Read and clean OS Rail Network data from the Mutli-Modal Routing Network."""
-    tfn_rail_links = gpd.read_file(os_rail_path)
+    tfn_rail_links = gpd.read_file(
+        os_rail_path,
+        mask=boundary,
+        columns=["osid", "description", "structure", "physicallevel", "railwayuse", "trackrepresentation", "operationalstatus", "geometry"])
     len_before_filter = len(tfn_rail_links)
     tfn_rail_links = tfn_rail_links[
         tfn_rail_links["operationalstatus"] == "Active"
     ]
-    tfn_rail_links = tfn_rail_links[
-        [
-            "osid",
-            "description",
-            "structure",
-            "physicallevel",
-            "railwayuse",
-            "trackrepresentation",
-            "geometry",
-        ]
-    ]
+    tfn_rail_links = tfn_rail_links.drop(columns="operationalstatus")
     tfn_rail_links = tfn_rail_links[
         ~tfn_rail_links["description"].isin(
             ["Preserved", "Funicular", "Mineral", "Static Museum"]
@@ -491,12 +487,11 @@ def _clean_other(
     _clean_charging_sites(config, boundary)
     _clean_ncn(config, boundary)
 
-    os_mm_net_node = _read_os_mm_node_network(config.infrastructure.other.os_mmrn)
-    _clean_train_stations(config, os_mm_net_node, boundary)
-    _clean_tram_stations(config, os_mm_net_node, boundary)
-    _clean_rapid_transport_stations(config, os_mm_net_node, boundary)
-    _clean_ferry_terminals(config, os_mm_net_node, boundary)
-    _clean_bus_coach_stations(config, os_mm_net_node, boundary)
+    _clean_train_stations(config, boundary)
+    _clean_tram_stations(config, boundary)
+    _clean_rapid_transport_stations(config, boundary)
+    _clean_ferry_terminals(config, boundary)
+    _clean_bus_coach_stations(config, boundary)
     _clean_tram_network(config, rail_links)
     _clean_rapid_transport_network(config, rail_links)
     LOG.info("Finished cleaning other infrastructure data.")
@@ -544,13 +539,13 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
 
 def _clean_petrol_stations(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean POI data, filter for petrol stations, and write to file."""
-    poi_uk = gpd.read_file(
-        f"zip://{config.infrastructure.other.poi_uk.zip_path}!{config.infrastructure.other.poi_uk.file_path}"
+    petrol_stations = gpd.read_file(
+        f"zip://{config.infrastructure.other.poi_uk.zip_path}!{config.infrastructure.other.poi_uk.file_path}",
+        columns=["id", "geometry"],
+        where="main_category = 'gas_station'"
     )
-    len_before_filter = len(poi_uk)
-    petrol_stations = poi_uk[poi_uk["main_category"] == "gas_station"]
-    petrol_stations = petrol_stations[["id", "geometry"]]
-    petrol_stations = petrol_stations.drop_duplicates(subset=["id", "geometry"])
+    len_before_filter = len(petrol_stations)
+    petrol_stations = petrol_stations.drop_duplicates()
     tfn_petrol = clip_to_boundary(petrol_stations, boundary)
     filter_removed = len_before_filter - len(tfn_petrol)
     LOG.info(
@@ -565,33 +560,21 @@ def _clean_petrol_stations(config: model_config.Config, boundary: gpd.GeoDataFra
     )
 
 
-def _read_os_mm_node_network(path: pathlib.Path) -> gpd.GeoDataFrame:
-    """Read and clean OS MMRN dataset to prepare for further filtering."""
-    os_mm_net_node = gpd.read_file(path, layer="mrn_ntwk_transportnode")
-    len_before_filter = len(os_mm_net_node)
-    os_mm_net_node = os_mm_net_node.drop(columns=["os_parentid", "name"])
-    os_mm_net_node = os_mm_net_node.drop_duplicates(subset=["nodeid", "geometry"])
-    filter_removed = len_before_filter - len(os_mm_net_node)
-    LOG.info(
-        "OS MMRN filtered - %s of %s (%s percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    return os_mm_net_node
-
-
 def _clean_train_stations(
-    config: model_config.Config, os_mmrn_path: pathlib.Path, boundary: gpd.GeoDataFrame
+    config: model_config.Config, boundary: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MMRN for train stations, then clip to boundary and write to file."""
-    os_mmrn_railway_stations = gpd.read_file(os_mmrn_path, layer="mrn_ntwk_transportnode", where="os_nodetype LIKE '%Railway Station%'")
+    os_mmrn_railway_stations = gpd.read_file(
+        config.infrastructure.other.os_mmrn,
+        layer="mrn_ntwk_transportnode",
+        where="os_nodetype LIKE '%Railway Station%'",
+        columns=["nodeid", "os_nodetype", "geometry"])
     len_before_filter = len(os_mmrn_railway_stations)
     train_stations = os_mmrn_railway_stations[
         os_mmrn_railway_stations["os_nodetype"].isin(MMRN_NODE_TYPES["Train Stations"])
     ]
-    train_stations = train_stations.drop(columns=["os_nodetype", "os_parentid", "name"])
-    train_stations = train_stations.drop_duplicates(subset=["nodeid", "geometry"])
+    train_stations = train_stations.drop(columns=["os_nodetype"])
+    train_stations = train_stations.drop_duplicates()
     tfn_train_stations = clip_to_boundary(train_stations, boundary)
     filter_removed = len_before_filter - len(tfn_train_stations)
     LOG.info(
@@ -607,13 +590,16 @@ def _clean_train_stations(
 
 
 def _clean_tram_stations(
-    config: model_config.Config, os_mmrn_path: pathlib.Path, boundary: gpd.GeoDataFrame
+    config: model_config.Config, boundary: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MMRN for tram stations, then clip to boundary and write to file."""
-    tram_stations = gpd.read_file(os_mmrn_path, layer="mrn_ntwk_transportnode", where="os_nodetype LIKE '%Tram Station%'")
+    tram_stations = gpd.read_file(
+        config.infrastructure.other.os_mmrn,
+        layer="mrn_ntwk_transportnode",
+        where="os_nodetype LIKE '%Tram Station%'",
+        columns=["nodeid", "geometry"])
     len_before_filter = len(tram_stations)
-    tram_stations = tram_stations.drop(columns=["os_nodetype", "os_parentid", "name"])
-    tram_stations = tram_stations.drop_duplicates(["nodeid", "geometry"])
+    tram_stations = tram_stations.drop_duplicates()
     tfn_tram_stations = clip_to_boundary(tram_stations, boundary)
     filter_removed = len_before_filter - len(tfn_tram_stations)
     LOG.info(
@@ -628,14 +614,17 @@ def _clean_tram_stations(
 
 
 def _clean_rapid_transport_stations(
-    config: model_config.Config, os_mm_net_node: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame
+    config: model_config.Config, boundary: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MMRN for rapid transport stations, then clip to boundary and write to file."""
-    len_before_filter = len(os_mm_net_node)
-    rapid_transport_stations = os_mm_net_node[
-        os_mm_net_node["os_nodetype"].str.contains("Underground System", case=False, na=False)
-    ]
-    rapid_transport_stations = rapid_transport_stations.drop(columns=["os_nodetype"])
+    rapid_transport_stations = gpd.read_file(
+        config.infrastructure.other.os_mmrn,
+        layer="mrn_ntwk_transportnode",
+        where="os_nodetype LIKE '%Underground System%'",
+        columns=["nodeid", "geometry"]
+    )
+    len_before_filter = len(rapid_transport_stations)
+    rapid_transport_stations = rapid_transport_stations.drop_duplicates()
     tfn_rapid_transport_stations = clip_to_boundary(rapid_transport_stations, boundary)
     filter_removed = len_before_filter - len(tfn_rapid_transport_stations)
     LOG.info(
@@ -651,14 +640,16 @@ def _clean_rapid_transport_stations(
 
 
 def _clean_ferry_terminals(
-    config: model_config.Config, os_mm_net_node: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame
+    config: model_config.Config, boundary: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MMRN for ferry terminals, then clip to boundary and write to file."""
-    len_before_filter = len(os_mm_net_node)
-    ferry_terminals = os_mm_net_node[
-        os_mm_net_node["os_nodetype"].str.contains("Ferry", case=False, na=False)
-    ]
-    ferry_terminals = ferry_terminals.drop(columns=["os_nodetype"])
+    ferry_terminals = gpd.read_file(
+        config.infrastructure.other.os_mmrn,
+        layer="mrn_ntwk_transportnode",
+        where="os_nodetype LIKE '%Ferry%'",
+        columns=["nodeid", "geometry"])
+    len_before_filter = len(ferry_terminals)
+    ferry_terminals = ferry_terminals.drop_duplicates()
     tfn_ferry_terminals = clip_to_boundary(ferry_terminals, boundary)
     filter_removed = len_before_filter - len(tfn_ferry_terminals)
     LOG.info(
@@ -674,15 +665,18 @@ def _clean_ferry_terminals(
 
 
 def _clean_bus_coach_stations(
-    config: model_config.Config, os_mm_net_node: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame
+    config: model_config.Config, boundary: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MMRN for bus and coach stations, then clip to boundary and write to file."""
-    len_before_filter = len(os_mm_net_node)
-    bus_coach_stations = os_mm_net_node[
-        (os_mm_net_node["os_nodetype"].str.contains("Bus Station", case=False, na=False))
-        | (os_mm_net_node["os_nodetype"] == "Coach Station;Modal Change")
-    ]
-    bus_coach_stations = bus_coach_stations.drop(columns=["os_nodetype"])
+    bus_coach_stations = gpd.read_file(
+        config.infrastructure.other.os_mmrn,
+        layer="mrn_ntwk_transportnode",
+        where="os_nodetype LIKE '%Bus Station%' OR os_nodetype LIKE '%Coach Station%'",
+        mask=boundary
+    )
+    len_before_filter = len(bus_coach_stations)
+    bus_coach_stations = bus_coach_stations.drop(columns=["os_nodetype", "os_parentid", "name"])
+    bus_coach_stations = bus_coach_stations.drop_duplicates(["nodeid", "geometry"])
     tfn_bus_coach_stations = clip_to_boundary(bus_coach_stations, boundary)
     filter_removed = len_before_filter - len(tfn_bus_coach_stations)
     LOG.info(
