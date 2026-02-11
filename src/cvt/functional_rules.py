@@ -175,7 +175,7 @@ def _iterative_spatial_infilling(
         # Stop if no improvement
         if prev_na_count is not None and current_na_count == prev_na_count:
             LOG.info(
-                "No further improvement  after %s iterations using spatial infilling. " \
+                "No further improvement  after %s iterations using spatial infilling. "
                 "Switching to nearest join to fill remaining %s NA values.",
                 i,
                 current_na_count,
@@ -875,7 +875,7 @@ def _area_weighted_flood_assignment(
 
     len_after_upscale = len(grid)
     LOG.info(
-        "Upscaled flood layer %s from %s geometries to %s grid cells " \
+        "Upscaled flood layer %s from %s geometries to %s grid cells "
         "using area-weighted average.",
         risk_column,
         len_before_upscale,

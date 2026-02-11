@@ -628,11 +628,7 @@ def _freight_impact_index(
 ) -> gpd.GeoDataFrame:
     """Calculate impact index using freight demand data and hazard risk."""
     tfn_freight_network_risk = functional_rules.min_max_scaling_pair(
-        tfn_freight_network_risk, [("2022_23_total", "2050_51 sc2_total")]
-    )
-
-    tfn_freight_network_risk = tfn_freight_network_risk.rename(
-        columns={"2022_23_total": "demand_current", "2050_51 sc2_total": "demand_forecast"}
+        tfn_freight_network_risk, [("demand_current", "demand_forecast")]
     )
 
     tfn_freight_network_risk = _calculate_freight_impact(
