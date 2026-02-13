@@ -702,9 +702,9 @@ def _storm_index(
 
 def _wind_risk_scaled(speed_metres_per_second: float) -> float:
     """Calculate wind risk value given a wind speed, based on classification rule."""
-    if speed_metres_per_second < _WIND_SPEED_RISK_THRESHOLD_LOWER:  # Below 30 mph
+    if speed_metres_per_second < _WIND_SPEED_RISK_THRESHOLD_LOWER:
         return 0
-    if speed_metres_per_second <= _WIND_SPEED_RISK_THRESHOLD_UPPER:  # between 30 and 45 mph
+    if speed_metres_per_second <= _WIND_SPEED_RISK_THRESHOLD_UPPER:
         return (speed_metres_per_second - _WIND_SPEED_RISK_THRESHOLD_LOWER) / (
             _WIND_SPEED_RISK_THRESHOLD_UPPER - _WIND_SPEED_RISK_THRESHOLD_LOWER
         )  # Scale to 0 - 1

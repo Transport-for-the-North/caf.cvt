@@ -71,7 +71,7 @@ RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH = (
     / "tfn_rapid_transport_links.gpkg"
 )
 CHARGING_SITES_MODEL_INPUT_PATH = (
-    pathlib.Path("Infrastructrure") / "Other" / "TfN EV Charging Sites" / "tfn_chg_sites.gpkg"
+    pathlib.Path("Infrastructure") / "Other" / "TfN EV Charging Sites" / "tfn_chg_sites.gpkg"
 )
 NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH = (
     pathlib.Path("Infrastructure") / "Other" / "TfN NCN" / "tfn_ncn.gpkg"

@@ -60,6 +60,9 @@ _FLOOD_CODE_NUMBER_MAP = {
 }
 
 
+_WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
+_WIND_SPEED_PERCENTILE = 0.99
+
 ### GENERAL FUNCTIONS
 
 
@@ -195,10 +198,11 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 def _df_to_gdf(df: pd.DataFrame, x_col: str, y_col: str, crs: str) -> gpd.GeoDataFrame:
     """Take a DataFrame and convert it to a GeoDataFrame using spatial columns."""
-    geometry = [
-        geometry.Point(xy) for xy in zip(df[x_col], df[y_col], strict=False)
-    ]  # Create geometry
-    return gpd.GeoDataFrame(df, geometry=geometry, crs=crs)  # Convert to GeoDataFrame
+    return gpd.GeoDataFrame(
+        df.copy(),
+        geometry=gpd.points_from_xy(df[x_col], df[y_col]),
+        crs=crs
+    )
 
 
 def _convert_point_to_grid(x: int, y: int, size: int) -> geometry.Polygon:
@@ -216,6 +220,9 @@ def _convert_point_to_grid(x: int, y: int, size: int) -> geometry.Polygon:
 def _extract_poly_from_geomcollection(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Extract polygons from GeomCollection objects in and turn into new rows."""
     rows = []
+    geometry_collection_count = 0
+    polygon_count = 0
+    multipolygon_count = 0
 
     for _idx, row in gdf.iterrows():
         geom = row.geometry
@@ -225,14 +232,30 @@ def _extract_poly_from_geomcollection(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame
         # If it's already Polygon or MultiPolygon, keep as is
         if isinstance(geom, (geometry.Polygon, geometry.MultiPolygon)):
             rows.append(row)
-
         # If it's a GeometryCollection, extract polygons
         elif isinstance(geom, geometry.GeometryCollection):
+            geometry_collection_count += 1
             for sub_geom in geom.geoms:
-                if isinstance(sub_geom, (geometry.Polygon, geometry.MultiPolygon)):
+                if isinstance(sub_geom, geometry.Polygon):
+                    polygon_count += 1
                     new_row = row.copy()
                     new_row.geometry = sub_geom
                     rows.append(new_row)
+                elif isinstance(sub_geom, geometry.MultiPolygon):
+                    multipolygon_count += 1
+                    new_row = row.copy()
+                    new_row.geometry = sub_geom
+                    rows.append(new_row)
+
+        else:
+            raise TypeError(f"Unexpected geometry type when extracting Polygons from GeometryCollections: {geom}")
+
+    LOG.info(
+        "Extracted %s Polygons and %s MultiPolygons from %s GeometryCollections",
+        polygon_count,
+        multipolygon_count,
+        geometry_collection_count
+    )
 
     # Create new GeoDataFrame from expanded rows
     return gpd.GeoDataFrame(rows, crs=gdf.crs)
@@ -272,7 +295,7 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    _clean_infrastructure(config, boundary)
+    #_clean_infrastructure(config, boundary)
     _clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
@@ -502,7 +525,7 @@ def _clean_other(
 
 def _clean_airports(config: model_config.Config) -> None:
     """Read TfN airports dataset, then write to file in new directory."""
-    airports = gpd.read_file(config.infrastructure.other.uk_airports)
+    airports = gpd.read_file(config.infrastructure.other.airports)
     write_to_file(airports, config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH)
     LOG.info("Cleaned airports data.")
 
@@ -552,7 +575,7 @@ def _clean_petrol_stations(config: model_config.Config, boundary: gpd.GeoDataFra
     tfn_petrol = clip_to_boundary(petrol_stations, boundary)
     filter_removed = len_before_filter - len(tfn_petrol)
     LOG.info(
-        "Petrol stations filtered from POIs - %s of %s (% percent)",
+        "Petrol stations filtered from POIs - %s of %s (%s percent)",
         filter_removed,
         len_before_filter,
         round((filter_removed / len_before_filter) * 100, 1),
@@ -819,7 +842,7 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
 def _clean_hazards(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean hazard data ready for analysis."""
     LOG.info("Cleaning hazard data...")
-    _clean_extreme_weather(config, boundary)
+    #_clean_extreme_weather(config, boundary)
     _clean_flooding(config, boundary)
     _clean_ground_stability(config, boundary)
     _clean_coastal_erosion(config, boundary)
@@ -862,14 +885,14 @@ def _clean_hazard_grid(
     hazard_grid["grid_id"] = range(1, len(hazard_grid) + 1)
     len_before_filter = len(hazard_grid)
     tfn_hazard_grid = clip_to_boundary(hazard_grid, boundary)
-    tfn_hazard_grid = explode_to_polygons(tfn_hazard_grid)
     filter_removed = len_before_filter - len(tfn_hazard_grid)
     LOG.info(
-        "Hazard grid filtered - % s of %s (%s percent) rows removed",
+        "Extreme weather grid filtered - % s of %s (%s percent) rows removed",
         filter_removed,
         len_before_filter,
         round((filter_removed / len_before_filter) * 100, 1),
     )
+    tfn_hazard_grid = explode_to_polygons(tfn_hazard_grid)
     write_to_file(
         tfn_hazard_grid,
         config.paths.model_input / file_paths.HAZARD_GRID_MODEL_INPUT_PATH,
@@ -1021,9 +1044,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     )
     len_before_filter = len(rain_days)
     tfn_rain_days = clip_to_boundary(rain_days, boundary)
-    tfn_rain_days = explode_to_polygons(tfn_rain_days)
     tfn_rain_days = tfn_rain_days.rename(columns={"Rain10mmDa": "10mm_rain_days_current"})
-    tfn_rain_days = tfn_rain_days.drop(columns=["part"])
     filter_removed = len_before_filter - len(tfn_rain_days)
     LOG.info(
         "10mm rain days 1991-2020 filtered - %s of %s (%s percent) rows removed",
@@ -1031,6 +1052,8 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         len_before_filter,
         round((filter_removed / len_before_filter) * 100, 1),
     )
+    tfn_rain_days = explode_to_polygons(tfn_rain_days)
+    tfn_rain_days = tfn_rain_days.drop(columns=["part"])
     write_to_file(
         tfn_rain_days, config.paths.model_input / file_paths.RAIN_DAYS_MODEL_INPUT_PATH
     )
@@ -1052,8 +1075,6 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
     )
     len_before_filter = len(drought_index)
     tfn_drought = clip_to_boundary(drought_index, boundary)
-    tfn_drought = explode_to_polygons(tfn_drought)
-    tfn_drought = tfn_drought.drop(columns=["part"])
     filter_removed = len_before_filter - len(tfn_drought)
     LOG.info(
         "Drought severity index filtered - %s of %s (%s percent) rows removed",
@@ -1061,6 +1082,8 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
         len_before_filter,
         round((filter_removed / len_before_filter) * 100, 1),
     )
+    tfn_drought = explode_to_polygons(tfn_drought)
+    tfn_drought = tfn_drought.drop(columns=["part"])
     write_to_file(
         tfn_drought, config.paths.model_input / file_paths.DROUGHT_INDEX_MODEL_INPUT_PATH
     )
@@ -1212,15 +1235,15 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     windspd_combined = gpd.GeoDataFrame(windspd_combined, geometry="geometry", crs=_BNG_CRS)
     windspd_combined = windspd_combined[[*metric_cols, "geometry"]]
     tfn_windspd = clip_to_boundary(windspd_combined, boundary)
-    tfn_windspd = explode_to_polygons(tfn_windspd)
-    tfn_windspd = tfn_windspd.drop(columns=["part"])
     filter_removed = len_before_filter - len(tfn_windspd)
     LOG.info(
         "Wind speed projections filtered - %s of %s (%s percent) rows removed",
-        len_before_filter,
         filter_removed,
+        len_before_filter,
         round((filter_removed / len_before_filter) * 100, 1),
     )
+    tfn_windspd = explode_to_polygons(tfn_windspd)
+    tfn_windspd = tfn_windspd.drop(columns=["part"])
     write_to_file(
         tfn_windspd, config.paths.model_input / file_paths.WIND_SPEED_MODEL_INPUT_PATH
     )
@@ -1232,12 +1255,20 @@ def _read_wind_speed_reduce(xr_path: pathlib.Path, scenario: str) -> tuple[pd.Da
     var = "wsgmax10m"
 
     # Compute exceedance and percentile aggregations
-    exceedance_dataset = _calculate_windspd_exceedance(windspd_dataset, 20, var, scenario)
+    exceedance_dataset = _calculate_windspd_exceedance(
+        windspd_dataset,
+        _WIND_SPEED_EXCEEDANCE_THRESHOLD,
+        var,
+        scenario
+    )
     percentile_dataset = _calculate_windspd_percentile(
-        windspd_dataset, 0.99, var, scenario=scenario
+        windspd_dataset, _WIND_SPEED_PERCENTILE, var, scenario=scenario
     )
 
-    windspd_aggregations = xr.merge([exceedance_dataset, percentile_dataset])
+    windspd_aggregations = xr.merge(
+        [exceedance_dataset, percentile_dataset],
+        compat="override"
+    )
     windspd_dataframe = windspd_aggregations.to_dataframe().reset_index()
     len_before_filter = windspd_dataset.sizes["time"]
 
@@ -1296,8 +1327,6 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
         wind_driven_rain_agg, geometry="geometry", crs="EPSG:3857"
     )
     tfn_wind_driven_rain = clip_to_boundary(wind_driven_rain_agg, boundary)
-    tfn_wind_driven_rain = explode_to_polygons(tfn_wind_driven_rain)
-    tfn_wind_driven_rain = tfn_wind_driven_rain.drop(columns=["part"])
     filter_removed = len_before_filter - len(tfn_wind_driven_rain)
     LOG.info(
         "Wind driven rain index filtered - %s of %s (%s percent) rows removed",
@@ -1305,6 +1334,8 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
         len_before_filter,
         round((filter_removed / len_before_filter) * 100, 1),
     )
+    tfn_wind_driven_rain = explode_to_polygons(tfn_wind_driven_rain)
+    tfn_wind_driven_rain = tfn_wind_driven_rain.drop(columns=["part"])
     write_to_file(
         tfn_wind_driven_rain,
         config.paths.model_input / file_paths.WIND_DRIVEN_RAIN_MODEL_INPUT_PATH,
@@ -1451,8 +1482,14 @@ def _read_flood_gdb(
     if not layers:
         raise ValueError(f"No layers found in GDB: {gdb_path}")
 
-    LOG.info("Available layers for %s %s%s: %s", flood_type, code, number, layers)
-    return gpd.read_file(gdb_path, layer=layers[0], mask=boundary, columns=["Risk_band"])
+    return gpd.read_file(
+        gdb_path,
+        layer=layers[0],
+        mask=boundary,
+        columns=["Risk_band"],
+        engine="pyogrio",
+        use_arrow=True
+    )
 
 
 def _extract_flood_data(
@@ -1498,20 +1535,26 @@ def _clean_flood(
             len_before_filter = len(flood_data)
             tfn_flood_data = clip_to_boundary(flood_data, boundary)
             if tfn_flood_data.empty:
+                LOG.info("%s%s layer empty. Continuing.", code, number)
                 continue
-            tfn_flood_data = _extract_poly_from_geomcollection(tfn_flood_data)
-            tfn_flood_data = tfn_flood_data[["Risk_band", "geometry"]]
             filter_removed = len_before_filter - len(tfn_flood_data)
             LOG.info(
-                "%s filtered - %s of %s (%s percent) rows removed",
+                "%s %s %s filtered - %s of %s (%s percent) rows removed",
                 flood_type,
-                len_before_filter,
+                code,
+                number,
                 filter_removed,
-                (len_before_filter / filter_removed) * 100,
+                len_before_filter,
+                round((filter_removed / len_before_filter) * 100, 1)
             )
+            tfn_flood_data = _extract_poly_from_geomcollection(tfn_flood_data)
+            tfn_flood_data = tfn_flood_data[["Risk_band", "geometry"]]
             if first_write:
+                first_write = False
+                full_output_path = config.paths.model_input / out_path
+                full_output_path.parent.mkdir(parents=True, exist_ok=True)
                 tfn_flood_data.to_file(
-                    config.paths.model_input / out_path, driver="GPKG", mode="w", layer="flood"
+                    full_output_path, driver="GPKG", mode="w", layer="flood"
                 )
             else:
                 tfn_flood_data.to_file(

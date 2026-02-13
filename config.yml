@@ -46,6 +46,7 @@ infrastructure:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/poi_uk.zip
       file_path: poi_uk.gpkg
     zapmap: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/ZapMap/ZapMap Site Devices.csv
+    airports: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/TfN Airports/tfn_airports.shp
 
 hazards:
   coastal_erosion:

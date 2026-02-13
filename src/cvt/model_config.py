@@ -12,7 +12,7 @@ class ZipFileEntry(ctk.BaseConfig):
 
     zip_path: pathlib.Path
     """Path to the zip file"""
-    file_path_path: str | None = None
+    file_path: str | None = None
     """Path within the zip file."""
     output_path: pathlib.Path | None = None
     """Output path for the extracted file"""
@@ -135,6 +135,8 @@ class Other(ctk.BaseConfig):
         Configuration for the POI UK zip file entry.
     zapmap : pathlib.Path
         Path to the ZapMap data.
+    airports: pathlib.path
+        Path to the airports data.
     """
 
     bus_stops: dict[str, pathlib.Path]
@@ -142,6 +144,7 @@ class Other(ctk.BaseConfig):
     os_mmrn: pathlib.Path
     poi_uk: ZipFileEntry
     zapmap: pathlib.Path
+    airports: pathlib.Path
 
 
 class InfrastructureConfig(ctk.BaseConfig):
