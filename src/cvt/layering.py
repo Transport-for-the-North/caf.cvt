@@ -151,7 +151,7 @@ def _prepare_model_output(
     num_zeroes = (risk_data[desc_cols] == "0").sum()
     risk_data[desc_cols] = risk_data[desc_cols].replace(0, "N/A")
     LOG.info("Replaced %s zero values with 'N/A' in descriptive columns.", num_zeroes)
-    risk_data = risk_data.to_crs(epsg=data_cleaning._BNG_CRS)
+    risk_data = risk_data.to_crs(epsg=data_cleaning.BNG_CRS)
     risk_data = _reshape_for_current_forecast(risk_data, "id", risk_cols_order)
     risk_data[risk_cols_order] = risk_data[risk_cols_order].round(1)
     return risk_data.rename(columns={col: f"{col}_score" for col in risk_cols_order})
@@ -370,7 +370,7 @@ def _noham_road_risk(
         col for col in tfn_noham_risk.columns if col not in ["link_id", "geometry"]
     ]
     tfn_noham_risk[cols_to_round] = tfn_noham_risk[cols_to_round].round(1)
-    tfn_noham_risk = tfn_noham_risk.to_crs(epsg=data_cleaning._BNG_CRS)
+    tfn_noham_risk = tfn_noham_risk.to_crs(epsg=data_cleaning.BNG_CRS)
     tfn_noham_risk = tfn_noham_risk.rename(columns={"link_id": "id"})
     tfn_noham_risk = tfn_noham_risk.rename(
         columns={col: f"{col}_score" for col in cols_to_round}
@@ -589,7 +589,7 @@ def _freight_rail_risk(
 
     # Set the correct CRS
     tfn_freight_network_risk = tfn_freight_network_risk.set_crs(
-        epsg=data_cleaning._BNG_CRS, allow_override=True
+        epsg=data_cleaning.BNG_CRS, allow_override=True
     )
 
     tfn_freight_network_risk = _prepare_model_output(
@@ -688,7 +688,7 @@ def _get_other_risk(
 
 def _buffer_geometry(infrastructure: gpd.GeoDataFrame, buffer_size_m: int) -> gpd.GeoDataFrame:
     """Buffers the geometries of a given GeoDataFrame to a given size in metres."""
-    infrastructure = infrastructure.to_crs(epsg=data_cleaning._BNG_CRS)
+    infrastructure = infrastructure.to_crs(epsg=data_cleaning.BNG_CRS)
     infrastructure["geometry"] = infrastructure.buffer(buffer_size_m)
     return infrastructure
 

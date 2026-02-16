@@ -165,7 +165,9 @@ FLOOD_SURFACE_WATER_MODEL_INPUT_PATH = (
 GEOSURE_MODEL_INPUT_PATH = (
     pathlib.Path("Hazards") / "Ground Stability" / "TfN GeoSure" / "tfn_geosure.gpkg"
 )
-GEOCLIMATE_MODEL_INPUT_PATH = pathlib.Path("Hazards") / "Ground Stability" / "BGS Shrink Swell"
+GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH = (
+    pathlib.Path("Hazards") / "Ground Stability" / "BGS Shrink Swell"
+)
 GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH = (
     pathlib.Path("Hazards") / "Coastal Erosion" / "NCERM" / "tfn_ncerm_giz.gpkg"
 )

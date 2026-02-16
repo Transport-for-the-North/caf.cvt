@@ -24,7 +24,7 @@ LOG = logging.getLogger(__name__)
 _NOHAM_ROAD_THRESHOLD = int(os.getenv("_NOHAM_ROAD_THRESHOLD", "10000"))
 
 # British National Grid CRS, for use in spatially merging datasets
-_BNG_CRS = os.getenv("_BNG_CRS", "EPSG:27700")
+BNG_CRS = os.getenv("BNG_CRS", "EPSG:27700")
 
 _FREIGHT_DEMAND_NETWORK_MAP_MAX_DISTANCE = int(
     os.getenv("_FREIGHT_DEMAND_NETWORK_MAP_MAX_DISTANCE", "500")
@@ -133,19 +133,21 @@ def write_to_file(
         raise ValueError(f"Unsupported file extension: {ext}")
 
 
-def explode_to_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def explode_to_polygons(gdf: gpd.GeoDataFrame, track_part: bool = False) -> gpd.GeoDataFrame:
     """
     Explodes the MultiPolygons and GeomCollections in a GeoDataFrame into Polygons.
 
     Converts rows in a GeoDataFrame with a MultiPolygon or GeometryCollection geometry into
     multiple rows with Polygon geometries, adding a 'part' column to keep track of how many new
-    rows have been created for each. Leaves other geometries as they are, and preserves the
-    original CRS.
+    rows have been created for each if specified. Leaves other geometries as they are, and
+    preserves the original CRS.
 
     Parameters
     ----------
     gdf: gpd.GeoDataFrame
         The input GeoDataFrame that needs to be cleaned
+    track_part: bool = False
+        True if tracking the parts of each extracted polygon is necessary, False if not.
 
     Returns
     -------
@@ -193,7 +195,12 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         multipolygon_polygon_count + geometry_collection_polygon_count,
     )
 
-    return gpd.GeoDataFrame(rows, crs=gdf.crs).reset_index(drop=True)
+    exploded_gdf = gpd.GeoDataFrame(rows, crs=gdf.crs).reset_index(drop=True)
+
+    if track_part:
+        return exploded_gdf
+
+    return exploded_gdf.drop(columns=["part"])
 
 
 def _df_to_gdf(df: pd.DataFrame, x_col: str, y_col: str, crs: str) -> gpd.GeoDataFrame:
@@ -248,7 +255,9 @@ def _extract_poly_from_geomcollection(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame
                     rows.append(new_row)
 
         else:
-            raise TypeError(f"Unexpected geometry type when extracting Polygons from GeometryCollections: {geom}")
+            raise TypeError(
+                "Unexpected geometry type when extracting Polygons from GeometryCollections: "
+                f"{geom}")
 
     LOG.info(
         "Extracted %s Polygons and %s MultiPolygons from %s GeometryCollections",
@@ -264,8 +273,8 @@ def _extract_poly_from_geomcollection(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame
 def _nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Take two GeoDataFrames and merge them on their nearest centroids."""
     # Ensure both GeoDataFrames are in the same projected CRS
-    gdf1 = gdf1.to_crs(_BNG_CRS)
-    gdf2 = gdf2.to_crs(_BNG_CRS)
+    gdf1 = gdf1.to_crs(BNG_CRS)
+    gdf2 = gdf2.to_crs(BNG_CRS)
 
     # Convert both to centroids
     gdf1_centroids = gdf1.copy()
@@ -295,7 +304,7 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    #_clean_infrastructure(config, boundary)
+    _clean_infrastructure(config, boundary)
     _clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
@@ -842,7 +851,7 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
 def _clean_hazards(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean hazard data ready for analysis."""
     LOG.info("Cleaning hazard data...")
-    #_clean_extreme_weather(config, boundary)
+    _clean_extreme_weather(config, boundary)
     _clean_flooding(config, boundary)
     _clean_ground_stability(config, boundary)
     _clean_coastal_erosion(config, boundary)
@@ -892,7 +901,7 @@ def _clean_hazard_grid(
         len_before_filter,
         round((filter_removed / len_before_filter) * 100, 1),
     )
-    tfn_hazard_grid = explode_to_polygons(tfn_hazard_grid)
+    tfn_hazard_grid = explode_to_polygons(tfn_hazard_grid, track_part=True)
     write_to_file(
         tfn_hazard_grid,
         config.paths.model_input / file_paths.HAZARD_GRID_MODEL_INPUT_PATH,
@@ -1053,7 +1062,6 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         round((filter_removed / len_before_filter) * 100, 1),
     )
     tfn_rain_days = explode_to_polygons(tfn_rain_days)
-    tfn_rain_days = tfn_rain_days.drop(columns=["part"])
     write_to_file(
         tfn_rain_days, config.paths.model_input / file_paths.RAIN_DAYS_MODEL_INPUT_PATH
     )
@@ -1083,7 +1091,6 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
         round((filter_removed / len_before_filter) * 100, 1),
     )
     tfn_drought = explode_to_polygons(tfn_drought)
-    tfn_drought = tfn_drought.drop(columns=["part"])
     write_to_file(
         tfn_drought, config.paths.model_input / file_paths.DROUGHT_INDEX_MODEL_INPUT_PATH
     )
@@ -1100,7 +1107,7 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
     hot_days = hot_days.drop(columns=["geometry"])
     hot_days = hot_days.rename(
         columns={
-            "HSD_base_4": "hot_summer_days_curent",
+            "HSD_base_4": "hot_summer_days_current",
             "HSD_40_med": "hot_summer_days_forecast",
         }
     )
@@ -1205,7 +1212,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     windspd_current_agg, len_before_filter_current = _read_wind_speed_reduce(
         config.hazards.extreme_weather.wind_spd_current, "current"
     )
-    windspd_forecast_agg, len_before_filter_future = _read_wind_speed_reduce(
+    windspd_forecast_agg, len_before_filter_forecast = _read_wind_speed_reduce(
         config.hazards.extreme_weather.wind_spd_forecast, "forecast"
     )
 
@@ -1216,7 +1223,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
         "avg_exceedance_days_forecast",
     ]
 
-    len_before_filter = len_before_filter_current + len_before_filter_future
+    len_before_filter = len_before_filter_current + len_before_filter_forecast
 
     windspd_combined = windspd_current_agg.merge(
         windspd_forecast_agg,
@@ -1232,7 +1239,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
             strict=False,
         )
     ]
-    windspd_combined = gpd.GeoDataFrame(windspd_combined, geometry="geometry", crs=_BNG_CRS)
+    windspd_combined = gpd.GeoDataFrame(windspd_combined, geometry="geometry", crs=BNG_CRS)
     windspd_combined = windspd_combined[[*metric_cols, "geometry"]]
     tfn_windspd = clip_to_boundary(windspd_combined, boundary)
     filter_removed = len_before_filter - len(tfn_windspd)
@@ -1243,7 +1250,6 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
         round((filter_removed / len_before_filter) * 100, 1),
     )
     tfn_windspd = explode_to_polygons(tfn_windspd)
-    tfn_windspd = tfn_windspd.drop(columns=["part"])
     write_to_file(
         tfn_windspd, config.paths.model_input / file_paths.WIND_SPEED_MODEL_INPUT_PATH
     )
@@ -1335,7 +1341,6 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
         round((filter_removed / len_before_filter) * 100, 1),
     )
     tfn_wind_driven_rain = explode_to_polygons(tfn_wind_driven_rain)
-    tfn_wind_driven_rain = tfn_wind_driven_rain.drop(columns=["part"])
     write_to_file(
         tfn_wind_driven_rain,
         config.paths.model_input / file_paths.WIND_DRIVEN_RAIN_MODEL_INPUT_PATH,
@@ -1622,7 +1627,6 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
         len_before_filter = len(geosure_data)
         geosure_data_clean = geosure_data.rename(columns={"CLASS": f"{code}_risk"})
         tfn_geosure_layers[code] = clip_to_boundary(geosure_data_clean, boundary)
-        tfn_geosure_layers[code] = explode_to_polygons(tfn_geosure_layers[code])
         filter_removed = len_before_filter - len(tfn_geosure_layers[code])
         LOG.info(
             "GeoSure %s filtered - %s of %s (%s percent) rows removed",
@@ -1631,6 +1635,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
             len_before_filter,
             round((filter_removed / len_before_filter) * 100, 1),
         )
+        tfn_geosure_layers[code] = explode_to_polygons(tfn_geosure_layers[code])
 
     # Merge layers based on nearest centroids
     base_code = next(iter(geosure_layers.keys()))
@@ -1675,14 +1680,13 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
 
 def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean GeoClimate Shrink-Swell data, then write to file."""
-    for year, filepath in config.hazards.ground_stability.geo_shrink_swell:
+    for year, filepath in config.hazards.ground_stability.geo_shrink_swell.items():
         geoclimate_data = gpd.read_file(filepath, mask=boundary, columns=["CLASS"])
         geoclimate_data = geoclimate_data.rename(
             columns={"CLASS": "shrink_swell_geoclimate_risk"}
         )
         len_before_filter = len(geoclimate_data)
         tfn_geoclimate_data = clip_to_boundary(geoclimate_data, boundary)
-        tfn_geoclimate_data = explode_to_polygons(tfn_geoclimate_data)
         filter_removed = len_before_filter - len(tfn_geoclimate_data)
         LOG.info(
             "GeoClimate %s filtered - %s of %s (%s percent) rows removed",
@@ -1691,6 +1695,7 @@ def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -
             len_before_filter,
             round((filter_removed / len_before_filter) * 100, 1),
         )
+        tfn_geoclimate_data = explode_to_polygons(tfn_geoclimate_data)
 
         write_to_file(
             tfn_geoclimate_data,
@@ -1722,7 +1727,6 @@ def _clean_ground_instability_zones(
     )
     len_before_filter = len(ncerm_giz)
     tfn_ncerm_giz = clip_to_boundary(ncerm_giz, boundary)
-    tfn_ncerm_giz = explode_to_polygons(tfn_ncerm_giz)
     filter_removed = len_before_filter - len(tfn_ncerm_giz)
     LOG.info(
         "Ground Instability Zones filtered - %s of %s (%s percent) rows removed",
@@ -1730,6 +1734,7 @@ def _clean_ground_instability_zones(
         len_before_filter,
         round((filter_removed / len_before_filter) * 100, 1),
     )
+    tfn_ncerm_giz = explode_to_polygons(tfn_ncerm_giz)
 
     write_to_file(
         tfn_ncerm_giz,
@@ -1748,7 +1753,6 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
         )
         len_before_filter = len(erosion_data)
         tfn_erosion_data = clip_to_boundary(erosion_data, boundary)
-        tfn_erosion_data = explode_to_polygons(tfn_erosion_data)
         filter_removed = len_before_filter - len(tfn_erosion_data)
         LOG.info(
             "NCERM %s filtered - %s of %s (%s percent) rows removed",
@@ -1757,6 +1761,7 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
             len_before_filter,
             round((filter_removed / len_before_filter) * 100, 1),
         )
+        tfn_erosion_data = explode_to_polygons(tfn_erosion_data)
 
         write_to_file(
             tfn_erosion_data,
@@ -1897,15 +1902,17 @@ def _read_noham_h5(
     if (year, time_period) not in route_links_store:
         noham_routes = pd.read_hdf(
             noham_demand_path,
-            key="/data/Route",
-            columns=["route", "link_id"]
+            key="/data/Route"
         )
-        noham_links = pd.read_hdf(noham_demand_path, key="/data/link", columns=["a", "b"])
+        noham_routes = noham_routes.reset_index()[["route", "link_id"]]
+        noham_links = pd.read_hdf(noham_demand_path, key="/data/link")
+        noham_links = noham_links[["a", "b"]]
         route_links_store[(year, time_period)] = (noham_routes, noham_links)
     else:
         noham_routes, noham_links = route_links_store[((year, time_period))]
 
-    noham_ods = pd.read_hdf(noham_demand_path, key="/data/OD", columns=["route", "abs_demand"])
+    noham_ods = pd.read_hdf(noham_demand_path, key="/data/OD")
+    noham_ods = noham_ods.reset_index()[["route", "abs_demand"]]
 
     return noham_ods, noham_routes, noham_links
 
@@ -1972,6 +1979,13 @@ def _aggregate_link_flows_year(config: model_config.Config, scenario: str
                 ["link_id", f"{user_class}_{time_period}"]
             ]  # Keep relevant columns
             uc_dfs.append(link_demand)  # Add to list of df's
+            LOG.info(
+                "%s ODs, %s Routes and %s Links aggregated to %s link flows",
+                len(noham_ods),
+                len(noham_routes),
+                len(noham_links),
+                len(link_demand)
+            )
 
         # Merge all user class dataframes
         combined_uc_df = uc_dfs[0]
