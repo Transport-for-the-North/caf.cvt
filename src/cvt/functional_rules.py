@@ -19,35 +19,29 @@ LOG = logging.getLogger(__name__)
 _SCENARIO_SUFFIXES = ["_current", "_forecast"]
 
 _EXTREME_HEAT_RISK_THRESHOLD = 30
-_EXTREME_COLD_RISK_THRESHOLD = 0
-
-_WIND_SPEED_RISK_THRESHOLD_LOWER = (
-    13.4  # 30 mph in m/s (should not exceed the upper threshold)
-)
-_WIND_SPEED_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s (should not exceed 25)
-
-_PCT_OF_MEDIAN_FILTER_THRESHOLD_EXTREME_WEATHER = 0.035
-_PCT_OF_MEDIAN_FILTER_THRESHOLD_STORM = 0.01
-
-_EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE = 10000
-_DROUGHT_NEAREST_JOIN_MAX_DISTANCE = 10000
-_STORM_NEAREST_JOIN_MAX_DISTANCE = 5000
-_GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE = 1000
-_COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
-
-_EXTREME_WEATHER_WEIGHTS = {
-    "heat_risk": 0.25,
-    "cold_risk": 0.25,
-    "drought_risk": 0.25,
-    "storm_risk": 0.25,
-}
 _EXTREME_HEAT_WEIGHTS = {
     "max_temp_summer_risk": 0.5,
     "hot_summer_days": 0.25,
     "extreme_summer_days": 0.25,
 }
-_EXTREME_COLD_WEIGHTS = {"min_temp_winter_risk": 0.5, "frost_days": 0.25, "icing_days": 0.25}
-_DROUGHT_WEIGHTS = {"drought_severity_index": 0.75, "precip_summer": 0.25}
+
+_EXTREME_COLD_RISK_THRESHOLD = 0
+_EXTREME_COLD_WEIGHTS = {
+    "min_temp_winter_risk": 0.5,
+    "frost_days": 0.25,
+    "icing_days": 0.25
+}
+
+_WIND_SPEED_RISK_THRESHOLD_LOWER = 13.4  # 30 mph in m/s (should not exceed upper threshold)
+_WIND_SPEED_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s (should not exceed 25)
+
+_DROUGHT_NEAREST_JOIN_MAX_DISTANCE = 10000
+_DROUGHT_WEIGHTS = {
+    "drought_severity_index": 0.75,
+    "precip_summer": 0.25
+}
+
+_STORM_NEAREST_JOIN_MAX_DISTANCE = 5000
 _STORM_WEIGHTS = {
     "wind_speed_risk": 0.3,
     "avg_exceedance_days": 0.2,
@@ -56,10 +50,15 @@ _STORM_WEIGHTS = {
     "wind_driven_rain_index": 0.2,
 }
 
-_FLOOD_GRID_SIZE_M = 1000
-_FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
-_FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
+_EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE = 10000
+_EXTREME_WEATHER_WEIGHTS = {
+    "heat_risk": 0.25,
+    "cold_risk": 0.25,
+    "drought_risk": 0.25,
+    "storm_risk": 0.25,
+}
 
+_GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE = 1000
 _GROUND_STABILITY_RISK_SCORE_MAP = {  # Map risk scores to normalised values (0-100)
     "Probable": 100,
     "Possible": 66,
@@ -75,7 +74,10 @@ _GEOSURE_HAZARDS = [
     "soluble_rocks",
     "shrink_swell_geoclimate",
 ]
-_GEOCLIMATE_YEAR_SCENARIO_MAP = {"2030": "current", "2070": "forecast"}
+_GEOCLIMATE_YEAR_SCENARIO_MAP = {
+    "2030": "current",
+    "2070": "forecast"
+}
 _GROUND_STABILITY_WEIGHTS = {
     "shrink_swell_geoclimate_risk": 0.40,
     "landslides_risk": 0.10,
@@ -86,8 +88,29 @@ _GROUND_STABILITY_WEIGHTS = {
     "soluble_rocks_risk": 0.10,
 }
 
-_COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": "current", "2105": "forecast"}
-_COASTAL_EROSION_WEIGHTS = {"coastal_erosion_risk": 0.9, "giz_risk": 0.1}
+_COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
+_COASTAL_EROSION_YEAR_SCENARIO_MAP = {
+    "2055": "current",
+    "2105": "forecast"
+}
+_COASTAL_EROSION_WEIGHTS = {
+    "coastal_erosion_risk": 0.9,
+    "giz_risk": 0.1
+}
+
+_FLOOD_GRID_SIZE_M = 1000
+_FLOOD_RISK_SCORE_MAP = {
+    "Unavailable": 0,
+    "Very low": 0,
+    "Low": 1,
+    "Medium": 2,
+    "High": 3
+}
+_FLOOD_WEIGHTS = {
+    "rivers_sea_flood_risk": 0.5,
+    "surface_water_flood_risk": 0.5
+}
+_COMBINE_FLOOD_DIRECT = False
 
 ### GENERAL FUNCTIONS
 
@@ -310,26 +333,6 @@ def _calculate_composite_score(
     return risk_data
 
 
-def _filter_out_small_geometries(
-    risk_data: gpd.GeoDataFrame, pct_of_median: float
-) -> gpd.GeoDataFrame:
-    """Filter out geometries with area less than a given percentage of the median area."""
-    risk_data["area"] = risk_data.geometry.area
-    threshold = risk_data["area"].median() * pct_of_median
-    len_before_filter = len(risk_data)
-    risk_data = risk_data[risk_data["area"] > threshold]  # Filter out tiny geometries
-    filter_removed = len_before_filter - len(risk_data)
-    LOG.info(
-        "Filtered out %s geometries of %s total geometries below area threshold of %s "
-        "(%s percent of median area).",
-        filter_removed,
-        len_before_filter,
-        threshold,
-        pct_of_median * 100,
-    )
-    return risk_data.drop(columns=["area"])
-
-
 def _overlay_and_clean(
         *hazard_layers: gpd.GeoDataFrame,
         target_crs: str,
@@ -403,7 +406,7 @@ def apply_functional_rules(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    _extreme_weather_index(config)
+    #_extreme_weather_index(config)
     _flooding_index(config, boundary)
     _ground_stability_index(config)
     _coastal_erosion_index(config)
@@ -448,10 +451,6 @@ def _extreme_weather_index(config: model_config.Config) -> None:
         tfn_storm[["storm_risk_current", "storm_risk_forecast", "geometry"]],
         target_crs=data_cleaning.BNG_CRS,
     )
-
-    #tfn_extreme_weather_risk = _filter_out_small_geometries(
-    #   tfn_extreme_weather_risk, _PCT_OF_MEDIAN_FILTER_THRESHOLD_EXTREME_WEATHER
-    #)
 
     tfn_extreme_weather_risk = _iterative_spatial_infilling(
         tfn_extreme_weather_risk,
@@ -716,10 +715,6 @@ def _storm_index(
         ]
     ]
 
-    #tfn_storm_risk = _filter_out_small_geometries(
-    #    tfn_storm_risk, _PCT_OF_MEDIAN_FILTER_THRESHOLD_STORM
-    #)
-
     tfn_storm_risk = _iterative_spatial_infilling(
         tfn_storm_risk,
         [
@@ -792,6 +787,10 @@ def _wind_risk_scaled(speed_metres_per_second: float) -> float:
 def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Combine RoFRS & RoFSW into a single risk score by upscaling them to a common grid."""
     LOG.info("Calculating flood risk index...")
+
+    if _COMBINE_FLOOD_DIRECT:
+        _flooding_index_direct(config)
+
     if config.switches.create_flood_grid:
         flood_grid = _create_flood_grid(config, _FLOOD_GRID_SIZE_M, boundary)
     else:
@@ -815,13 +814,13 @@ def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         ),
     ]
 
-    LOG.info("Proccessing current flood risk...")
+    LOG.info("Processing current flood risk...")
     tfn_flood_risk_c = _upscale_to_grid(
         config, flood_grid, current_flood_scenario_map, "current"
     )
     LOG.info("Current flood risk processing complete.")
 
-    LOG.info("Proccessing forecast flood risk...")
+    LOG.info("Processing forecast flood risk...")
     tfn_flood_risk_f = _upscale_to_grid(
         config, flood_grid, forecast_flood_scenario_map, "forecast"
     )
@@ -897,12 +896,12 @@ def _upscale_to_grid(
             risk_col,
         )
 
-        data_cleaning.write_to_file(
-            result,
-            config.paths.model_interim_output
-            / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
-            / f"tfn_flood_risk_{scenario}.gpkg",
-        )
+    data_cleaning.write_to_file(
+        result,
+        config.paths.model_interim_output
+        / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
+        / f"tfn_flood_risk_{scenario}.gpkg",
+    )
 
     return result
 
@@ -912,39 +911,48 @@ def _area_weighted_flood_assignment(
 ) -> gpd.GeoDataFrame:
     """Assign flood risk to grid squares using an area-weighted average."""
     len_before_upscale = len(flood_gdf)
-    # Spatial join to find intersecting polygons
-    flood_risk_join = gpd.sjoin(
-        grid, flood_gdf[[risk_column, "geometry"]], how="left", predicate="intersects"
-    )
 
-    # Retrieve flood polygon geometry using index_right
-    flood_risk_join = flood_risk_join.merge(
+    # Preserve original index, renaming to grid_id
+    grid = grid.reset_index().rename(columns={"index": "grid_id"})
+
+    # Perform overlay to get intersections
+    flood_intersections = gpd.overlay(
+        grid[["grid_id", "geometry"]],
         flood_gdf[[risk_column, "geometry"]],
-        left_on="index_right",
-        right_index=True,
-        suffixes=("", "_flood"),
+        how="intersection"
     )
 
-    # Get geometry of each intersection between grid and flood polygon
-    flood_risk_join["intersection"] = flood_risk_join.apply(
-        lambda row: row["geometry"].intersection(row["geometry_flood"]), axis=1
-    )
+    # Compute intersected area
+    flood_intersections["area"] = flood_intersections.geometry.area
 
-    # Calculate area of each intersection
-    flood_risk_join["area"] = flood_risk_join["intersection"].area
+    # Compute aggregated weighted sum and area sum
+    risk_area_agg = (
+        flood_intersections
+        .assign(weighted=lambda d: d[risk_column] * d["area"])
+        .groupby("grid_id")
+        .agg(weighted_sum=("weighted", "sum"), area_sum=("area", "sum"))
+    )
 
     # Compute area weighted average flood risk per grid cell
-    weighted_avg_flood = flood_risk_join.groupby(flood_risk_join.index).apply(
-        lambda group: (group[risk_column] * group["area"]).sum() / group["area"].sum()
-    )
+    weighted_avg_flood = risk_area_agg["weighted_sum"] / risk_area_agg["area_sum"]
+    weighted_avg_flood.name = risk_column
 
     # Assign weighted average flood risk back to the original grid
-    grid[risk_column] = weighted_avg_flood
+    grid = grid.set_index("grid_id")
+    grid[risk_column] = 0.0
+    grid.loc[weighted_avg_flood.index, risk_column] = weighted_avg_flood.to_numpy()
+    grid = grid.reset_index(drop=True)
 
-    # Fill missing values with 0 (no risk)
+    # Fill missing values with 0 (no risk) since no data means no risk in the underlying data
     num_na_rows = grid[risk_column].isna().sum()
-    grid[risk_column] = grid[risk_column].fillna(0)
-    LOG.info("Filled %s NA values in  flood data column %s with 0.", num_na_rows, risk_column)
+    pct_na_rows = (num_na_rows / len(grid))*100
+    grid[risk_column] = grid[risk_column].fillna(0.0)
+    LOG.info(
+        "Filled %s NA values (%s percent of data) in flood data column %s with 0.",
+        num_na_rows,
+        pct_na_rows,
+        risk_column
+    )
 
     len_after_upscale = len(grid)
     LOG.info(
@@ -956,6 +964,66 @@ def _area_weighted_flood_assignment(
     )
 
     return grid
+
+
+def _flooding_index_direct(config: model_config.Config) -> gpd.GeoDataFrame:
+    LOG.info("Calculating flooding risk index...")
+
+    tfn_rofrs = gpd.read_file(
+        config.paths.model_input / file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH
+    )
+    tfn_rofrs_cc = gpd.read_file(
+        config.paths.model_input / file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH
+    )
+    tfn_rofsw = gpd.read_file(
+        config.paths.model_input / file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH
+    )
+    tfn_rofsw_cc = gpd.read_file(
+        config.paths.model_input /
+        file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH
+    )
+
+    tfn_rofrs = tfn_rofrs.rename(columns={"Risk_band": "rivers_sea_flood_risk_current"})
+    tfn_rofrs_cc = tfn_rofrs_cc.rename(columns={"Risk_band": "rivers_sea_flood_risk_forecast"})
+    tfn_rofsw = tfn_rofsw.rename(columns={"Risk_band": "surface_water_flood_risk_current"})
+    tfn_rofsw_cc = tfn_rofsw_cc.rename(columns={"Risk_band": "surface_water_flood_risk_forecast"})
+
+    LOG.info("Combining all four flood datasets...")
+    tfn_flood_risk = _overlay_and_clean(
+        tfn_rofrs,
+        tfn_rofrs_cc,
+        tfn_rofsw,
+        tfn_rofsw_cc,
+        target_crs=data_cleaning.BNG_CRS
+    )
+
+    tfn_flood_risk = tfn_flood_risk.fillna(0)
+
+    tfn_flood_risk = min_max_scaling_pair(
+    tfn_flood_risk,
+        [
+            ("rivers_sea_flood_risk_current", "rivers_sea_flood_risk_forecast"),
+            ("surface_water_flood_risk_current", "surface_water_flood_risk_forecast"),
+        ],
+    )
+
+    tfn_flood_risk = _calculate_composite_score(
+        tfn_flood_risk,
+        _FLOOD_WEIGHTS,
+        "flood_risk",
+    )
+
+    tfn_flood_risk = min_max_scaling_pair(
+        tfn_flood_risk, [("flood_risk_current", "flood_risk_forecast")]
+    )
+
+    data_cleaning.write_to_file(
+        tfn_flood_risk,
+        config.paths.model_interim_output / file_paths.FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH,
+    )
+
+    LOG.info("Flood risk index calculation complete.")
+    return tfn_flood_risk
 
 
 ### GROUND STABILITY
