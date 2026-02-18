@@ -94,6 +94,8 @@ def clip_to_boundary(gdf: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> gpd.G
 def write_to_file(
     data: pd.DataFrame | gpd.GeoDataFrame,
     output_path: pathlib.Path,
+    mode: str = "w",
+    layer: str | None = None
 ) -> None:
     """
     Write a DataFrame or GeoDataFrame to a file.
@@ -128,7 +130,7 @@ def write_to_file(
     elif ext in driver_map:
         if not isinstance(data, gpd.GeoDataFrame):
             raise TypeError(f"{ext} requires a GeoDataFrame, got {type(data)}")
-        data.to_file(output_path, driver=driver_map[ext])
+        data.to_file(output_path, layer=layer, driver=driver_map[ext], mode=mode)
     else:
         raise ValueError(f"Unsupported file extension: {ext}")
 

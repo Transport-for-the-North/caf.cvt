@@ -110,7 +110,7 @@ _FLOOD_WEIGHTS = {
     "rivers_sea_flood_risk": 0.5,
     "surface_water_flood_risk": 0.5
 }
-_COMBINE_FLOOD_DIRECT = False
+_COMBINE_FLOOD_DIRECT = True
 
 ### GENERAL FUNCTIONS
 
@@ -967,8 +967,7 @@ def _area_weighted_flood_assignment(
 
 
 def _flooding_index_direct(config: model_config.Config) -> gpd.GeoDataFrame:
-    LOG.info("Calculating flooding risk index...")
-
+    LOG.info("Reading flooding datasets...")
     tfn_rofrs = gpd.read_file(
         config.paths.model_input / file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH
     )
@@ -986,15 +985,25 @@ def _flooding_index_direct(config: model_config.Config) -> gpd.GeoDataFrame:
     tfn_rofrs = tfn_rofrs.rename(columns={"Risk_band": "rivers_sea_flood_risk_current"})
     tfn_rofrs_cc = tfn_rofrs_cc.rename(columns={"Risk_band": "rivers_sea_flood_risk_forecast"})
     tfn_rofsw = tfn_rofsw.rename(columns={"Risk_band": "surface_water_flood_risk_current"})
-    tfn_rofsw_cc = tfn_rofsw_cc.rename(columns={"Risk_band": "surface_water_flood_risk_forecast"})
+    tfn_rofsw_cc = tfn_rofsw_cc.rename(
+        columns={"Risk_band": "surface_water_flood_risk_forecast"}
+    )
 
     LOG.info("Combining all four flood datasets...")
-    tfn_flood_risk = _overlay_and_clean(
-        tfn_rofrs,
-        tfn_rofrs_cc,
-        tfn_rofsw,
-        tfn_rofsw_cc,
-        target_crs=data_cleaning.BNG_CRS
+    _tile_polygon_overlay(
+        config,
+        [
+            tfn_rofrs,
+            tfn_rofrs_cc,
+            tfn_rofsw,
+            tfn_rofsw_cc
+        ],
+        crs=data_cleaning.BNG_CRS,
+        tile_size_m=10000
+    )
+
+    tfn_flood_risk = gpd.read_file(
+        config.paths.model_interim_output / file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH
     )
 
     tfn_flood_risk = tfn_flood_risk.fillna(0)
@@ -1025,6 +1034,100 @@ def _flooding_index_direct(config: model_config.Config) -> gpd.GeoDataFrame:
     LOG.info("Flood risk index calculation complete.")
     return tfn_flood_risk
 
+
+def _tile_polygon_overlay(
+        config: model_config.Config,
+        layers: list[gpd.GeoDataFrame],
+        crs: str,
+        tile_size_m: int = 5000
+) -> gpd.GeoDataFrame:
+    """Chunked polygon-polygon overlay using a tile grid."""
+    # Ensure CRS
+    clean_layers = [
+        (layer if layer.crs == crs else layer.to_crs(crs)).copy()
+        for layer in layers
+    ]
+
+    # Compute global bounds of all layers
+    xmin = min([layer.total_bounds[0] for layer in layers])
+    ymin = min([layer.total_bounds[1] for layer in layers])
+    xmax = max([layer.total_bounds[2] for layer in layers])
+    ymax = max([layer.total_bounds[3] for layer in layers])
+
+    # Create tiles
+    tiles = _create_grid(xmin, ymin, xmax, ymax, tile_size_m)
+    tiles["tile_id"] = range(len(tiles))
+
+    # Prebuild spatial indexes
+    spatial_indexes = [layer.sindex for layer in clean_layers]
+
+    # Prepare output GPKG
+    output_path = config.paths.model_interim_output / file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH
+    layer_name = "flood_overlay"
+    first_write = True
+
+    # For each tile, do spatial filtering and run overlay and clean
+    for id, tile in tiles.iterrows():
+        LOG.info("Running overlay for tile %s", id)
+        tile_gdf = gpd.GeoDataFrame(geometry=[tile.geometry], crs=crs)
+        tile_bbox = tile.bounds
+
+        # Select polygons intersecting this tile for each layer
+        subset_layers: list[gpd.GeoDataFrame] = []
+        for layer, spatial_index in zip(layers, spatial_indexes, strict=False):
+            match_ids = list(spatial_index.intersection(tile_bbox))
+            if not match_ids:
+                subset_layers = []
+                break
+
+            subset = layer.iloc[match_ids]
+
+            # Clip to tile to filter for only tile-bound geometries
+            subset = gpd.overlay(
+                subset,
+                tile_gdf,
+                how="intersection"
+            )
+
+            # If the overlay returns nothing, break from this layer
+            if subset.empty:
+                subset_layers = []
+                break
+
+            subset_layers.append(subset)
+
+        # If there are no overlaps for this tile, skip
+        if not subset_layers:
+            continue
+
+        # Overlay and clean result for this tile
+        tile_overlay = _overlay_and_clean(
+            *subset_layers,
+            target_crs=crs,
+            how="union"
+        )
+
+        # If there are no resulting geometries, skip to the next tile
+        if tile_overlay.empty:
+            continue
+
+        if first_write:
+            data_cleaning.write_to_file(
+                tile_overlay,
+                output_path,
+                mode="w",
+                layer=layer_name
+            )
+            first_write = False
+        else:
+            data_cleaning.write_to_file(
+                tile_overlay,
+                output_path,
+                mode="a",
+                layer=layer_name
+            )
+
+    LOG.info("Chunked overlay written to file.")
 
 ### GROUND STABILITY
 
