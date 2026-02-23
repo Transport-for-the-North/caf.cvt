@@ -94,11 +94,11 @@ _COASTAL_EROSION_YEAR_SCENARIO_MAP = {
     "2105": "forecast"
 }
 _COASTAL_EROSION_WEIGHTS = {
-    "coastal_erosion_risk": 0.9,
+    "erosion_risk": 0.9,
     "giz_risk": 0.1
 }
 
-_FLOOD_GRID_SIZE_M = 1000
+_FLOOD_GRID_SIZE_M = 10000
 _FLOOD_RISK_SCORE_MAP = {
     "Unavailable": 0,
     "Very low": 0,
@@ -251,7 +251,7 @@ def _iterative_spatial_infilling(
         final_remaining = risk_grid[variables].isna().sum().sum()
         filled_nearest = new_na_count - final_remaining
         LOG.info(
-            "Nearest-join infilling with a %s max distance filled %s NA values; %s remain",
+            "Nearest-join infilling with a %sm max distance filled %s NA values; %s remain",
             int(nearest_join_max_distance),
             int(filled_nearest),
             int(final_remaining)
@@ -368,7 +368,9 @@ def _overlay_and_clean(
         # Drop non-area geometries
         geom_types = hazard_overlay.geometry.type
         num_points = (geom_types == "Point").sum() + (geom_types == "MultiPoint").sum()
-        num_lines = (geom_types == "LineString").sum() + (geom_types == "MultiLineString").sum()
+        num_lines = (
+            (geom_types == "LineString").sum() + (geom_types == "MultiLineString").sum()
+        )
         hazard_overlay = hazard_overlay[
             geom_types.isin(["Polygon", "MultiPolygon", "GeometryCollection"])
         ].reset_index(drop=True)
@@ -407,8 +409,8 @@ def apply_functional_rules(config: model_config.Config) -> None:
     boundary = gpd.read_file(config.other_input.boundary_path)
 
     #_extreme_weather_index(config)
-    _flooding_index(config, boundary)
-    _ground_stability_index(config)
+    #_flooding_index(config, boundary)
+    #_ground_stability_index(config)
     _coastal_erosion_index(config)
 
 
@@ -789,7 +791,8 @@ def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     LOG.info("Calculating flood risk index...")
 
     if _COMBINE_FLOOD_DIRECT:
-        _flooding_index_direct(config)
+        _flooding_index_direct(config, boundary)
+        return
 
     if config.switches.create_flood_grid:
         flood_grid = _create_flood_grid(config, _FLOOD_GRID_SIZE_M, boundary)
@@ -966,40 +969,25 @@ def _area_weighted_flood_assignment(
     return grid
 
 
-def _flooding_index_direct(config: model_config.Config) -> gpd.GeoDataFrame:
-    LOG.info("Reading flooding datasets...")
-    tfn_rofrs = gpd.read_file(
-        config.paths.model_input / file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH
-    )
-    tfn_rofrs_cc = gpd.read_file(
-        config.paths.model_input / file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH
-    )
-    tfn_rofsw = gpd.read_file(
-        config.paths.model_input / file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH
-    )
-    tfn_rofsw_cc = gpd.read_file(
-        config.paths.model_input /
-        file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH
-    )
-
-    tfn_rofrs = tfn_rofrs.rename(columns={"Risk_band": "rivers_sea_flood_risk_current"})
-    tfn_rofrs_cc = tfn_rofrs_cc.rename(columns={"Risk_band": "rivers_sea_flood_risk_forecast"})
-    tfn_rofsw = tfn_rofsw.rename(columns={"Risk_band": "surface_water_flood_risk_current"})
-    tfn_rofsw_cc = tfn_rofsw_cc.rename(
-        columns={"Risk_band": "surface_water_flood_risk_forecast"}
-    )
-
+def _flooding_index_direct(
+        config: model_config.Config,
+        boundary: gpd.GeoDataFrame
+    ) -> gpd.GeoDataFrame:
+    """Overlay all four flood datasets using a tiled chunking method."""
     LOG.info("Combining all four flood datasets...")
     _tile_polygon_overlay(
         config,
+        boundary,
         [
-            tfn_rofrs,
-            tfn_rofrs_cc,
-            tfn_rofsw,
-            tfn_rofsw_cc
+            config.paths.model_input / file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
+            config.paths.model_input /
+            file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+            config.paths.model_input / file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
+            config.paths.model_input /
+            file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH
         ],
         crs=data_cleaning.BNG_CRS,
-        tile_size_m=10000
+        tile_size_m=_FLOOD_GRID_SIZE_M
     )
 
     tfn_flood_risk = gpd.read_file(
@@ -1037,72 +1025,64 @@ def _flooding_index_direct(config: model_config.Config) -> gpd.GeoDataFrame:
 
 def _tile_polygon_overlay(
         config: model_config.Config,
-        layers: list[gpd.GeoDataFrame],
+        boundary: gpd.GeoDataFrame,
+        layer_paths: list[gpd.GeoDataFrame],
         crs: str,
         tile_size_m: int = 5000
 ) -> gpd.GeoDataFrame:
     """Chunked polygon-polygon overlay using a tile grid."""
-    # Ensure CRS
-    clean_layers = [
-        (layer if layer.crs == crs else layer.to_crs(crs)).copy()
-        for layer in layers
-    ]
-
-    # Compute global bounds of all layers
-    xmin = min([layer.total_bounds[0] for layer in layers])
-    ymin = min([layer.total_bounds[1] for layer in layers])
-    xmax = max([layer.total_bounds[2] for layer in layers])
-    ymax = max([layer.total_bounds[3] for layer in layers])
+    # Compute global bounds
+    xmin, ymin, xmax, ymax = boundary.total_bounds
 
     # Create tiles
     tiles = _create_grid(xmin, ymin, xmax, ymax, tile_size_m)
+    tiles = tiles[tiles.geometry.intersects(boundary.geometry.iloc[0])].copy()
+    tiles = tiles.reset_index(drop=True)
     tiles["tile_id"] = range(len(tiles))
 
-    # Prebuild spatial indexes
-    spatial_indexes = [layer.sindex for layer in clean_layers]
-
     # Prepare output GPKG
-    output_path = config.paths.model_interim_output / file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH
+    output_path = (config.paths.model_interim_output /
+                   file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH)
     layer_name = "flood_overlay"
     first_write = True
 
     # For each tile, do spatial filtering and run overlay and clean
-    for id, tile in tiles.iterrows():
-        LOG.info("Running overlay for tile %s", id)
-        tile_gdf = gpd.GeoDataFrame(geometry=[tile.geometry], crs=crs)
-        tile_bbox = tile.bounds
+    for tile_idx, tile in tiles.iterrows():
+        LOG.info("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
+
+        tile_geom = tile.geometry
+        tile_bbox = tile_geom.bounds
+        tile_gdf = gpd.GeoDataFrame(geometry=[tile_geom], crs=crs)
 
         # Select polygons intersecting this tile for each layer
-        subset_layers: list[gpd.GeoDataFrame] = []
-        for layer, spatial_index in zip(layers, spatial_indexes, strict=False):
-            match_ids = list(spatial_index.intersection(tile_bbox))
-            if not match_ids:
-                subset_layers = []
-                break
+        layer_subsets: list[gpd.GeoDataFrame] = []
+        for layer_path in layer_paths:
+            layer_sub = gpd.read_file(layer_path, bbox=tile_bbox)
 
-            subset = layer.iloc[match_ids]
+            if layer_sub.empty:
+                continue
 
             # Clip to tile to filter for only tile-bound geometries
-            subset = gpd.overlay(
-                subset,
+            layer_sub = gpd.overlay(
+                layer_sub,
                 tile_gdf,
                 how="intersection"
             )
 
             # If the overlay returns nothing, break from this layer
-            if subset.empty:
-                subset_layers = []
+            if layer_sub.empty:
+                layer_subsets = []
                 break
 
-            subset_layers.append(subset)
+            layer_subsets.append(layer_sub)
 
         # If there are no overlaps for this tile, skip
-        if not subset_layers:
+        if not layer_subsets:
             continue
 
         # Overlay and clean result for this tile
         tile_overlay = _overlay_and_clean(
-            *subset_layers,
+            *layer_subsets,
             target_crs=crs,
             how="union"
         )
@@ -1127,7 +1107,13 @@ def _tile_polygon_overlay(
                 layer=layer_name
             )
 
-    LOG.info("Chunked overlay written to file.")
+        LOG.info(
+            "Tile %s wrote %s geometries.",
+            tile_idx + 1,
+            len(tile_overlay)
+        )
+
+    LOG.info("Chunked overlay completed. Output written to %s", output_path)
 
 ### GROUND STABILITY
 
@@ -1143,7 +1129,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
     for year, scenario in _GEOCLIMATE_YEAR_SCENARIO_MAP.items():
         tfn_ss[year] = gpd.read_file(
             config.paths.model_input
-            / file_paths.GEOCLIMATE_MODEL_INPUT_PATH
+            / file_paths.GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH
             / f"tfn_bgs_ss_{year}.gpkg"
         )
         tfn_ss[year]["shrink_swell_geoclimate_risk"] = tfn_ss[year][
@@ -1217,17 +1203,17 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
     tfn_ncerm_giz = gpd.read_file(
         config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH
     )
-    tfn_ncerm_giz["giz_risk"] = 1
+    tfn_ncerm_giz["giz_risk"] = 100
 
     tfn_ncerm = {}
     tfn_erosion_risk = {}
     for year, scenario in _COASTAL_EROSION_YEAR_SCENARIO_MAP.items():
         tfn_ncerm[year] = gpd.read_file(
             config.paths.model_input
-            / file_paths.COASTAL_EROSION_MODEL_INPUT_PATH
+            / file_paths.NCERM_MODEL_INPUT_PATH
             / f"tfn_ncerm_smp_{year}_70CC.gpkg"
         )
-        tfn_ncerm[year]["coastal_erosion_risk"] = 1
+        tfn_ncerm[year]["erosion_risk"] = 100
 
         tfn_erosion_risk[scenario] = _overlay_and_clean(
             tfn_ncerm_giz,
@@ -1236,15 +1222,15 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
         )
 
         # Normalise risk values
-        scaler = sklearn.preprocessing.MinMaxScaler(feature_range=(0, 100))
-        normalised_values = scaler.fit_transform(
-            tfn_erosion_risk[scenario][["coastal_erosion_risk", "giz_risk"]]
-        )
+        #scaler = sklearn.preprocessing.MinMaxScaler(feature_range=(0, 100))
+        #normalised_values = scaler.fit_transform(
+        #    tfn_erosion_risk[scenario][["erosion_risk", "giz_risk"]]
+        #)
 
         # Compute composite risk score
         tfn_erosion_risk[scenario]["coastal_erosion_risk"] = (
-            normalised_values[:, 0] * _COASTAL_EROSION_WEIGHTS["coastal_erosion_risk"]
-            + normalised_values[:, 1] * _COASTAL_EROSION_WEIGHTS["giz_risk"]
+            tfn_erosion_risk[scenario]["erosion_risk"] * _COASTAL_EROSION_WEIGHTS["erosion_risk"]
+            + tfn_erosion_risk[scenario]["giz_risk"] * _COASTAL_EROSION_WEIGHTS["giz_risk"]
         )
 
         tfn_erosion_risk[scenario] = tfn_erosion_risk[scenario].rename(

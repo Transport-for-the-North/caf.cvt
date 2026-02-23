@@ -1369,6 +1369,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         True,
         _FLOOD_CODE_NUMBER_MAP,
+        "rivers_sea_flood_risk_forecast"
     )
     LOG.info("Finished cleaning climate change river and sea flooding data.")
 
@@ -1382,6 +1383,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
         False,
         _FLOOD_CODE_NUMBER_MAP,
+        "rivers_sea_flood_risk_current"
     )
     LOG.info("Finished cleaning river and sea flooding data.")
 
@@ -1395,6 +1397,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         True,
         _FLOOD_CODE_NUMBER_MAP,
+        "surface_water_flood_risk_forecast"
     )
     LOG.info("Finished cleaning climate change surface water flooding data.")
 
@@ -1408,6 +1411,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
         False,
         _FLOOD_CODE_NUMBER_MAP,
+        "surface_water_flood_risk_current"
     )
     LOG.info("Finished cleaning surface water flooding data.")
     LOG.info("Finished cleaning flooding data.")
@@ -1523,6 +1527,7 @@ def _clean_flood(
     out_path: pathlib.Path,
     climate_change_switch: bool,
     code_number_map: dict[str, list[str]],
+    rename_risk_col: str
 ) -> None:
     """Read and clean flood data, then write to file."""
     first_write = True
@@ -1556,16 +1561,19 @@ def _clean_flood(
             )
             tfn_flood_data = _extract_poly_from_geomcollection(tfn_flood_data)
             tfn_flood_data = tfn_flood_data[["Risk_band", "geometry"]]
+            tfn_flood_data = tfn_flood_data.rename(columns={"Risk_band": rename_risk_col})
             if first_write:
-                first_write = False
-                full_output_path = config.paths.model_input / out_path
-                full_output_path.parent.mkdir(parents=True, exist_ok=True)
-                tfn_flood_data.to_file(
-                    full_output_path, driver="GPKG", mode="w", layer="flood"
+                write_to_file(
+                    tfn_flood_data,
+                    config.paths.model_input / out_path,
+                    mode="w"
                 )
+                first_write = False
             else:
-                tfn_flood_data.to_file(
-                    config.paths.model_input / out_path, driver="GPKG", mode="a", layer="flood"
+                write_to_file(
+                    tfn_flood_data,
+                    config.paths.model_input / out_path,
+                    mode="a"
                 )
 
             del flood_data, tfn_flood_data

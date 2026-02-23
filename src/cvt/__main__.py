@@ -43,7 +43,7 @@ def _main() -> None:
         if config.switches.run_functional_rules:
             LOG.info("Starting functional rules step...")
             apply_functional_rules(config)
-            LOG.info("Finished data cleaning step.")
+            LOG.info("Finished functional rules step.")
 
         if config.switches.run_layering:
             LOG.info("Starting layering step...")
