@@ -130,7 +130,7 @@ def _reshape_for_current_forecast(
     ).reset_index()
 
     # Reorder risk columns based on original order
-    reshaped = reshaped[id_col, "current_or_forecast", *descriptive_cols, *risk_cols_order]
+    reshaped = reshaped[[id_col, "current_or_forecast", *descriptive_cols, *risk_cols_order]]
 
     # Merge geometry back
     reshaped_gdf = reshaped.merge(geometry, on=id_col)
@@ -140,7 +140,6 @@ def _reshape_for_current_forecast(
 def _prepare_model_output(
     risk_data: gpd.GeoDataFrame,
     drop_cols: list[str],
-    desc_cols: list[str],
     rename_map: dict[str, str],
     risk_cols_order: list[str],
 ) -> gpd.GeoDataFrame:
@@ -148,10 +147,7 @@ def _prepare_model_output(
     risk_data = risk_data.drop(columns=drop_cols)
     risk_data = risk_data.drop_duplicates(subset=["geometry"])
     risk_data = risk_data.rename(columns=rename_map)
-    num_zeroes = (risk_data[desc_cols] == "0").sum()
-    risk_data[desc_cols] = risk_data[desc_cols].replace(0, "N/A")
-    LOG.info("Replaced %s zero values with 'N/A' in descriptive columns.", num_zeroes)
-    risk_data = risk_data.to_crs(epsg=data_cleaning.BNG_CRS)
+    risk_data = risk_data.to_crs(data_cleaning.BNG_CRS)
     risk_data = _reshape_for_current_forecast(risk_data, "id", risk_cols_order)
     risk_data[risk_cols_order] = risk_data[risk_cols_order].round(1)
     return risk_data.rename(columns={col: f"{col}_score" for col in risk_cols_order})
@@ -211,9 +207,11 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
             config.paths.model_interim_output
             / file_paths.EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH
         ),
-        "Flooding": gpd.read_file(
+        "Flooding": gpd.read_file( # TEMPORARY RENAMING DUE TO USING OLD FLOODING RISK DATA, DELETE WHEN UPDATE WITH NEW DATA 
             config.paths.model_interim_output / file_paths.FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH
-        ),
+        ).rename(columns={"rivers_sea_flood_risk_c": "rivers_sea_flood_risk_current", "surface_water_flood_risk_c": "surface_water_flood_risk_current",
+                          "rivers_sea_flood_risk_f": "rivers_sea_flood_risk_forecast", "surface_water_flood_risk_f": "surface_water_flood_risk_forecast",
+                          "flood_risk_c": "flood_risk_current", "flood_risk_f": "flood_risk_forecast"}),
         "Ground Stability": gpd.read_file(
             config.paths.model_interim_output
             / file_paths.GROUND_STABILITY_MODEL_INTERIM_OUTPUT_PATH
@@ -251,7 +249,7 @@ def _get_road_risk(
 ) -> None:
     """Layer OS Open Roads and NoHAM with hazards to assign risk."""
     LOG.info("Calculating road risk...")
-    _os_open_road_risk(config, hazard_layers, risk_cols)
+    #_os_open_road_risk(config, hazard_layers, risk_cols)
     _noham_road_risk(config, hazard_layers, risk_cols, impact_weights)
     LOG.info("Road risk calculation complete.")
 
@@ -273,7 +271,6 @@ def _os_open_road_risk(
     tfn_os_road_risk = _prepare_model_output(
         risk_data=tfn_os_road_risk,
         drop_cols=[],
-        desc_cols=["road_number", "name", "function"],
         rename_map={"identifier": "id"},
         risk_cols_order=risk_cols,
     )
@@ -370,7 +367,7 @@ def _noham_road_risk(
         col for col in tfn_noham_risk.columns if col not in ["link_id", "geometry"]
     ]
     tfn_noham_risk[cols_to_round] = tfn_noham_risk[cols_to_round].round(1)
-    tfn_noham_risk = tfn_noham_risk.to_crs(epsg=data_cleaning.BNG_CRS)
+    tfn_noham_risk = tfn_noham_risk.to_crs(data_cleaning.BNG_CRS)
     tfn_noham_risk = tfn_noham_risk.rename(columns={"link_id": "id"})
     tfn_noham_risk = tfn_noham_risk.rename(
         columns={col: f"{col}_score" for col in cols_to_round}
@@ -535,13 +532,6 @@ def _passenger_rail_risk(
     tfn_rail_network_risk = _prepare_model_output(
         risk_data=tfn_rail_network_risk,
         drop_cols=[],
-        desc_cols=[
-            "description",
-            "structure",
-            "physical_level",
-            "railway_use",
-            "track_representation",
-        ],
         rename_map={
             "osid": "id",
             "desc": "description",
@@ -589,19 +579,12 @@ def _freight_rail_risk(
 
     # Set the correct CRS
     tfn_freight_network_risk = tfn_freight_network_risk.set_crs(
-        epsg=data_cleaning.BNG_CRS, allow_override=True
+        data_cleaning.BNG_CRS, allow_override=True
     )
 
     tfn_freight_network_risk = _prepare_model_output(
         risk_data=tfn_freight_network_risk,
         drop_cols=["dij_id", "distance", "demand_current", "demand_forecast"],
-        desc_cols=[
-            "description",
-            "structure",
-            "physical_level",
-            "railway_use",
-            "track_representation",
-        ],
         rename_map={
             "osid": "id",
             "desc": "description",
@@ -688,7 +671,7 @@ def _get_other_risk(
 
 def _buffer_geometry(infrastructure: gpd.GeoDataFrame, buffer_size_m: int) -> gpd.GeoDataFrame:
     """Buffers the geometries of a given GeoDataFrame to a given size in metres."""
-    infrastructure = infrastructure.to_crs(epsg=data_cleaning.BNG_CRS)
+    infrastructure = infrastructure.to_crs(data_cleaning.BNG_CRS)
     infrastructure["geometry"] = infrastructure.buffer(buffer_size_m)
     return infrastructure
 
@@ -717,7 +700,6 @@ def _train_stations_risk(
     tfn_train_stations_risk = _prepare_model_output(
         risk_data=tfn_train_stations_risk,
         drop_cols=[],
-        desc_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=risk_cols,
     )
@@ -755,7 +737,6 @@ def _ev_charging_sites_risk(
     tfn_chg_sites_risk = _prepare_model_output(
         risk_data=tfn_chg_sites_risk,
         drop_cols=[],
-        desc_cols=["name", "speed"],
         rename_map={"devices": "installed_devices"},
         risk_cols_order=risk_cols,
     )
@@ -791,7 +772,6 @@ def _airports_risk(
     tfn_airports_risk = _prepare_model_output(
         risk_data=tfn_airports_risk,
         drop_cols=[],
-        desc_cols=["name"],
         rename_map={},
         risk_cols_order=risk_cols,
     )
@@ -834,7 +814,6 @@ def _bus_coach_stations_risk(
     tfn_bus_coach_stations_risk = _prepare_model_output(
         risk_data=tfn_bus_coach_stations_risk,
         drop_cols=[],
-        desc_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=risk_cols,
     )
@@ -867,7 +846,6 @@ def _bus_stops_risk(
     tfn_bus_stops_risk = _prepare_model_output(
         risk_data=tfn_bus_stops_risk,
         drop_cols=[],
-        desc_cols=[],
         rename_map={"stop_id": "id"},
         risk_cols_order=risk_cols,
     )
@@ -905,7 +883,6 @@ def _tram_stations_risk(
     tfn_tram_stations_risk = _prepare_model_output(
         risk_data=tfn_tram_stations_risk,
         drop_cols=[],
-        desc_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=risk_cols,
     )
@@ -948,7 +925,6 @@ def _rapid_transport_stations_risk(
     tfn_rapid_transport_stations_risk = _prepare_model_output(
         risk_data=tfn_rapid_transport_stations_risk,
         drop_cols=[],
-        desc_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=risk_cols,
     )
@@ -990,7 +966,6 @@ def _ferry_terminals_risk(
     tfn_ferry_terminals_risk = _prepare_model_output(
         risk_data=tfn_ferry_terminals_risk,
         drop_cols=[],
-        desc_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=risk_cols,
     )
@@ -1030,7 +1005,6 @@ def _petrol_stations_risk(
     tfn_petrol_stations_risk = _prepare_model_output(
         risk_data=tfn_petrol_stations_risk,
         drop_cols=[],
-        desc_cols=[],
         rename_map={},
         risk_cols_order=risk_cols,
     )
@@ -1066,17 +1040,6 @@ def _ncn_risk(
     tfn_ncn_risk = _prepare_model_output(
         risk_data=tfn_ncn_risk,
         drop_cols=[],
-        desc_cols=[
-            "description",
-            "greenway",
-            "route_type",
-            "route_number",
-            "link_number",
-            "surface",
-            "quality",
-            "lighting",
-            "road_class",
-        ],
         rename_map={
             "Desc_": "description",
             "Greenway": "greenway",
@@ -1123,13 +1086,6 @@ def _tram_network_risk(
     tfn_tram_risk = _prepare_model_output(
         risk_data=tfn_tram_risk,
         drop_cols=[],
-        desc_cols=[
-            "description",
-            "structure",
-            "physical_level",
-            "railway_use",
-            "track_representation",
-        ],
         rename_map={
             "osid": "id",
             "desc": "description",
@@ -1173,13 +1129,6 @@ def _rapid_transport_network_risk(
     tfn_rapid_transport_risk = _prepare_model_output(
         risk_data=tfn_rapid_transport_risk,
         drop_cols=[],
-        desc_cols=[
-            "description",
-            "structure",
-            "physical_level",
-            "railway_use",
-            "track_representation",
-        ],
         rename_map={
             "osid": "id",
             "desc": "description",

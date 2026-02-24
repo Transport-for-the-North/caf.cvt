@@ -12,7 +12,7 @@ switches:
   # True if the raw NoHAM h5 files need to be extracted from zip file
   noham_zip_extract: false
   # True if the 1km flood grid needs to be created before running the flood data functional rules and layering
-  create_flood_grid: false
+  create_flood_grid: true
 
 ####### FILE PATHS #########
 

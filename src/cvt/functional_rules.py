@@ -98,7 +98,11 @@ _COASTAL_EROSION_WEIGHTS = {
     "giz_risk": 0.1
 }
 
-_FLOOD_GRID_SIZE_M = 10000
+_COMBINE_FLOOD_DIRECT = False
+
+_CREATE_FLOOD_TILES = False
+_NUM_TILES_DONE = 50
+_FLOOD_GRID_SIZE_M = 1000
 _FLOOD_RISK_SCORE_MAP = {
     "Unavailable": 0,
     "Very low": 0,
@@ -110,7 +114,6 @@ _FLOOD_WEIGHTS = {
     "rivers_sea_flood_risk": 0.5,
     "surface_water_flood_risk": 0.5
 }
-_COMBINE_FLOOD_DIRECT = True
 
 ### GENERAL FUNCTIONS
 
@@ -409,9 +412,9 @@ def apply_functional_rules(config: model_config.Config) -> None:
     boundary = gpd.read_file(config.other_input.boundary_path)
 
     #_extreme_weather_index(config)
-    #_flooding_index(config, boundary)
+    _flooding_index(config, boundary)
     #_ground_stability_index(config)
-    _coastal_erosion_index(config)
+    #_coastal_erosion_index(config)
 
 
 ## HAZARDS
@@ -1031,23 +1034,32 @@ def _tile_polygon_overlay(
         tile_size_m: int = 5000
 ) -> gpd.GeoDataFrame:
     """Chunked polygon-polygon overlay using a tile grid."""
-    # Compute global bounds
-    xmin, ymin, xmax, ymax = boundary.total_bounds
-
     # Create tiles
-    tiles = _create_grid(xmin, ymin, xmax, ymax, tile_size_m)
-    tiles = tiles[tiles.geometry.intersects(boundary.geometry.iloc[0])].copy()
-    tiles = tiles.reset_index(drop=True)
-    tiles["tile_id"] = range(len(tiles))
+    if _CREATE_FLOOD_TILES:
+        xmin, ymin, xmax, ymax = boundary.total_bounds
+        tiles = _create_grid(xmin, ymin, xmax, ymax, tile_size_m)
+        tiles = tiles[tiles.geometry.intersects(boundary.geometry.iloc[0])].copy()
+        tiles = tiles.reset_index(drop=True)
+        tiles["tile_id"] = range(len(tiles))
+        data_cleaning.write_to_file(
+            tiles,
+            config.paths.model_interim_output / file_paths.TILE_GRID_MODEL_INTERIM_OUTPUT_PATH
+        )
+    else:
+        tiles = gpd.read_file(
+            config.paths.model_interim_output / file_paths.TILE_GRID_MODEL_INTERIM_OUTPUT_PATH
+        )
 
     # Prepare output GPKG
     output_path = (config.paths.model_interim_output /
-                   file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH)
+                   file_paths.FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH)
     layer_name = "flood_overlay"
-    first_write = True
+    first_write = False
 
     # For each tile, do spatial filtering and run overlay and clean
     for tile_idx, tile in tiles.iterrows():
+        if tile_idx <= _NUM_TILES_DONE:
+            continue
         LOG.info("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
 
         tile_geom = tile.geometry
@@ -1220,12 +1232,6 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
             tfn_ncerm[year],
             target_crs=data_cleaning.BNG_CRS
         )
-
-        # Normalise risk values
-        #scaler = sklearn.preprocessing.MinMaxScaler(feature_range=(0, 100))
-        #normalised_values = scaler.fit_transform(
-        #    tfn_erosion_risk[scenario][["erosion_risk", "giz_risk"]]
-        #)
 
         # Compute composite risk score
         tfn_erosion_risk[scenario]["coastal_erosion_risk"] = (
