@@ -26,20 +26,13 @@ _EXTREME_HEAT_WEIGHTS = {
 }
 
 _EXTREME_COLD_RISK_THRESHOLD = 0
-_EXTREME_COLD_WEIGHTS = {
-    "min_temp_winter_risk": 0.5,
-    "frost_days": 0.25,
-    "icing_days": 0.25
-}
+_EXTREME_COLD_WEIGHTS = {"min_temp_winter_risk": 0.5, "frost_days": 0.25, "icing_days": 0.25}
 
 _WIND_SPEED_RISK_THRESHOLD_LOWER = 13.4  # 30 mph in m/s (should not exceed upper threshold)
 _WIND_SPEED_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s (should not exceed 25)
 
 _DROUGHT_NEAREST_JOIN_MAX_DISTANCE = 10000
-_DROUGHT_WEIGHTS = {
-    "drought_severity_index": 0.75,
-    "precip_summer": 0.25
-}
+_DROUGHT_WEIGHTS = {"drought_severity_index": 0.75, "precip_summer": 0.25}
 
 _STORM_NEAREST_JOIN_MAX_DISTANCE = 5000
 _STORM_WEIGHTS = {
@@ -74,10 +67,7 @@ _GEOSURE_HAZARDS = [
     "soluble_rocks",
     "shrink_swell_geoclimate",
 ]
-_GEOCLIMATE_YEAR_SCENARIO_MAP = {
-    "2030": "current",
-    "2070": "forecast"
-}
+_GEOCLIMATE_YEAR_SCENARIO_MAP = {"2030": "current", "2070": "forecast"}
 _GROUND_STABILITY_WEIGHTS = {
     "shrink_swell_geoclimate_risk": 0.40,
     "landslides_risk": 0.10,
@@ -89,31 +79,16 @@ _GROUND_STABILITY_WEIGHTS = {
 }
 
 _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
-_COASTAL_EROSION_YEAR_SCENARIO_MAP = {
-    "2055": "current",
-    "2105": "forecast"
-}
-_COASTAL_EROSION_WEIGHTS = {
-    "erosion_risk": 0.9,
-    "giz_risk": 0.1
-}
+_COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": "current", "2105": "forecast"}
+_COASTAL_EROSION_WEIGHTS = {"erosion_risk": 0.9, "giz_risk": 0.1}
 
 _COMBINE_FLOOD_DIRECT = False
 
 _CREATE_FLOOD_TILES = False
 _NUM_TILES_DONE = 50
 _FLOOD_GRID_SIZE_M = 1000
-_FLOOD_RISK_SCORE_MAP = {
-    "Unavailable": 0,
-    "Very low": 0,
-    "Low": 1,
-    "Medium": 2,
-    "High": 3
-}
-_FLOOD_WEIGHTS = {
-    "rivers_sea_flood_risk": 0.5,
-    "surface_water_flood_risk": 0.5
-}
+_FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
+_FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
 
 ### GENERAL FUNCTIONS
 
@@ -191,7 +166,7 @@ def _iterative_spatial_infilling(
     risk_grid: gpd.GeoDataFrame,
     variables: list[str],
     max_iterations: int = 10,
-    nearest_join_max_distance: int = 5000
+    nearest_join_max_distance: int = 5000,
 ) -> gpd.GeoDataFrame:
     """Apply spatial infilling iteratively to GeoDataFrame on given variables."""
     prev_na_count = None
@@ -227,7 +202,7 @@ def _iterative_spatial_infilling(
             "Iteration %s: filled %s NA values (%s remaining)",
             i + 1,
             int(filled_this_iter),
-            int(new_na_count)
+            int(new_na_count),
         )
 
     # Fallback: nearest join for remaining NAs
@@ -237,7 +212,7 @@ def _iterative_spatial_infilling(
             remaining_na,
             risk_grid.drop(remaining_na.index),
             how="left",
-            max_distance=nearest_join_max_distance
+            max_distance=nearest_join_max_distance,
         )
 
         # Calculate the average value of the neighbouring grids
@@ -257,7 +232,7 @@ def _iterative_spatial_infilling(
             "Nearest-join infilling with a %sm max distance filled %s NA values; %s remain",
             int(nearest_join_max_distance),
             int(filled_nearest),
-            int(final_remaining)
+            int(final_remaining),
         )
 
     return risk_grid
@@ -337,10 +312,10 @@ def _calculate_composite_score(
 
 
 def _overlay_and_clean(
-        *hazard_layers: gpd.GeoDataFrame,
-        target_crs: str,
-        how: str = "union",
-    ) -> gpd.GeoDataFrame:
+    *hazard_layers: gpd.GeoDataFrame,
+    target_crs: str,
+    how: str = "union",
+) -> gpd.GeoDataFrame:
     """Overlay any number of GeoDataFrames with a union (default), then clean to polygons."""
     clean_layers: list[gpd.GeoDataFrame] = []
     for i, hazard_data in enumerate(hazard_layers):
@@ -362,18 +337,15 @@ def _overlay_and_clean(
     hazard_overlay = clean_layers[0]
     for clean_hazard in clean_layers[1:]:
         hazard_overlay = gpd.overlay(
-            hazard_overlay,
-            clean_hazard,
-            how=how,
-            keep_geom_type=False
+            hazard_overlay, clean_hazard, how=how, keep_geom_type=False
         )
 
         # Drop non-area geometries
         geom_types = hazard_overlay.geometry.type
         num_points = (geom_types == "Point").sum() + (geom_types == "MultiPoint").sum()
-        num_lines = (
-            (geom_types == "LineString").sum() + (geom_types == "MultiLineString").sum()
-        )
+        num_lines = (geom_types == "LineString").sum() + (
+            geom_types == "MultiLineString"
+        ).sum()
         hazard_overlay = hazard_overlay[
             geom_types.isin(["Polygon", "MultiPolygon", "GeometryCollection"])
         ].reset_index(drop=True)
@@ -381,7 +353,7 @@ def _overlay_and_clean(
             "Overlay dropped %s points and %s lines, and kept %s area geometries",
             int(num_points),
             int(num_lines),
-            len(hazard_overlay)
+            len(hazard_overlay),
         )
 
         # Standardise to polygons
@@ -411,10 +383,10 @@ def apply_functional_rules(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    #_extreme_weather_index(config)
+    # _extreme_weather_index(config)
     _flooding_index(config, boundary)
-    #_ground_stability_index(config)
-    #_coastal_erosion_index(config)
+    # _ground_stability_index(config)
+    # _coastal_erosion_index(config)
 
 
 ## HAZARDS
@@ -469,7 +441,7 @@ def _extreme_weather_index(config: model_config.Config) -> None:
             "storm_risk_current",
             "storm_risk_forecast",
         ],
-        _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE
+        _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE,
     )
 
     tfn_extreme_weather_risk = _calculate_composite_score(
@@ -613,9 +585,7 @@ def _drought_index(
     ]
 
     tfn_drought_risk = _overlay_and_clean(
-        tfn_precip_sum_gdf,
-        tfn_drought,
-        target_crs=data_cleaning.BNG_CRS
+        tfn_precip_sum_gdf, tfn_drought, target_crs=data_cleaning.BNG_CRS
     )
 
     tfn_drought_risk = _iterative_spatial_infilling(
@@ -626,7 +596,7 @@ def _drought_index(
             "drought_severity_index_current",
             "drought_severity_index_forecast",
         ],
-        _DROUGHT_NEAREST_JOIN_MAX_DISTANCE
+        _DROUGHT_NEAREST_JOIN_MAX_DISTANCE,
     )
 
     tfn_drought_risk = tfn_drought_risk[
@@ -702,7 +672,7 @@ def _storm_index(
         tfn_rain_days,
         tfn_precip_win_gdf,
         tfn_wdr,
-        target_crs=data_cleaning.BNG_CRS
+        target_crs=data_cleaning.BNG_CRS,
     )
 
     tfn_storm_risk = tfn_storm_risk[
@@ -733,7 +703,7 @@ def _storm_index(
             "wind_driven_rain_index_current",
             "wind_driven_rain_index_forecast",
         ],
-        _STORM_NEAREST_JOIN_MAX_DISTANCE
+        _STORM_NEAREST_JOIN_MAX_DISTANCE,
     )
 
     tfn_storm_risk["wind_speed_risk_current"] = tfn_storm_risk[
@@ -883,7 +853,7 @@ def _process_flood_layer(
 ) -> gpd.GeoDataFrame:
     """Read a flood layer, assigns risk, and return area-weighted flood risk."""
     layer = gpd.read_file(file_path)
-    layer[risk_column] = layer["Risk_band"].map(_FLOOD_RISK_SCORE_MAP)
+    layer[risk_column] = layer[risk_column].map(_FLOOD_RISK_SCORE_MAP)
     return _area_weighted_flood_assignment(flood_grid, layer, risk_column)
 
 
@@ -923,9 +893,7 @@ def _area_weighted_flood_assignment(
 
     # Perform overlay to get intersections
     flood_intersections = gpd.overlay(
-        grid[["grid_id", "geometry"]],
-        flood_gdf[[risk_column, "geometry"]],
-        how="intersection"
+        grid[["grid_id", "geometry"]], flood_gdf[[risk_column, "geometry"]], how="intersection"
     )
 
     # Compute intersected area
@@ -933,8 +901,7 @@ def _area_weighted_flood_assignment(
 
     # Compute aggregated weighted sum and area sum
     risk_area_agg = (
-        flood_intersections
-        .assign(weighted=lambda d: d[risk_column] * d["area"])
+        flood_intersections.assign(weighted=lambda d: d[risk_column] * d["area"])
         .groupby("grid_id")
         .agg(weighted_sum=("weighted", "sum"), area_sum=("area", "sum"))
     )
@@ -951,13 +918,13 @@ def _area_weighted_flood_assignment(
 
     # Fill missing values with 0 (no risk) since no data means no risk in the underlying data
     num_na_rows = grid[risk_column].isna().sum()
-    pct_na_rows = (num_na_rows / len(grid))*100
+    pct_na_rows = (num_na_rows / len(grid)) * 100
     grid[risk_column] = grid[risk_column].fillna(0.0)
     LOG.info(
         "Filled %s NA values (%s percent of data) in flood data column %s with 0.",
         num_na_rows,
         pct_na_rows,
-        risk_column
+        risk_column,
     )
 
     len_after_upscale = len(grid)
@@ -973,9 +940,8 @@ def _area_weighted_flood_assignment(
 
 
 def _flooding_index_direct(
-        config: model_config.Config,
-        boundary: gpd.GeoDataFrame
-    ) -> gpd.GeoDataFrame:
+    config: model_config.Config, boundary: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
     """Overlay all four flood datasets using a tiled chunking method."""
     LOG.info("Combining all four flood datasets...")
     _tile_polygon_overlay(
@@ -983,14 +949,14 @@ def _flooding_index_direct(
         boundary,
         [
             config.paths.model_input / file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
-            config.paths.model_input /
-            file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+            config.paths.model_input
+            / file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
             config.paths.model_input / file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
-            config.paths.model_input /
-            file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH
+            config.paths.model_input
+            / file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         ],
         crs=data_cleaning.BNG_CRS,
-        tile_size_m=_FLOOD_GRID_SIZE_M
+        tile_size_m=_FLOOD_GRID_SIZE_M,
     )
 
     tfn_flood_risk = gpd.read_file(
@@ -1000,7 +966,7 @@ def _flooding_index_direct(
     tfn_flood_risk = tfn_flood_risk.fillna(0)
 
     tfn_flood_risk = min_max_scaling_pair(
-    tfn_flood_risk,
+        tfn_flood_risk,
         [
             ("rivers_sea_flood_risk_current", "rivers_sea_flood_risk_forecast"),
             ("surface_water_flood_risk_current", "surface_water_flood_risk_forecast"),
@@ -1027,11 +993,11 @@ def _flooding_index_direct(
 
 
 def _tile_polygon_overlay(
-        config: model_config.Config,
-        boundary: gpd.GeoDataFrame,
-        layer_paths: list[gpd.GeoDataFrame],
-        crs: str,
-        tile_size_m: int = 5000
+    config: model_config.Config,
+    boundary: gpd.GeoDataFrame,
+    layer_paths: list[gpd.GeoDataFrame],
+    crs: str,
+    tile_size_m: int = 5000,
 ) -> gpd.GeoDataFrame:
     """Chunked polygon-polygon overlay using a tile grid."""
     # Create tiles
@@ -1043,7 +1009,7 @@ def _tile_polygon_overlay(
         tiles["tile_id"] = range(len(tiles))
         data_cleaning.write_to_file(
             tiles,
-            config.paths.model_interim_output / file_paths.TILE_GRID_MODEL_INTERIM_OUTPUT_PATH
+            config.paths.model_interim_output / file_paths.TILE_GRID_MODEL_INTERIM_OUTPUT_PATH,
         )
     else:
         tiles = gpd.read_file(
@@ -1051,8 +1017,10 @@ def _tile_polygon_overlay(
         )
 
     # Prepare output GPKG
-    output_path = (config.paths.model_interim_output /
-                   file_paths.FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH)
+    output_path = (
+        config.paths.model_interim_output
+        / file_paths.FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH
+    )
     layer_name = "flood_overlay"
     first_write = False
 
@@ -1075,11 +1043,7 @@ def _tile_polygon_overlay(
                 continue
 
             # Clip to tile to filter for only tile-bound geometries
-            layer_sub = gpd.overlay(
-                layer_sub,
-                tile_gdf,
-                how="intersection"
-            )
+            layer_sub = gpd.overlay(layer_sub, tile_gdf, how="intersection")
 
             # If the overlay returns nothing, break from this layer
             if layer_sub.empty:
@@ -1093,39 +1057,22 @@ def _tile_polygon_overlay(
             continue
 
         # Overlay and clean result for this tile
-        tile_overlay = _overlay_and_clean(
-            *layer_subsets,
-            target_crs=crs,
-            how="union"
-        )
+        tile_overlay = _overlay_and_clean(*layer_subsets, target_crs=crs, how="union")
 
         # If there are no resulting geometries, skip to the next tile
         if tile_overlay.empty:
             continue
 
         if first_write:
-            data_cleaning.write_to_file(
-                tile_overlay,
-                output_path,
-                mode="w",
-                layer=layer_name
-            )
+            data_cleaning.write_to_file(tile_overlay, output_path, mode="w", layer=layer_name)
             first_write = False
         else:
-            data_cleaning.write_to_file(
-                tile_overlay,
-                output_path,
-                mode="a",
-                layer=layer_name
-            )
+            data_cleaning.write_to_file(tile_overlay, output_path, mode="a", layer=layer_name)
 
-        LOG.info(
-            "Tile %s wrote %s geometries.",
-            tile_idx + 1,
-            len(tile_overlay)
-        )
+        LOG.info("Tile %s wrote %s geometries.", tile_idx + 1, len(tile_overlay))
 
     LOG.info("Chunked overlay completed. Output written to %s", output_path)
+
 
 ### GROUND STABILITY
 
@@ -1149,9 +1096,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
         ].map(_GROUND_STABILITY_RISK_SCORE_MAP)
         tfn_ss[year] = tfn_ss[year][["shrink_swell_geoclimate_risk", "geometry"]]
         ground_stability[scenario] = _overlay_and_clean(
-            tfn_geosure,
-            tfn_ss[year],
-            target_crs=data_cleaning.BNG_CRS
+            tfn_geosure, tfn_ss[year], target_crs=data_cleaning.BNG_CRS
         )
         ground_stability[scenario] = ground_stability[scenario].rename(
             columns={
@@ -1164,7 +1109,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
     tfn_ground_stability = _overlay_and_clean(
         ground_stability["current"],
         ground_stability["forecast"],
-        target_crs=data_cleaning.BNG_CRS
+        target_crs=data_cleaning.BNG_CRS,
     )
 
     risk_cols = [
@@ -1177,9 +1122,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
         tfn_ground_stability[col] = pd.to_numeric(tfn_ground_stability[col], errors="coerce")
 
     tfn_ground_stability = _iterative_spatial_infilling(
-        tfn_ground_stability,
-        risk_cols,
-        _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE
+        tfn_ground_stability, risk_cols, _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE
     )
 
     gs_pairs = [(f"{col}_risk_current", f"{col}_risk_forecast") for col in _GEOSURE_HAZARDS]
@@ -1228,14 +1171,13 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
         tfn_ncerm[year]["erosion_risk"] = 100
 
         tfn_erosion_risk[scenario] = _overlay_and_clean(
-            tfn_ncerm_giz,
-            tfn_ncerm[year],
-            target_crs=data_cleaning.BNG_CRS
+            tfn_ncerm_giz, tfn_ncerm[year], target_crs=data_cleaning.BNG_CRS
         )
 
         # Compute composite risk score
         tfn_erosion_risk[scenario]["coastal_erosion_risk"] = (
-            tfn_erosion_risk[scenario]["erosion_risk"] * _COASTAL_EROSION_WEIGHTS["erosion_risk"]
+            tfn_erosion_risk[scenario]["erosion_risk"]
+            * _COASTAL_EROSION_WEIGHTS["erosion_risk"]
             + tfn_erosion_risk[scenario]["giz_risk"] * _COASTAL_EROSION_WEIGHTS["giz_risk"]
         )
 
@@ -1246,16 +1188,13 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
     tfn_coastal_erosion_risk = _overlay_and_clean(
         tfn_erosion_risk["current"],
         tfn_erosion_risk["forecast"],
-        target_crs=data_cleaning.BNG_CRS
+        target_crs=data_cleaning.BNG_CRS,
     )
 
     tfn_coastal_erosion_risk = _iterative_spatial_infilling(
         tfn_coastal_erosion_risk,
-        [
-            "coastal_erosion_risk_current",
-            "coastal_erosion_risk_forecast"
-        ],
-        nearest_join_max_distance=_COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE
+        ["coastal_erosion_risk_current", "coastal_erosion_risk_forecast"],
+        nearest_join_max_distance=_COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE,
     )
     tfn_coastal_erosion_risk = gpd.GeoDataFrame(tfn_coastal_erosion_risk, geometry="geometry")
     tfn_coastal_erosion_risk = tfn_coastal_erosion_risk[

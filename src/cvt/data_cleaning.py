@@ -95,7 +95,7 @@ def write_to_file(
     data: pd.DataFrame | gpd.GeoDataFrame,
     output_path: pathlib.Path,
     mode: str = "w",
-    layer: str | None = None
+    layer: str | None = None,
 ) -> None:
     """
     Write a DataFrame or GeoDataFrame to a file.
@@ -208,9 +208,7 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame, track_part: bool = False) -> gpd.
 def _df_to_gdf(df: pd.DataFrame, x_col: str, y_col: str, crs: str) -> gpd.GeoDataFrame:
     """Take a DataFrame and convert it to a GeoDataFrame using spatial columns."""
     return gpd.GeoDataFrame(
-        df.copy(),
-        geometry=gpd.points_from_xy(df[x_col], df[y_col]),
-        crs=crs
+        df.copy(), geometry=gpd.points_from_xy(df[x_col], df[y_col]), crs=crs
     )
 
 
@@ -259,13 +257,14 @@ def _extract_poly_from_geomcollection(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame
         else:
             raise TypeError(
                 "Unexpected geometry type when extracting Polygons from GeometryCollections: "
-                f"{geom}")
+                f"{geom}"
+            )
 
     LOG.info(
         "Extracted %s Polygons and %s MultiPolygons from %s GeometryCollections",
         polygon_count,
         multipolygon_count,
-        geometry_collection_count
+        geometry_collection_count,
     )
 
     # Create new GeoDataFrame from expanded rows
@@ -459,7 +458,7 @@ def _get_rail_links(
         "OS MMRN Rail links filtered - %s of %s (%s percent) rows removed",
         filter_removed,
         len_before_filter,
-        round((filter_removed / len_before_filter) * 100, 1)
+        round((filter_removed / len_before_filter) * 100, 1),
     )
 
     return tfn_rail_links
@@ -1264,18 +1263,14 @@ def _read_wind_speed_reduce(xr_path: pathlib.Path, scenario: str) -> tuple[pd.Da
 
     # Compute exceedance and percentile aggregations
     exceedance_dataset = _calculate_windspd_exceedance(
-        windspd_dataset,
-        _WIND_SPEED_EXCEEDANCE_THRESHOLD,
-        var,
-        scenario
+        windspd_dataset, _WIND_SPEED_EXCEEDANCE_THRESHOLD, var, scenario
     )
     percentile_dataset = _calculate_windspd_percentile(
         windspd_dataset, _WIND_SPEED_PERCENTILE, var, scenario=scenario
     )
 
     windspd_aggregations = xr.merge(
-        [exceedance_dataset, percentile_dataset],
-        compat="override"
+        [exceedance_dataset, percentile_dataset], compat="override"
     )
     windspd_dataframe = windspd_aggregations.to_dataframe().reset_index()
     len_before_filter = windspd_dataset.sizes["time"]
@@ -1369,7 +1364,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         True,
         _FLOOD_CODE_NUMBER_MAP,
-        "rivers_sea_flood_risk_forecast"
+        "rivers_sea_flood_risk_forecast",
     )
     LOG.info("Finished cleaning climate change river and sea flooding data.")
 
@@ -1383,7 +1378,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
         False,
         _FLOOD_CODE_NUMBER_MAP,
-        "rivers_sea_flood_risk_current"
+        "rivers_sea_flood_risk_current",
     )
     LOG.info("Finished cleaning river and sea flooding data.")
 
@@ -1397,7 +1392,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         True,
         _FLOOD_CODE_NUMBER_MAP,
-        "surface_water_flood_risk_forecast"
+        "surface_water_flood_risk_forecast",
     )
     LOG.info("Finished cleaning climate change surface water flooding data.")
 
@@ -1411,7 +1406,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
         False,
         _FLOOD_CODE_NUMBER_MAP,
-        "surface_water_flood_risk_current"
+        "surface_water_flood_risk_current",
     )
     LOG.info("Finished cleaning surface water flooding data.")
     LOG.info("Finished cleaning flooding data.")
@@ -1499,7 +1494,7 @@ def _read_flood_gdb(
         mask=boundary,
         columns=["Risk_band"],
         engine="pyogrio",
-        use_arrow=True
+        use_arrow=True,
     )
 
 
@@ -1527,7 +1522,7 @@ def _clean_flood(
     out_path: pathlib.Path,
     climate_change_switch: bool,
     code_number_map: dict[str, list[str]],
-    rename_risk_col: str
+    rename_risk_col: str,
 ) -> None:
     """Read and clean flood data, then write to file."""
     first_write = True
@@ -1557,24 +1552,16 @@ def _clean_flood(
                 number,
                 filter_removed,
                 len_before_filter,
-                round((filter_removed / len_before_filter) * 100, 1)
+                round((filter_removed / len_before_filter) * 100, 1),
             )
             tfn_flood_data = _extract_poly_from_geomcollection(tfn_flood_data)
             tfn_flood_data = tfn_flood_data[["Risk_band", "geometry"]]
             tfn_flood_data = tfn_flood_data.rename(columns={"Risk_band": rename_risk_col})
             if first_write:
-                write_to_file(
-                    tfn_flood_data,
-                    config.paths.model_input / out_path,
-                    mode="w"
-                )
+                write_to_file(tfn_flood_data, config.paths.model_input / out_path, mode="w")
                 first_write = False
             else:
-                write_to_file(
-                    tfn_flood_data,
-                    config.paths.model_input / out_path,
-                    mode="a"
-                )
+                write_to_file(tfn_flood_data, config.paths.model_input / out_path, mode="a")
 
             del flood_data, tfn_flood_data
             gc.collect()
@@ -1910,16 +1897,13 @@ def _read_noham_h5(
     )
 
     if (year, time_period) not in route_links_store:
-        noham_routes = pd.read_hdf(
-            noham_demand_path,
-            key="/data/Route"
-        )
+        noham_routes = pd.read_hdf(noham_demand_path, key="/data/Route")
         noham_routes = noham_routes.reset_index()[["route", "link_id"]]
         noham_links = pd.read_hdf(noham_demand_path, key="/data/link")
         noham_links = noham_links[["a", "b"]]
         route_links_store[(year, time_period)] = (noham_routes, noham_links)
     else:
-        noham_routes, noham_links = route_links_store[((year, time_period))]
+        noham_routes, noham_links = route_links_store[(year, time_period)]
 
     noham_ods = pd.read_hdf(noham_demand_path, key="/data/OD")
     noham_ods = noham_ods.reset_index()[["route", "abs_demand"]]
@@ -1932,28 +1916,17 @@ def _aggregate_link_flows(
 ) -> pd.DataFrame:
     """Take NoHAM od's, routes, and link to create aggregated link flows DataFrame."""
     # Merge OD demand onto routes
-    od_routes = routes.merge(
-        ods[["route", "abs_demand"]],
-        on="route",
-        how="inner"
-    )
+    od_routes = routes.merge(ods[["route", "abs_demand"]], on="route", how="inner")
 
     # Aggregate demand per link_id
-    link_demand = (
-        od_routes.groupby("link_id")["abs_demand"]
-        .sum()
-        .reset_index()
-    )
+    link_demand = od_routes.groupby("link_id")["abs_demand"].sum().reset_index()
 
-    return link_demand.merge(
-        links[["a", "b"]],
-        left_on="link_id",
-        right_index=True
-    )
+    return link_demand.merge(links[["a", "b"]], left_on="link_id", right_index=True)
 
 
-def _aggregate_link_flows_year(config: model_config.Config, scenario: str
-                               ) -> dict[str, pd.DataFrame]:
+def _aggregate_link_flows_year(
+    config: model_config.Config, scenario: str
+) -> dict[str, pd.DataFrame]:
     """Aggregate link flows for each year, time period, and user class."""
     year = config.infrastructure.road.noham[scenario].year
 
@@ -1994,7 +1967,7 @@ def _aggregate_link_flows_year(config: model_config.Config, scenario: str
                 len(noham_ods),
                 len(noham_routes),
                 len(noham_links),
-                len(link_demand)
+                len(link_demand),
             )
 
         # Merge all user class dataframes

@@ -207,11 +207,18 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
             config.paths.model_interim_output
             / file_paths.EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH
         ),
-        "Flooding": gpd.read_file( # TEMPORARY RENAMING DUE TO USING OLD FLOODING RISK DATA, DELETE WHEN UPDATE WITH NEW DATA 
+        "Flooding": gpd.read_file(  # TEMPORARY RENAMING DUE TO USING OLD FLOODING RISK DATA, DELETE WHEN UPDATE WITH NEW DATA
             config.paths.model_interim_output / file_paths.FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH
-        ).rename(columns={"rivers_sea_flood_risk_c": "rivers_sea_flood_risk_current", "surface_water_flood_risk_c": "surface_water_flood_risk_current",
-                          "rivers_sea_flood_risk_f": "rivers_sea_flood_risk_forecast", "surface_water_flood_risk_f": "surface_water_flood_risk_forecast",
-                          "flood_risk_c": "flood_risk_current", "flood_risk_f": "flood_risk_forecast"}),
+        ).rename(
+            columns={
+                "rivers_sea_flood_risk_c": "rivers_sea_flood_risk_current",
+                "surface_water_flood_risk_c": "surface_water_flood_risk_current",
+                "rivers_sea_flood_risk_f": "rivers_sea_flood_risk_forecast",
+                "surface_water_flood_risk_f": "surface_water_flood_risk_forecast",
+                "flood_risk_c": "flood_risk_current",
+                "flood_risk_f": "flood_risk_forecast",
+            }
+        ),
         "Ground Stability": gpd.read_file(
             config.paths.model_interim_output
             / file_paths.GROUND_STABILITY_MODEL_INTERIM_OUTPUT_PATH
@@ -249,7 +256,7 @@ def _get_road_risk(
 ) -> None:
     """Layer OS Open Roads and NoHAM with hazards to assign risk."""
     LOG.info("Calculating road risk...")
-    #_os_open_road_risk(config, hazard_layers, risk_cols)
+    # _os_open_road_risk(config, hazard_layers, risk_cols)
     _noham_road_risk(config, hazard_layers, risk_cols, impact_weights)
     LOG.info("Road risk calculation complete.")
 
