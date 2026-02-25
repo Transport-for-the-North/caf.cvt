@@ -245,7 +245,9 @@ def _create_grid(
     rows = int(np.ceil((ymax - ymin) / cell_size))
     cols = int(np.ceil((xmax - xmin) / cell_size))
     grid_cells = []
+    grid_ids = []
 
+    grid_id = 0
     for i in range(cols):
         for j in range(rows):
             x0 = xmin + i * cell_size
@@ -253,7 +255,12 @@ def _create_grid(
             x1 = x0 + cell_size
             y1 = y0 + cell_size
             grid_cells.append(box(x0, y0, x1, y1))
-    return gpd.GeoDataFrame(geometry=grid_cells, crs=data_cleaning.BNG_CRS)
+            grid_ids.append(grid_id)
+            grid_id += 1
+    return gpd.GeoDataFrame(
+        {"grid_id": grid_ids, "geometry": grid_cells},
+        crs=data_cleaning.BNG_CRS
+    )
 
 
 def _merge_on_key(
@@ -852,9 +859,9 @@ def _process_flood_layer(
     risk_column: str,
 ) -> gpd.GeoDataFrame:
     """Read a flood layer, assigns risk, and return area-weighted flood risk."""
-    layer = gpd.read_file(file_path)
-    layer[risk_column] = layer[risk_column].map(_FLOOD_RISK_SCORE_MAP)
-    return _area_weighted_flood_assignment(flood_grid, layer, risk_column)
+    flood_layer = gpd.read_file(file_path)
+    flood_layer[risk_column] = flood_layer[risk_column].map(_FLOOD_RISK_SCORE_MAP)
+    return _area_weighted_flood_assignment(flood_grid, flood_layer, risk_column)
 
 
 def _upscale_to_grid(
@@ -864,22 +871,32 @@ def _upscale_to_grid(
     scenario: str,
 ) -> gpd.GeoDataFrame:
     """Upscales each flood layer to the common grid and writes to file."""
-    result = flood_grid.copy()
+    flood_upscaled = {}
     for path, risk_col in scenario_map:
-        result = _process_flood_layer(
-            result,
+        flood_upscaled[risk_col] = _process_flood_layer(
+            flood_grid,
             config.paths.model_input / path,
             risk_col,
         )
 
-    data_cleaning.write_to_file(
-        result,
-        config.paths.model_interim_output
-        / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
-        / f"tfn_flood_risk_{scenario}.gpkg",
+
+    flood_risk_scenario = (
+        flood_upscaled[scenario_map[0][1]]
+        .merge(
+        flood_upscaled[scenario_map[1][1]],
+        on = "grid_id",
+        how = "inner"
+        )
     )
 
-    return result
+    data_cleaning.write_to_file(
+        flood_risk_scenario,
+        config.paths.model_interim_output
+        / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
+        / f"tfn_flood_risk_{scenario}.csv",
+    )
+
+    return flood_risk_scenario
 
 
 def _area_weighted_flood_assignment(
@@ -888,21 +905,27 @@ def _area_weighted_flood_assignment(
     """Assign flood risk to grid squares using an area-weighted average."""
     len_before_upscale = len(flood_gdf)
 
-    # Preserve original index, renaming to grid_id
-    grid = grid.reset_index().rename(columns={"index": "grid_id"})
-
     # Perform overlay to get intersections
     flood_intersections = gpd.overlay(
-        grid[["grid_id", "geometry"]], flood_gdf[[risk_column, "geometry"]], how="intersection"
+        grid,
+        flood_gdf,
+        how="intersection"
     )
 
     # Compute intersected area
     flood_intersections["area"] = flood_intersections.geometry.area
 
+    # Drop geometry to save memory
+    flood_intersections = flood_intersections.drop(columns=["geometry"])
+
+    # Compute weighted risk contribution
+    flood_intersections["weighted"] = (
+        flood_intersections[risk_column] * flood_intersections["area"]
+    )
+
     # Compute aggregated weighted sum and area sum
     risk_area_agg = (
-        flood_intersections.assign(weighted=lambda d: d[risk_column] * d["area"])
-        .groupby("grid_id")
+        flood_intersections.groupby("grid_id")
         .agg(weighted_sum=("weighted", "sum"), area_sum=("area", "sum"))
     )
 
@@ -911,15 +934,15 @@ def _area_weighted_flood_assignment(
     weighted_avg_flood.name = risk_column
 
     # Assign weighted average flood risk back to the original grid
-    grid = grid.set_index("grid_id")
-    grid[risk_column] = 0.0
-    grid.loc[weighted_avg_flood.index, risk_column] = weighted_avg_flood.to_numpy()
-    grid = grid.reset_index(drop=True)
+    flood_result = grid[["grid_id"]].copy().set_index("grid_id")
+    flood_result[risk_column] = 0.0
+    flood_result.loc[weighted_avg_flood.index, risk_column] = weighted_avg_flood.to_numpy()
+    flood_result = flood_result.reset_index(drop=True)
 
     # Fill missing values with 0 (no risk) since no data means no risk in the underlying data
-    num_na_rows = grid[risk_column].isna().sum()
-    pct_na_rows = (num_na_rows / len(grid)) * 100
-    grid[risk_column] = grid[risk_column].fillna(0.0)
+    num_na_rows = flood_result[risk_column].isna().sum()
+    pct_na_rows = (num_na_rows / len(flood_result)) * 100
+    flood_result[risk_column] = flood_result[risk_column].fillna(0.0)
     LOG.info(
         "Filled %s NA values (%s percent of data) in flood data column %s with 0.",
         num_na_rows,
@@ -927,7 +950,7 @@ def _area_weighted_flood_assignment(
         risk_column,
     )
 
-    len_after_upscale = len(grid)
+    len_after_upscale = len(flood_result)
     LOG.info(
         "Upscaled flood layer %s from %s geometries to %s grid cells "
         "using area-weighted average.",
@@ -936,7 +959,43 @@ def _area_weighted_flood_assignment(
         len_after_upscale,
     )
 
-    return grid
+    return flood_result
+
+
+def _chunked_grid_polygon_overlay(
+    config: model_config.Config,
+    flood_layer: gpd.GeoDataFrame,
+    flood_grid: gpd.GeoDataFrame,
+    scenario: str
+) -> gpd.GeoDataFrame:
+    """Chunked polygon-grid overlay."""
+    # Prepare output GPKG
+    output_path = (
+        config.paths.model_interim_output
+        / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
+        / f"tfn_flood_risk_overlay_{scenario}.csv"
+    )
+    first_write = True
+
+    # For each tile, do spatial filtering and run overlay and clean
+    for grid_square in flood_grid:
+        LOG.info("Grid %s/%s starting overlay", grid_square["grid_id"] + 1, len(flood_grid))
+
+        flood_chunk = gpd.overlay(flood_layer, grid_square, how="intersection")
+
+        # If there are no resulting geometries, skip to the next tile
+        if flood_chunk.empty:
+            continue
+
+        if first_write:
+            data_cleaning.write_to_file(flood_chunk, output_path, mode="w")
+            first_write = False
+        else:
+            data_cleaning.write_to_file(flood_chunk, output_path, mode="a")
+
+        LOG.info("Tile %s wrote %s geometries.", grid_square["grid_id"] + 1, len(flood_chunk))
+
+    LOG.info("Chunked overlay completed. Output written to %s", output_path)
 
 
 def _flooding_index_direct(
