@@ -335,20 +335,26 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to run functional rules.
     run_layering : bool
         Whether to run layering.
+    flood_overlay_direct: bool
+        Whether to use a direct overlay of flood data.
     flood_zip_extract : bool
         Whether to extract flood zip files.
     noham_zip_extract : bool
         Whether to extract NoHAM zip files.
     create_flood_grid : bool
         Whether to create flood grid.
+    create_flood_tiles: bool
+        Whether to create flood tiles.
     """
 
     run_data_cleaning: bool = False
     run_functional_rules: bool = False
     run_layering: bool = False
+    flood_overlay_direct: bool = False
     flood_zip_extract: bool = False
     noham_zip_extract: bool = False
     create_flood_grid: bool = False
+    create_flood_tiles: bool = False
 
 
 # -------------------------

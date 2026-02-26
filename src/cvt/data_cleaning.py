@@ -126,7 +126,7 @@ def write_to_file(
     driver_map = {".gpkg": "GPKG", ".shp": "ESRI Shapefile"}
 
     if ext == ".csv":
-        data.to_csv(output_path, index=False)
+        data.to_csv(output_path, index=False, mode=mode, header=(mode == "w"))
     elif ext in driver_map:
         if not isinstance(data, gpd.GeoDataFrame):
             raise TypeError(f"{ext} requires a GeoDataFrame, got {type(data)}")

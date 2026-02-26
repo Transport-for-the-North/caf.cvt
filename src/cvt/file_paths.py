@@ -184,15 +184,21 @@ EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH = (
     pathlib.Path("TfN Extreme Weather Risk") / "tfn_extreme_weather_risk.gpkg"
 )
 FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Other") / "flood_grid.gpkg"
-TILE_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Other") / "tiles.gpkg"
 FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("TfN Flood Risk") / "tfn_flood_risk.gpkg"
+
+TILE_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Other") / "tiles.gpkg"
 FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH = (
-    pathlib.Path("TfN Flood Risk") / "tfn_flood_risk_tile.gpkg"
+    pathlib.Path("TfN Flood Risk") / "tfn_flood_risk_tile_overlay.gpkg"
+)
+FLOOD_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH = (
+    pathlib.Path("TfN Flood Risk") / "tfn_flood_risk_direct.gpkg"
 )
 FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("TfN Flood Risk")
+
 GROUND_STABILITY_MODEL_INTERIM_OUTPUT_PATH = (
     pathlib.Path("TfN Ground Stability Risk") / "tfn_ground_stability_risk.gpkg"
 )
+
 COASTAL_EROSION_MODEL_INTERIM_OUTPUT_PATH = (
     pathlib.Path("TfN Coastal Erosion Risk") / "tfn_coastal_erosion_risk.gpkg"
 )

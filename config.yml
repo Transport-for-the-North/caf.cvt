@@ -7,14 +7,20 @@ switches:
   run_functional_rules: true
   run_layering: false
 
+  # True if overlaying the flood data directly to retain maximum spatial detail (this takes months), False if upscaling flood data to 1km grid
+  flood_overlay_direct: true
+
   # True if the raw flood data from Defra data services needs to be extracted from the zip files (this is time consuming)
   flood_zip_extract: false
   # True if the raw NoHAM h5 files need to be extracted from zip file
   noham_zip_extract: false
-  # True if the 1km flood grid needs to be created before running the flood data functional rules and layering
+  # True if the flood grid needs to be created before upscaling the flood data to this grid
   create_flood_grid: false
+  # True if the flood tiles need to be created before using these in the direct flood overlay
+  create_flood_tiles: false
 
-####### FILE PATHS #########
+
+###### FILE PATHS ######
 
 paths:
   root: D:/Climate Vulnerability Tool/Data

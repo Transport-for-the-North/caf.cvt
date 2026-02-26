@@ -82,13 +82,12 @@ _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": "current", "2105": "forecast"}
 _COASTAL_EROSION_WEIGHTS = {"erosion_risk": 0.9, "giz_risk": 0.1}
 
-_COMBINE_FLOOD_DIRECT = False
-
-_CREATE_FLOOD_TILES = False
-_NUM_TILES_DONE = 50
 _FLOOD_GRID_SIZE_M = 1000
+_FLOOD_TILE_SIZE_M = 10000
 _FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
 _FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
+
+_NUM_TILES_DONE = 50
 
 ### GENERAL FUNCTIONS
 
@@ -391,7 +390,10 @@ def apply_functional_rules(config: model_config.Config) -> None:
     boundary = gpd.read_file(config.other_input.boundary_path)
 
     # _extreme_weather_index(config)
-    _flooding_index(config, boundary)
+    if config.switches.flood_overlay_direct:
+        _flooding_index_direct(config, boundary)
+    else:
+        _flooding_index(config, boundary)
     # _ground_stability_index(config)
     # _coastal_erosion_index(config)
 
@@ -769,11 +771,7 @@ def _wind_risk_scaled(speed_metres_per_second: float) -> float:
 def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Combine RoFRS & RoFSW into a single risk score by upscaling them to a common grid."""
     LOG.info("Calculating flood risk index...")
-
-    if _COMBINE_FLOOD_DIRECT:
-        _flooding_index_direct(config, boundary)
-        return
-
+    # Ensure grid exists
     if config.switches.create_flood_grid:
         flood_grid = _create_flood_grid(config, _FLOOD_GRID_SIZE_M, boundary)
     else:
@@ -809,8 +807,13 @@ def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     )
     LOG.info("Forecast flood risk processing complete.")
 
-    # Merge on geometry columns (these will be exactly the same)
-    tfn_flood_risk = tfn_flood_risk_c.merge(tfn_flood_risk_f, on="geometry", how="left")
+    # Merge on grid ID
+    tfn_flood_risk = tfn_flood_risk_c.merge(tfn_flood_risk_f, on="grid_id", how="left")
+
+    # Merge with grid to get geometries
+    tfn_flood_risk = tfn_flood_risk.merge(flood_grid, on="grid_id", how="left")
+
+    tfn_flood_risk = tfn_flood_risk.drop(columns=["grid_id"])
 
     tfn_flood_risk = min_max_scaling_pair(
         tfn_flood_risk,
@@ -853,17 +856,6 @@ def _create_flood_grid(
     return flood_grid
 
 
-def _process_flood_layer(
-    flood_grid: gpd.GeoDataFrame,
-    file_path: pathlib.Path,
-    risk_column: str,
-) -> gpd.GeoDataFrame:
-    """Read a flood layer, assigns risk, and return area-weighted flood risk."""
-    flood_layer = gpd.read_file(file_path)
-    flood_layer[risk_column] = flood_layer[risk_column].map(_FLOOD_RISK_SCORE_MAP)
-    return _area_weighted_flood_assignment(flood_grid, flood_layer, risk_column)
-
-
 def _upscale_to_grid(
     config: model_config.Config,
     flood_grid: gpd.GeoDataFrame,
@@ -873,12 +865,14 @@ def _upscale_to_grid(
     """Upscales each flood layer to the common grid and writes to file."""
     flood_upscaled = {}
     for path, risk_col in scenario_map:
-        flood_upscaled[risk_col] = _process_flood_layer(
+        LOG.info("Upscaling flood layer %s to a %sm grid", risk_col, _FLOOD_GRID_SIZE_M)
+        flood_upscaled[risk_col] = _area_weighted_flood_assignment(
+            config,
             flood_grid,
             config.paths.model_input / path,
+            scenario,
             risk_col,
         )
-
 
     flood_risk_scenario = (
         flood_upscaled[scenario_map[0][1]]
@@ -900,23 +894,21 @@ def _upscale_to_grid(
 
 
 def _area_weighted_flood_assignment(
-    grid: gpd.GeoDataFrame, flood_gdf: gpd.GeoDataFrame, risk_column: str
+    config: model_config.Config,
+    grid: gpd.GeoDataFrame,
+    flood_path: pathlib.Path,
+    scenario: str,
+    risk_column: str
 ) -> gpd.GeoDataFrame:
     """Assign flood risk to grid squares using an area-weighted average."""
-    len_before_upscale = len(flood_gdf)
-
-    # Perform overlay to get intersections
-    flood_intersections = gpd.overlay(
+    # Perform chunked overlay to get intersections
+    flood_intersections, len_before_upscale = _chunked_grid_polygon_overlay(
+        config,
+        flood_path,
         grid,
-        flood_gdf,
-        how="intersection"
+        scenario,
+        risk_column
     )
-
-    # Compute intersected area
-    flood_intersections["area"] = flood_intersections.geometry.area
-
-    # Drop geometry to save memory
-    flood_intersections = flood_intersections.drop(columns=["geometry"])
 
     # Compute weighted risk contribution
     flood_intersections["weighted"] = (
@@ -964,12 +956,14 @@ def _area_weighted_flood_assignment(
 
 def _chunked_grid_polygon_overlay(
     config: model_config.Config,
-    flood_layer: gpd.GeoDataFrame,
+    flood_path: pathlib.Path,
     flood_grid: gpd.GeoDataFrame,
-    scenario: str
+    scenario: str,
+    risk_column: str,
+    log_every: int = 1000
 ) -> gpd.GeoDataFrame:
     """Chunked polygon-grid overlay."""
-    # Prepare output GPKG
+    # Prepare output csv
     output_path = (
         config.paths.model_interim_output
         / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
@@ -977,11 +971,36 @@ def _chunked_grid_polygon_overlay(
     )
     first_write = True
 
-    # For each tile, do spatial filtering and run overlay and clean
-    for grid_square in flood_grid:
-        LOG.info("Grid %s/%s starting overlay", grid_square["grid_id"] + 1, len(flood_grid))
+    len_before_upscale = 0
+    log_total = 0
 
-        flood_chunk = gpd.overlay(flood_layer, grid_square, how="intersection")
+    # For each tile, do spatial filtering and run overlay and clean
+    for i, grid_square in flood_grid.iterrows():
+        if i % log_every == 0:
+            LOG.info(
+                "Overlay progress: %s/%s grid squares (%.1f%%), %s intersections written to file",
+                i,
+                len(flood_grid),
+                (i / len(flood_grid) * 100),
+                log_total
+            )
+
+        grid_geom = grid_square.geometry
+        grid_bbox = grid_geom.bounds
+        grid_square_gdf = gpd.GeoDataFrame(
+            {"grid_id": [grid_square["grid_id"]]},
+            geometry = [grid_geom],
+            crs=data_cleaning.BNG_CRS
+        )
+
+        flood_layer_sub = gpd.read_file(flood_path, bbox=grid_bbox)
+        flood_layer_sub[risk_column] = flood_layer_sub[risk_column].map(_FLOOD_RISK_SCORE_MAP)
+        len_before_upscale += len(flood_layer_sub)
+
+        flood_chunk = gpd.overlay(flood_layer_sub, grid_square_gdf, how="intersection")
+        flood_chunk["area"] = flood_chunk.geometry.area
+
+        flood_chunk = flood_chunk.drop(columns=["geometry"])
 
         # If there are no resulting geometries, skip to the next tile
         if flood_chunk.empty:
@@ -993,9 +1012,11 @@ def _chunked_grid_polygon_overlay(
         else:
             data_cleaning.write_to_file(flood_chunk, output_path, mode="a")
 
-        LOG.info("Tile %s wrote %s geometries.", grid_square["grid_id"] + 1, len(flood_chunk))
+        log_total += len(flood_chunk)
 
     LOG.info("Chunked overlay completed. Output written to %s", output_path)
+
+    return pd.read_csv(output_path), len_before_upscale
 
 
 def _flooding_index_direct(
@@ -1015,11 +1036,12 @@ def _flooding_index_direct(
             / file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         ],
         crs=data_cleaning.BNG_CRS,
-        tile_size_m=_FLOOD_GRID_SIZE_M,
+        tile_size_m=_FLOOD_TILE_SIZE_M,
     )
 
     tfn_flood_risk = gpd.read_file(
-        config.paths.model_interim_output / file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH
+        config.paths.model_interim_output
+        / file_paths.FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH
     )
 
     tfn_flood_risk = tfn_flood_risk.fillna(0)
@@ -1044,7 +1066,8 @@ def _flooding_index_direct(
 
     data_cleaning.write_to_file(
         tfn_flood_risk,
-        config.paths.model_interim_output / file_paths.FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH,
+        config.paths.model_interim_output
+        / file_paths.FLOOD_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH,
     )
 
     LOG.info("Flood risk index calculation complete.")
@@ -1060,7 +1083,7 @@ def _tile_polygon_overlay(
 ) -> gpd.GeoDataFrame:
     """Chunked polygon-polygon overlay using a tile grid."""
     # Create tiles
-    if _CREATE_FLOOD_TILES:
+    if config.switches.create_flood_tiles:
         xmin, ymin, xmax, ymax = boundary.total_bounds
         tiles = _create_grid(xmin, ymin, xmax, ymax, tile_size_m)
         tiles = tiles[tiles.geometry.intersects(boundary.geometry.iloc[0])].copy()
