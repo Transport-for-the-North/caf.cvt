@@ -7,14 +7,14 @@ import os
 import pathlib
 from zipfile import ZipFile
 
-import file_paths
 import fiona
 import geopandas as gpd
-import model_config
 import pandas as pd
 import py7zr
 import xarray as xr
 from shapely import geometry
+
+from cvt import file_paths, model_config
 
 LOG = logging.getLogger(__name__)
 

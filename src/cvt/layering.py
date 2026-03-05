@@ -3,14 +3,12 @@
 import logging
 import pathlib
 
-import data_cleaning
-import file_paths
-import functional_rules
 import geopandas as gpd
-import model_config
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+
+from cvt import data_cleaning, file_paths, functional_rules, model_config
 
 LOG = logging.getLogger(__name__)
 

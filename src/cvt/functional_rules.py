@@ -5,14 +5,13 @@ import logging
 import pathlib
 from functools import reduce
 
-import data_cleaning
-import file_paths
 import geopandas as gpd
-import model_config
 import numpy as np
 import pandas as pd
 import sklearn
 from shapely.geometry import box
+
+from cvt import data_cleaning, file_paths, model_config
 
 LOG = logging.getLogger(__name__)
 
