@@ -87,7 +87,7 @@ _FLOOD_TILE_SIZE_M = 10000
 _FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
 _FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
 
-_NUM_TILES_DONE = 50
+_NUM_TILES_DONE = 101
 
 ### GENERAL FUNCTIONS
 
@@ -389,13 +389,13 @@ def apply_functional_rules(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    # _extreme_weather_index(config)
+    _extreme_weather_index(config)
     if config.switches.flood_overlay_direct:
         _flooding_index_direct(config, boundary)
     else:
         _flooding_index(config, boundary)
-    # _ground_stability_index(config)
-    # _coastal_erosion_index(config)
+    _ground_stability_index(config)
+    _coastal_erosion_index(config)
 
 
 ## HAZARDS
@@ -813,6 +813,11 @@ def _flooding_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     # Merge with grid to get geometries
     tfn_flood_risk = tfn_flood_risk.merge(flood_grid, on="grid_id", how="left")
 
+    # Convert to GeoDataFrame
+    tfn_flood_risk = gpd.GeoDataFrame(
+        tfn_flood_risk, geometry="geometry", crs=data_cleaning.BNG_CRS
+    )
+
     tfn_flood_risk = tfn_flood_risk.drop(columns=["grid_id"])
 
     tfn_flood_risk = min_max_scaling_pair(
@@ -902,7 +907,7 @@ def _area_weighted_flood_assignment(
 ) -> gpd.GeoDataFrame:
     """Assign flood risk to grid squares using an area-weighted average."""
     # Perform chunked overlay to get intersections
-    flood_intersections, len_before_upscale = _chunked_grid_polygon_overlay(
+    flood_intersections, len_before_upscale = _chunked_grid_polygon_flood_overlay(
         config,
         flood_path,
         grid,
@@ -929,7 +934,7 @@ def _area_weighted_flood_assignment(
     flood_result = grid[["grid_id"]].copy().set_index("grid_id")
     flood_result[risk_column] = 0.0
     flood_result.loc[weighted_avg_flood.index, risk_column] = weighted_avg_flood.to_numpy()
-    flood_result = flood_result.reset_index(drop=True)
+    flood_result = flood_result.reset_index()
 
     # Fill missing values with 0 (no risk) since no data means no risk in the underlying data
     num_na_rows = flood_result[risk_column].isna().sum()
@@ -954,7 +959,7 @@ def _area_weighted_flood_assignment(
     return flood_result
 
 
-def _chunked_grid_polygon_overlay(
+def _chunked_grid_polygon_flood_overlay(
     config: model_config.Config,
     flood_path: pathlib.Path,
     flood_grid: gpd.GeoDataFrame,
@@ -978,7 +983,8 @@ def _chunked_grid_polygon_overlay(
     for i, grid_square in flood_grid.iterrows():
         if i % log_every == 0:
             LOG.info(
-                "Overlay progress: %s/%s grid squares (%.1f%%), %s intersections written to file",
+                "Overlay progress: %s/%s grid squares (%.1f%%), "
+                "%s intersections written to file",
                 i,
                 len(flood_grid),
                 (i / len(flood_grid) * 100),
@@ -1024,7 +1030,7 @@ def _flooding_index_direct(
 ) -> gpd.GeoDataFrame:
     """Overlay all four flood datasets using a tiled chunking method."""
     LOG.info("Combining all four flood datasets...")
-    _tile_polygon_overlay(
+    _tile_polygon_flood_overlay(
         config,
         boundary,
         [
@@ -1074,7 +1080,7 @@ def _flooding_index_direct(
     return tfn_flood_risk
 
 
-def _tile_polygon_overlay(
+def _tile_polygon_flood_overlay(
     config: model_config.Config,
     boundary: gpd.GeoDataFrame,
     layer_paths: list[gpd.GeoDataFrame],

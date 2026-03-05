@@ -98,7 +98,7 @@ def _reshape_for_current_forecast(
     descriptive_cols = [
         col
         for col in risk_data.columns
-        if col not in risk_cols and col not in [id_col] and col != "geometry"
+        if col not in risk_cols and col not in (id_col, "geometry")
     ]
 
     # Separate geometry for later
@@ -168,6 +168,9 @@ def _split_csv_shapefile(
     spatial_gdf = gdf[[id_col, "geometry"]].copy()
     attribute_df = gdf.drop(columns=["geometry"])
 
+    # Remove duplicates from spatial data
+    spatial_gdf = spatial_gdf.drop_duplicates()
+
     # Save to file
     data_cleaning.write_to_file(
         spatial_gdf, config.paths.model_output / out_path_no_suffix.with_suffix(".shp")
@@ -207,17 +210,8 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
             config.paths.model_interim_output
             / file_paths.EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH
         ),
-        "Flooding": gpd.read_file(  # TEMPORARY RENAMING DUE TO USING OLD FLOODING RISK DATA, DELETE WHEN UPDATE WITH NEW DATA
+        "Flooding": gpd.read_file(
             config.paths.model_interim_output / file_paths.FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH
-        ).rename(
-            columns={
-                "rivers_sea_flood_risk_c": "rivers_sea_flood_risk_current",
-                "surface_water_flood_risk_c": "surface_water_flood_risk_current",
-                "rivers_sea_flood_risk_f": "rivers_sea_flood_risk_forecast",
-                "surface_water_flood_risk_f": "surface_water_flood_risk_forecast",
-                "flood_risk_c": "flood_risk_current",
-                "flood_risk_f": "flood_risk_forecast",
-            }
         ),
         "Ground Stability": gpd.read_file(
             config.paths.model_interim_output
@@ -256,7 +250,7 @@ def _get_road_risk(
 ) -> None:
     """Layer OS Open Roads and NoHAM with hazards to assign risk."""
     LOG.info("Calculating road risk...")
-    # _os_open_road_risk(config, hazard_layers, risk_cols)
+    _os_open_road_risk(config, hazard_layers, risk_cols)
     _noham_road_risk(config, hazard_layers, risk_cols, impact_weights)
     LOG.info("Road risk calculation complete.")
 
