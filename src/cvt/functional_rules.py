@@ -257,8 +257,7 @@ def _create_grid(
             grid_ids.append(grid_id)
             grid_id += 1
     return gpd.GeoDataFrame(
-        {"grid_id": grid_ids, "geometry": grid_cells},
-        crs=data_cleaning.BNG_CRS
+        {"grid_id": grid_ids, "geometry": grid_cells}, crs=data_cleaning.BNG_CRS
     )
 
 
@@ -879,13 +878,8 @@ def _upscale_to_grid(
             risk_col,
         )
 
-    flood_risk_scenario = (
-        flood_upscaled[scenario_map[0][1]]
-        .merge(
-        flood_upscaled[scenario_map[1][1]],
-        on = "grid_id",
-        how = "inner"
-        )
+    flood_risk_scenario = flood_upscaled[scenario_map[0][1]].merge(
+        flood_upscaled[scenario_map[1][1]], on="grid_id", how="inner"
     )
 
     data_cleaning.write_to_file(
@@ -903,16 +897,12 @@ def _area_weighted_flood_assignment(
     grid: gpd.GeoDataFrame,
     flood_path: pathlib.Path,
     scenario: str,
-    risk_column: str
+    risk_column: str,
 ) -> gpd.GeoDataFrame:
     """Assign flood risk to grid squares using an area-weighted average."""
     # Perform chunked overlay to get intersections
     flood_intersections, len_before_upscale = _chunked_grid_polygon_flood_overlay(
-        config,
-        flood_path,
-        grid,
-        scenario,
-        risk_column
+        config, flood_path, grid, scenario, risk_column
     )
 
     # Compute weighted risk contribution
@@ -921,9 +911,8 @@ def _area_weighted_flood_assignment(
     )
 
     # Compute aggregated weighted sum and area sum
-    risk_area_agg = (
-        flood_intersections.groupby("grid_id")
-        .agg(weighted_sum=("weighted", "sum"), area_sum=("area", "sum"))
+    risk_area_agg = flood_intersections.groupby("grid_id").agg(
+        weighted_sum=("weighted", "sum"), area_sum=("area", "sum")
     )
 
     # Compute area weighted average flood risk per grid cell
@@ -965,7 +954,7 @@ def _chunked_grid_polygon_flood_overlay(
     flood_grid: gpd.GeoDataFrame,
     scenario: str,
     risk_column: str,
-    log_every: int = 1000
+    log_every: int = 1000,
 ) -> gpd.GeoDataFrame:
     """Chunked polygon-grid overlay."""
     # Prepare output csv
@@ -988,15 +977,15 @@ def _chunked_grid_polygon_flood_overlay(
                 i,
                 len(flood_grid),
                 (i / len(flood_grid) * 100),
-                log_total
+                log_total,
             )
 
         grid_geom = grid_square.geometry
         grid_bbox = grid_geom.bounds
         grid_square_gdf = gpd.GeoDataFrame(
             {"grid_id": [grid_square["grid_id"]]},
-            geometry = [grid_geom],
-            crs=data_cleaning.BNG_CRS
+            geometry=[grid_geom],
+            crs=data_cleaning.BNG_CRS,
         )
 
         flood_layer_sub = gpd.read_file(flood_path, bbox=grid_bbox)
