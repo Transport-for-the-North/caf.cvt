@@ -1,6 +1,6 @@
 ![Transport for the North Logo](https://github.com/transport-for-the-north/cvt/blob/main/docs/TFN_Landscape_Colour_CMYK.png)
 
-<h1 align="center">CVT</h1>
+<h1 align="center">cvt</h1>
 
 <p align="center">
 <a href="https://transport-for-the-north.github.io/CAF-Handbook/python_tools/framework.html">
@@ -103,7 +103,7 @@ Once the command has finished the PDF will be located at
 
 ## Maintainers
 
-- Daniel Jackson (DanielJackson
+- Daniel Jackson (DanielJacksonTfN)
 
 ## Credit
 

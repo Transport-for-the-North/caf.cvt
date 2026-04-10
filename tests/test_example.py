@@ -1,10 +1,7 @@
-# -*- coding: utf-8 -*-
-"""Tests for the {} module"""
+"""Tests for the {} module."""
 # Built-Ins
-from typing import Any
 
 # Third Party
-import pytest
 
 
 # # # CONSTANTS # # #
@@ -15,5 +12,8 @@ import pytest
 
 # # # TESTS # # #
 class TestFunctionName:
-    def test_something(self):
+    """Example Class Docstring."""
+
+    def test_something(self) -> None:
+        """Example Test Docstring."""
         assert True
