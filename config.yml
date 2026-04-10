@@ -4,10 +4,10 @@
 switches:
   # If running from scratch using only the raw input files these switches should all be true
   run_data_cleaning: false
-  run_functional_rules: false
-  run_layering: true
+  run_functional_rules: true
+  run_layering: false
   # True if overlaying the flood data directly to retain maximum spatial detail (this takes months), False if upscaling flood data to 1km grid
-  flood_overlay_direct: false
+  flood_overlay_direct: true
 
   # True if the raw flood data from Defra data services needs to be extracted from the zip files (this is time consuming)
   flood_zip_extract: false

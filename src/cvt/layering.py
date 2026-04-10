@@ -297,7 +297,7 @@ def _noham_road_risk(
     LOG.info("Layering NoHAM with hazard risk and calculating impact index...")
     tfn_noham = {}
     tfn_noham_risk_scenario = {}
-    for _, scenario in {"2023": "current", "2048": "forecast"}.items():
+    for scenario in functional_rules.SCENARIO_NAMES:
         tfn_noham[scenario] = gpd.read_file(
             config.paths.model_input
             / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
@@ -628,7 +628,7 @@ def _calculate_freight_impact(
     freight_data: pd.DataFrame, impact_weights: dict[str, float]
 ) -> pd.DataFrame:
     """Calculate composite impact score for current and forecast years."""
-    for scenario in ["current", "forecast"]:
+    for scenario in functional_rules.SCENARIO_NAMES:
         freight_data[f"impact_{scenario}"] = (
             freight_data[f"demand_{scenario}"] * impact_weights["demand"]
             + freight_data[f"flood_risk_{scenario}"] * impact_weights["flood"]

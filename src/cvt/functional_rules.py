@@ -15,6 +15,7 @@ from cvt import data_cleaning, file_paths, model_config
 
 LOG = logging.getLogger(__name__)
 
+SCENARIO_NAMES = ["current", "forecast"]
 _SCENARIO_SUFFIXES = ["_current", "_forecast"]
 
 _EXTREME_HEAT_RISK_THRESHOLD = 30
@@ -29,6 +30,7 @@ _EXTREME_COLD_WEIGHTS = {"min_temp_winter_risk": 0.5, "frost_days": 0.25, "icing
 
 _WIND_SPEED_RISK_THRESHOLD_LOWER = 13.4  # 30 mph in m/s (should not exceed upper threshold)
 _WIND_SPEED_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s (should not exceed 25)
+_EXTREME_WIND_MAX = 25
 
 _DROUGHT_NEAREST_JOIN_MAX_DISTANCE = 10000
 _DROUGHT_WEIGHTS = {"drought_severity_index": 0.75, "precip_summer": 0.25}
@@ -86,7 +88,8 @@ _FLOOD_TILE_SIZE_M = 10000
 _FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
 _FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
 
-_NUM_TILES_DONE = 101
+
+_NUM_TILES_DONE = 449
 
 ### GENERAL FUNCTIONS
 
@@ -287,7 +290,7 @@ def _calculate_risk_threshold(
     invert: bool = False,
 ) -> pd.DataFrame:
     """Calculate risk level of a given column based on a threshold."""
-    for scenario in ["current", "forecast"]:
+    for scenario in SCENARIO_NAMES:
         col_name = f"{base_col}_{scenario}"
         out_name = f"{output_col}_{scenario}"
 
@@ -307,7 +310,7 @@ def _calculate_composite_score(
     risk_data: pd.DataFrame, weights: dict[str, float], output_col: str
 ) -> pd.DataFrame:
     """Calculate composite score given a dataframe with variables and corresponding weights."""
-    for scenario in ["current", "forecast"]:
+    for scenario in SCENARIO_NAMES:
         risk_data[f"{output_col}_{scenario}"] = sum(
             risk_data[f"{col}_{scenario}"] * weight for col, weight in weights.items()
         )
@@ -387,13 +390,13 @@ def apply_functional_rules(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    _extreme_weather_index(config)
+    #_extreme_weather_index(config)
     if config.switches.flood_overlay_direct:
         _flooding_index_direct(config, boundary)
     else:
         _flooding_index(config, boundary)
-    _ground_stability_index(config)
-    _coastal_erosion_index(config)
+    #_ground_stability_index(config)
+    #_coastal_erosion_index(config)
 
 
 ## HAZARDS
@@ -759,7 +762,7 @@ def _wind_risk_scaled(speed_metres_per_second: float) -> float:
             _WIND_SPEED_RISK_THRESHOLD_UPPER - _WIND_SPEED_RISK_THRESHOLD_LOWER
         )  # Scale to 0 - 1
     return 1 + (speed_metres_per_second - _WIND_SPEED_RISK_THRESHOLD_UPPER) / (
-        25 - _WIND_SPEED_RISK_THRESHOLD_UPPER
+        _EXTREME_WIND_MAX - _WIND_SPEED_RISK_THRESHOLD_UPPER
     )  # Scale beyond 1
 
 
@@ -1102,7 +1105,7 @@ def _tile_polygon_flood_overlay(
 
     # For each tile, do spatial filtering and run overlay and clean
     for tile_idx, tile in tiles.iterrows():
-        if tile_idx <= _NUM_TILES_DONE:
+        if tile_idx + 1 <= _NUM_TILES_DONE:
             continue
         LOG.info("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
 
