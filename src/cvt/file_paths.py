@@ -46,11 +46,11 @@ TRAM_NETWORK_MODEL_INPUT_PATH = pathlib.Path(
 RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH = pathlib.Path(
     "Infrastructure/Other/TfN Rapid Transport Network/tfn_rapid_transport_links.gpkg"
 )
-CHARGING_SITES_MODEL_INPUT_PATH = (
-    pathlib.Path("Infrastructure/Other/TfN EV Charging Sites/tfn_chg_sites.gpkg")
+CHARGING_SITES_MODEL_INPUT_PATH = pathlib.Path(
+    "Infrastructure/Other/TfN EV Charging Sites/tfn_chg_sites.gpkg"
 )
-NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH = (
-    pathlib.Path("Infrastructure/Other/TfN NCN/tfn_ncn.gpkg")
+NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH = pathlib.Path(
+    "Infrastructure/Other/TfN NCN/tfn_ncn.gpkg"
 )
 
 # Hazards Model Inputs Paths
@@ -102,9 +102,7 @@ FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Flooding/TfN RoFRS CC/tfn_rofrs_cc.gpkg"
 )
 
-FLOOD_RIVERS_SEA_MODEL_INPUT_PATH = pathlib.Path(
-    "Hazards/Flooding/TfN RoFRS/tfn_rofrs.gpkg"
-)
+FLOOD_RIVERS_SEA_MODEL_INPUT_PATH = pathlib.Path("Hazards/Flooding/TfN RoFRS/tfn_rofrs.gpkg")
 FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Flooding/TfN RoFSW CC/tfn_rofsw_cc.gpkg"
 )

@@ -390,13 +390,13 @@ def apply_functional_rules(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    #_extreme_weather_index(config)
+    _extreme_weather_index(config)
     if config.switches.flood_overlay_direct:
         _flooding_index_direct(config, boundary)
     else:
         _flooding_index(config, boundary)
-    #_ground_stability_index(config)
-    #_coastal_erosion_index(config)
+    _ground_stability_index(config)
+    _coastal_erosion_index(config)
 
 
 ## HAZARDS

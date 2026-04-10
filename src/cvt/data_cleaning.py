@@ -373,9 +373,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     """Read and clean 2023 and 2048 NoHAM network datasets, then write to file."""
     for scenario, noham_entry in config.infrastructure.road.noham.items():
         noham_network = gpd.read_file(
-            noham_entry.file_path,
-            mask=boundary,
-            columns=["link_id"]
+            noham_entry.file_path, mask=boundary, columns=["link_id"]
         )
         len_before_filter = len(noham_network)
         noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
