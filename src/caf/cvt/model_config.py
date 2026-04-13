@@ -14,7 +14,8 @@ class ZipFileEntry(ctk.BaseConfig):
     """Path to the zip file"""
     file_path: str | None = None
     """Path within the zip file."""
-    output_path: pathlib.Path | None = None
+    output_path: pathlib.Path
+    #| None = None
     """Output path for the extracted file"""
 
 

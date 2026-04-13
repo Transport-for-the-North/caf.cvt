@@ -6,12 +6,12 @@ import pathlib
 import warnings
 
 import caf.toolkit as ctk
-from data_cleaning import data_cleaning
-from functional_rules import apply_functional_rules
-from layering import layering
-from model_config import Config
+from caf import cvt
 
-import cvt
+from .data_cleaning import data_cleaning
+from .functional_rules import apply_functional_rules
+from .layering import layering
+from .model_config import Config
 
 LOG = logging.getLogger(__name__)
 
