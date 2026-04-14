@@ -13,4 +13,4 @@ last updated on |today|.
     :toctree: _autosummary/
     :recursive:
 
-    cvt
+    caf.cvt

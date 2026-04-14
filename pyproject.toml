@@ -3,7 +3,7 @@ requires = ["setuptools>=64.0.0", "versioningit"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cvt"
+name = "caf.cvt"
 dynamic = ["version", "dependencies", "optional-dependencies"]
 description = "Climate Vulnerability Tool to assess the vulnerability of the transport network in the North to climate hazards."
 readme = "README.md"
@@ -18,10 +18,10 @@ classifiers = [
 ]
 
 [project.urls]
-"Bug Tracker" = "https://github.com/transport-for-the-north/cvt/issues"
-Homepage = "https://github.com/transport-for-the-north/cvt"
-Source = "https://github.com/transport-for-the-north/cvt"
-Documentation = "http://cvt.readthedocs.io/"
+"Bug Tracker" = "https://github.com/transport-for-the-north/caf.cvt/issues"
+Homepage = "https://github.com/transport-for-the-north/caf.cvt"
+Source = "https://github.com/transport-for-the-north/caf.cvt"
+Documentation = "http://caf.cvt.readthedocs.io/"
 
 [tool.setuptools.dynamic]
 dependencies = { "file" = "requirements.txt" }
@@ -38,9 +38,10 @@ sdist = "versioningit.cmdclass.sdist"
 # Packaging options
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["caf*"]
 
 [tool.setuptools.package-data]
-"cvt" = ["py.typed"]
+"caf.cvt" = ["py.typed"]
 
 # Linters
 [tool.ruff]
@@ -159,7 +160,7 @@ extension-pkg-allow-list = []
 ignore = ["__init__.py", "_version.py"]
 
 [tool.mypy]
-packages = ["cvt"]
+packages = ["caf.cvt"]
 namespace_packages = true
 ignore_missing_imports = true
 allow_redefinition = true
@@ -183,8 +184,8 @@ match = ["v*"]
 default-tag = "0.0.1"
 
 [tool.versioningit.onbuild]
-source-file = "src/cvt/_version.py"
-build-file = "cvt/_version.py"
+source-file = "src/caf/cvt/_version.py"
+build-file = "caf/cvt/_version.py"
 
 [tool.versioningit.format]
 distance = "{base_version}+{distance}.{vcs}{rev}"

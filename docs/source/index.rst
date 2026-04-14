@@ -9,7 +9,7 @@ Welcome to CVT's documentation!
 
 Climate Vulnerability Tool to assess the vulnerability of the transport network in the North to climate hazards.
 
-CVT source code is available on `GitHub <https://github.com/transport-for-the-north/cvt>`_.
+CVT source code is available on `GitHub <https://github.com/transport-for-the-north/caf.cvt>`_.
 
 
 Contents

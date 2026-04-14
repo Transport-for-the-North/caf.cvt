@@ -15,12 +15,12 @@ CVT can be installed from pip, conda-forge or **pipx
 Pip
 ---
 Installing through pip is easy and can be done in one command:
-``pip install cvt``
+``pip install caf.cvt``
 
 conda-forge
 -----------
 Installing through conda-forge is easy and can be done in one command:
-``conda install cvt -c conda-forge``
+``conda install caf.cvt -c conda-forge``
 
 Pipx
 ----
@@ -48,7 +48,7 @@ When using CVT functionality within Python:
 
 .. code:: python
 
-    import cvt
+    import caf.cvt
 
 The :ref:`user guide` contains :ref:`tutorials` and :ref:`code examples`, which
 explain available functionality. For a detailed look at the

@@ -1,30 +1,30 @@
-![Transport for the North Logo](https://github.com/transport-for-the-north/cvt/blob/main/docs/TFN_Landscape_Colour_CMYK.png)
+![Transport for the North Logo](https://github.com/transport-for-the-north/caf.cvt/blob/main/docs/TFN_Landscape_Colour_CMYK.png)
 
-<h1 align="center">cvt</h1>
+<h1 align="center">caf.cvt</h1>
 
 <p align="center">
 <a href="https://transport-for-the-north.github.io/CAF-Handbook/python_tools/framework.html">
   <img alt="CAF Status - Pre-Alpha" src="https://img.shields.io/badge/CAF%20Status-Pre--Alpha-orange">
 </a>
-<a href="https://pypi.org/project/cvt/">
-  <img alt="Supported Python versions" src="https://img.shields.io/pypi/pyversions/cvt.svg?style=flat-square">
+<a href="https://pypi.org/project/caf.cvt/">
+  <img alt="Supported Python versions" src="https://img.shields.io/pypi/pyversions/caf.cvt.svg?style=flat-square">
 </a>
-<a href="https://pypi.org/project/cvt/">
-  <img alt="Latest release" src="https://img.shields.io/github/release/transport-for-the-north/cvt.svg?style=flat-square&maxAge=86400">
+<a href="https://pypi.org/project/caf.cvt/">
+  <img alt="Latest release" src="https://img.shields.io/github/release/transport-for-the-north/caf.cvt.svg?style=flat-square&maxAge=86400">
 </a>
-<a href="https://anaconda.org/conda-forge/cvt">
-  <img alt="Conda" src="https://img.shields.io/conda/v/conda-forge/cvt?style=flat-square&logo=condaforge">
+<a href="https://anaconda.org/conda-forge/caf.cvt">
+  <img alt="Conda" src="https://img.shields.io/conda/v/conda-forge/caf.cvt?style=flat-square&logo=condaforge">
 </a>
 </p>
 <p align="center">
-<a href="https://app.codecov.io/gh/transport-for-the-north/cvt">
-  <img alt="Coverage" src="https://img.shields.io/codecov/c/github/transport-for-the-north/cvt.svg?branch=main&style=flat-square&logo=CodeCov">
+<a href="https://app.codecov.io/gh/transport-for-the-north/caf.cvt">
+  <img alt="Coverage" src="https://img.shields.io/codecov/c/github/transport-for-the-north/caf.cvt.svg?branch=main&style=flat-square&logo=CodeCov">
 </a>
-<a href="https://github.com/transport-for-the-north/cvt/actions?query=event%3Apush">
-  <img alt="Testing Badge" src="https://img.shields.io/github/actions/workflow/status/transport-for-the-north/cvt/tests.yml?style=flat-square&logo=GitHub&label=Tests">
+<a href="https://github.com/transport-for-the-north/caf.cvt/actions?query=event%3Apush">
+  <img alt="Testing Badge" src="https://img.shields.io/github/actions/workflow/status/transport-for-the-north/caf.cvt/tests.yml?style=flat-square&logo=GitHub&label=Tests">
 </a>
-<a href='https://cvt.readthedocs.io/en/stable/?badge=stable'>
-  <img alt='Documentation Status' src="https://img.shields.io/readthedocs/cvt?style=flat-square&logo=readthedocs">
+<a href='https://caf.cvt.readthedocs.io/en/stable/?badge=stable'>
+  <img alt='Documentation Status' src="https://img.shields.io/readthedocs/caf.cvt?style=flat-square&logo=readthedocs">
 </a>
 <a href="https://github.com/psf/black">
   <img alt="code style: black" src="https://img.shields.io/badge/code%20format-black-000000.svg">
@@ -46,7 +46,7 @@ Climate Vulnerability Tool to assess the vulnerability of the transport network 
 
 CVT happily accepts contributions.
 
-The best way to contribute to this project is to go to the [issues tab](https://github.com/transport-for-the-north/cvt/issues)
+The best way to contribute to this project is to go to the [issues tab](https://github.com/transport-for-the-north/caf.cvt/issues)
 and report bugs or submit a feature request. This helps CVT become more
 stable and full-featured. Please check the closed bugs before submitting a bug report to see if your
 question has already been answered.
@@ -58,7 +58,7 @@ for details on contributing to the codebase or documentation.
 <details><summary><h2>Documentation</h2></summary>
 
 Documentation is created using [Sphinx](https://www.sphinx-doc.org/en/master/index.html) and is hosted online at
-[cvt.readthedocs](https://cvt.readthedocs.io/en/stable/).
+[caf.cvt.readthedocs](https://caf.cvt.readthedocs.io/en/stable/).
 
 The documentation can be built locally once all the docs requirements
 ([`docs/requirements.txt`](docs/requirements.txt)) are installed into your Python environment.
@@ -97,7 +97,7 @@ Once MiKTex and Perl are installed you are able to build the PDF from the LaTeX 
 provides a target (latexpdf) which builds the LaTeX files then immediately builds the PDF. When
 running `make latexpdf` MiKTeX may ask for permission to installed some required TeX packages.
 Once the command has finished the PDF will be located at
-[`docs/build/latex/cvt.pdf`](docs/build/latex/cvt.pdf).
+[`docs/build/latex/caf.cvt.pdf`](docs/build/latex/caf.cvt.pdf).
 </details>
 
 

@@ -21,12 +21,12 @@ sys.path.insert(0, str(source.absolute()))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "CVT"
+project = "Climate Vulnerability Tool (caf.cvt)"
 copyright = "2024, Transport for the North"
 author = "Transport for the North"
 
 # Third Party
-import cvt
+from caf import cvt
 
 version = str(cvt.__version__)
 release = version
@@ -76,7 +76,7 @@ autodoc_typehints = "description"
 # Auto summary options
 autosummary_generate = True
 autosummary_imported_members = True
-modindex_common_prefix = ["cvt."]
+modindex_common_prefix = ["caf.cvt."]
 
 # -- Options for Sphinx Examples gallery -------------------------------------
 sphinx_gallery_conf = {
@@ -126,7 +126,7 @@ html_theme_options = {
     "icon_links": [
         {
             "name": "GitHub",
-            "url": "https://github.com/transport-for-the-north/cvt",
+            "url": "https://github.com/transport-for-the-north/caf.cvt",
             "icon": "fa-brands fa-square-github",
             "type": "fontawesome",
         }
@@ -135,11 +135,11 @@ html_theme_options = {
     "external_links": [
         {
             "name": "Changelog",
-            "url": "https://github.com/transport-for-the-north/cvt/releases",
+            "url": "https://github.com/transport-for-the-north/caf.cvt/releases",
         },
         {
             "name": "Issues",
-            "url": "https://github.com/transport-for-the-north/cvt/issues",
+            "url": "https://github.com/transport-for-the-north/caf.cvt/issues",
         },
         {
             "name": "CAF Handbook",
@@ -151,7 +151,7 @@ html_theme_options = {
 html_context = {
     "github_url": "https://github.com",
     "github_user": "transport-for-the-north",
-    "github_repo": "cvt",
+    "github_repo": "caf.cvt",
     "github_version": "main",
     "doc_path": "docs/source",
 }
