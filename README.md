@@ -1,11 +1,18 @@
-![Transport for the North Logo](https://github.com/transport-for-the-north/caf.cvt/blob/main/docs/TFN_Landscape_Colour_CMYK.png)
+<div align="center" style="background-color: white;">
+<a href="https://www.transportforthenorth.com/">
+<img src="https://www.transportforthenorth.com/wp-content/themes/tfn-theme/img/logo.svg"
+  alt="Transport for the North logo">
+</a>
+</div>
 
-<h1 align="center">caf.cvt</h1>
+<h1 align="center">CAF.cvt</h1>
 
 <p align="center">
 <a href="https://transport-for-the-north.github.io/CAF-Handbook/python_tools/framework.html">
   <img alt="CAF Status - Pre-Alpha" src="https://img.shields.io/badge/CAF%20Status-Pre--Alpha-orange">
 </a>
+</p>
+<p align="center">
 <a href="https://pypi.org/project/caf.cvt/">
   <img alt="Supported Python versions" src="https://img.shields.io/pypi/pyversions/caf.cvt.svg?style=flat-square">
 </a>
@@ -17,95 +24,159 @@
 </a>
 </p>
 <p align="center">
+<a href="https://github.com/transport-for-the-north/caf.cvt.template/actions?query=event%3Apush">
+  <img alt="Testing Badge" src="https://img.shields.io/github/actions/workflow/status/transport-for-the-north/caf.cvt/tests.yml?style=flat-square&logo=GitHub&label=Tests">
+</a>
 <a href="https://app.codecov.io/gh/transport-for-the-north/caf.cvt">
   <img alt="Coverage" src="https://img.shields.io/codecov/c/github/transport-for-the-north/caf.cvt.svg?branch=main&style=flat-square&logo=CodeCov">
 </a>
-<a href="https://github.com/transport-for-the-north/caf.cvt/actions?query=event%3Apush">
-  <img alt="Testing Badge" src="https://img.shields.io/github/actions/workflow/status/transport-for-the-north/caf.cvt/tests.yml?style=flat-square&logo=GitHub&label=Tests">
-</a>
-<a href='https://cafcvt.readthedocs.io/en/stable/?badge=stable'>
-  <img alt='Documentation Status' src="https://img.shields.io/readthedocs/caf.cvt?style=flat-square&logo=readthedocs">
-</a>
-<a href="https://github.com/psf/black">
-  <img alt="code style: black" src="https://img.shields.io/badge/code%20format-black-000000.svg">
+<a href='https://cafcvt.readthedocs.io/en/stable/'>
+  <img alt='Documentation Status' src="https://img.shields.io/readthedocs/cafcvt?style=flat-square&logo=readthedocs">
 </a>
 </p>
 
 > [!WARNING]  
-> This package is in an early stage of development so features may change or be removed. 
-> If using this package it is recommended to set a specific version and check before 
+> This package is in an early stage of development so features may change or be removed.
+> If using this package it is recommended to set a specific version and check before
 > upgrading to a new version.
 
-Climate Vulnerability Tool to assess the vulnerability of the transport network in the North to climate hazards.
+cookiecutter template for caf.cvt package
+
+> [!TIP]
+> For more detailed information including a user guide, tutorials and API reference see the full
+> [caf.cvt documentation](https://cafcvt.readthedocs.io/en/stable/)
 
 
+## Table of Contents
+
+- [Table of Contents](#table-of-contents)
+- [Overview](#overview)
+  - [What does it do?](#what-does-it-do)
+  - [Main Features](#main-features)
+    - [Work-in-Progress](#work-in-progress)
+  - [Who is it for?](#who-is-it-for)
+- [Where to get it](#where-to-get-it)
+  - [Installation from GitHub](#installation-from-github)
+- [Usage](#usage)
+  - [Command Line](#command-line)
+- [Documentation](#documentation)
+- [What is CAF?](#what-is-caf)
+- [Contribution](#contribution)
+- [Contact Us](#contact-us)
+- [Template Usage](#template-usage)
+
+## Overview
+
+### What does it do?
+
+> [!ATTENTION]
+> This section of the README hasn't been written yet, but it will contain a brief
+> description of what the tool is intended to do.
+
+### Main Features
+
+> [!ATTENTION]
+> This section of the README hasn't been written yet.
+
+- **Feature 1** - description
+
+#### Work-in-Progress
+
+- **Work in progress feature** - description of feature not yet release.
+
+> [!WARNING]
+> These features are work-in-progress and are not available in a released version of caf.space, to
+> access these features a specific branch of caf.space should be installed, see [Installation from GitHub](#installation-from-github).
+
+### Who is it for?
+
+- **Target audience:** *TODO*
+- **CAF Analytical Stage:** *TODO*
+
+![CAF Analytical Process Diagram](https://github.com/Transport-for-the-North/.github/blob/21a428e81880639839e221940881572cdee24d5a/profile/ProcessDiagram.png?raw=true)
+
+For more details on CAF Analytical Stages see the [description within TfN's GitHub homepage](https://github.com/Transport-for-the-North)
+
+## Where to get it
+
+> [!ATTENTION]
+> caf.cvt has not been published yet so cannot be installed from
+> conda-forge or PyPI, see [Installation from GitHub](#installation-from-github).
+
+The latest released version are available at the [Python
+Package Index (PyPI)](https://pypi.org/project/caf.cvt) and on [Conda](https://anaconda.org/conda-forge/caf.cvt).
+
+```sh
+conda install -c conda-forge caf.cvt
+```
+
+```sh
+pip install caf.cvt
+```
+
+> [!TIP]
+>
+> - See the [Quick Start Guide](https://cafcvt.readthedocs.io/en/stable/start.html#quick-start) for more detailed instructions.
+> - See the [requirements.txt](requirements.txt) for the full list of package dependencies.
+
+### Installation from GitHub
+
+> [!WARNING]
+> Unreleased GitHub versions should **not** be considered stable.
+
+The latest, unreleased, version can be installed directly from GitHub using:
+
+```sh
+pip install "git+https://github.com/transport-for-the-north/caf.cvt.template"
+```
+
+> [!TIP]
+> `pip install` can install a specific tag, or branch, using `@{tag-name}`
+> after the git URL.
+
+## Usage
+
+CAF.space provides and Command-line (CLI) and graphical interface (GUI) to use many of it's
+features without the need to write any Python code, see the [Tool Usage section](https://cafcvt.readthedocs.io/en/stable/usage/index.html)
+of the user guide for more details.
+
+### Command Line
+
+The tool can be run from command line, with the command:
+
+```sh
+caf.cvt
+```
+
+See [Command-Line Interface (User Guide)](https://cafcvt.readthedocs.io/en/stable/usage/cli.html)
+for full explanations of the parameters.
+
+## Documentation
+
+The code documentation is hosted at <https://cafcvt.readthedocs.io/en/stable/>.
+
+
+## What is CAF?
+
+This tool is part of TfN's [Common Analytical Framework (CAF)](https://github.com/Transport-for-the-North).
+CAF is Transport for the North's structured suite of analytical tools designed to support transport
+modelling, appraisal, and strategic decision-making.
+
+More information on CAF and details on other CAF tools can be found on [TfN's GitHub Homepage](https://github.com/Transport-for-the-North).
+
+## Contribution
+
+We encourage use of, and contributions to, the repositories within this organisation, licenses are provided within
+the repositories and the [organisation contribution guide](https://github.com/Transport-for-the-North/.github/blob/main/CONTRIBUTING.rst)
+provides details for contributions.
 
 ---
 
-<details><summary><h2>Contributing</h2></summary>
+## Contact Us
 
-CVT happily accepts contributions.
+For further information about using this tool or CAF tools in your projects and work contact Transport for the North - <TfNOffer@transportforthenorth.com>
 
-The best way to contribute to this project is to go to the [issues tab](https://github.com/transport-for-the-north/caf.cvt/issues)
-and report bugs or submit a feature request. This helps CVT become more
-stable and full-featured. Please check the closed bugs before submitting a bug report to see if your
-question has already been answered.
-
-Please see our [contribution guidelines](https://github.com/Transport-for-the-North/.github/blob/main/CONTRIBUTING.rst)
-for details on contributing to the codebase or documentation.
-</details>
-
-<details><summary><h2>Documentation</h2></summary>
-
-Documentation is created using [Sphinx](https://www.sphinx-doc.org/en/master/index.html) and is hosted online at
-[cafcvt.readthedocs](https://caf.cvt.readthedocs.io/en/stable/).
-
-The documentation can be built locally once all the docs requirements
-([`docs/requirements.txt`](docs/requirements.txt)) are installed into your Python environment.
-
-The provided make batch file, (inside the docs folder), allow for building the documentation in
-various target formats. The command for building the documentation is `make {target}`
-(called from within docs/), where `{target}` is the type of documentation format to build. A full
-list of all available target formats can be seen by running the `make` command without any
-arguments but the two most common are detailed below.
-
-### HTML
-
-The HTML documentation (seen on Read the Docs) can be built using the `make html` command, this
-will build the web-based documentation and provide an index.html file as the homepage,
-[`docs/build/html/index.html`](docs/build/html/index.html).
-
-### PDF
-
-The PDF documentation has some other requirements before it can be built as Sphinx will first
-build a [LaTeX](https://www.latex-project.org/) version of the documentation and then use an
-installed TeX distribution to build the PDF from those. If you already have a TeX distribution
-setup then you can build the PDF with `make latexpdf`, otherwise follow the instructions below.
-
-Installing LaTeX on Windows is best done using [MiKTeX](https://miktex.org/), as this provides a
-simple way of handling any additional TeX packages. Details of other operating systems and TeX
-distributions can be found on the [Getting LaTeX](https://www.latex-project.org/get/) page on
-LaTeX's website.
-
-MiKTeX provides an installer on its website [miktex.org/download](https://miktex.org/download),
-which will run through the process of getting it installed and setup. In addition to MiKTeX
-the specific process Sphinx uses for building PDFs is [Latexmk](https://mg.readthedocs.io/latexmk.html),
-which is a Perl script and so requires Perl to be installed on your machine, this can be done with an
-installer provided by [Strawberry Perl](https://strawberryperl.com/).
-
-Once MiKTex and Perl are installed you are able to build the PDF from the LaTeX files, Sphinx
-provides a target (latexpdf) which builds the LaTeX files then immediately builds the PDF. When
-running `make latexpdf` MiKTeX may ask for permission to installed some required TeX packages.
-Once the command has finished the PDF will be located at
-[`docs/build/latex/caf.cvt.pdf`](docs/build/latex/caf.cvt.pdf).
-</details>
+---
 
 
-## Maintainers
-
-- Daniel Jackson (DanielJacksonTfN)
-
-## Credit
-
-This project was created using the Common Analytical Framework cookiecutter template found here:
-<https://github.com/Transport-for-the-North/cookiecutter-caf>
+[Go to Top](#table-of-contents)

@@ -1,12 +1,12 @@
 Code Examples
 =============
 
-This section contains code examples for using some of the functionality within CVT.
+This section contains code examples for using some of the functionality within CAF.cvt.
 
 .. attention::
     The code examples are currently work-in-progress, if you have any
     suggestions for examples please consider raising an issue on
-    `GitHub <https://github.com/transport-for-the-north/caf.cvt/issues>`__.
+    `GitHub <https://github.com/transport-for-the-north/caf.cvt.template/issues>`__.
 
 .. note::
    - For quick start guide see :ref:`quick start`

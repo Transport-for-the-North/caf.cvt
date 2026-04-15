@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "caf.cvt"
 dynamic = ["version", "dependencies", "optional-dependencies"]
-description = "Climate Vulnerability Tool to assess the vulnerability of the transport network to climate hazards."
+description = "cookiecutter template for caf.cvt package"
 readme = "README.md"
 license = { "file" = "LICENSE" }
 requires-python = ">=3.13"
@@ -18,9 +18,9 @@ classifiers = [
 ]
 
 [project.urls]
-"Bug Tracker" = "https://github.com/transport-for-the-north/caf.cvt/issues"
-Homepage = "https://github.com/transport-for-the-north/caf.cvt"
-Source = "https://github.com/transport-for-the-north/caf.cvt"
+"Bug Tracker" = "https://github.com/transport-for-the-north/caf.cvt.template/issues"
+Homepage = "https://github.com/transport-for-the-north/caf.cvt.template"
+Source = "https://github.com/transport-for-the-north/caf.cvt.template"
 Documentation = "http://cafcvt.readthedocs.io/"
 
 [tool.setuptools.dynamic]
@@ -38,7 +38,6 @@ sdist = "versioningit.cmdclass.sdist"
 # Packaging options
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["caf*"]
 
 [tool.setuptools.package-data]
 "caf.cvt" = ["py.typed"]
@@ -98,6 +97,7 @@ ignore = [
     "SIM108", # one line if else (flake8-bandit)
     "S311",   # random.random not allowed (flake8-bandit)
     "DOC502", # docstring-extraneous-exception (sometimes necessary)
+    "ANN003", # type annotation for **kwargs
 ]
 unfixable = [
     "T20",  # print-statements (flake8-print)
@@ -151,6 +151,8 @@ disable = [
     "use-dict-literal",
     "use-list-literal",
     "wrong-import-position", # Compatibility with ruff
+    "wrong-import-order",    # Handled by ruff
+    "ungrouped-imports",     # Handled by ruff
 ]
 
 [tool.pylint.basic]
