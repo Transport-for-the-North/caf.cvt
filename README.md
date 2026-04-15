@@ -23,7 +23,7 @@
 <a href="https://github.com/transport-for-the-north/caf.cvt/actions?query=event%3Apush">
   <img alt="Testing Badge" src="https://img.shields.io/github/actions/workflow/status/transport-for-the-north/caf.cvt/tests.yml?style=flat-square&logo=GitHub&label=Tests">
 </a>
-<a href='https://caf.cvt.readthedocs.io/en/stable/?badge=stable'>
+<a href='https://cafcvt.readthedocs.io/en/stable/?badge=stable'>
   <img alt='Documentation Status' src="https://img.shields.io/readthedocs/caf.cvt?style=flat-square&logo=readthedocs">
 </a>
 <a href="https://github.com/psf/black">
@@ -58,7 +58,7 @@ for details on contributing to the codebase or documentation.
 <details><summary><h2>Documentation</h2></summary>
 
 Documentation is created using [Sphinx](https://www.sphinx-doc.org/en/master/index.html) and is hosted online at
-[caf.cvt.readthedocs](https://caf.cvt.readthedocs.io/en/stable/).
+[cafcvt.readthedocs](https://caf.cvt.readthedocs.io/en/stable/).
 
 The documentation can be built locally once all the docs requirements
 ([`docs/requirements.txt`](docs/requirements.txt)) are installed into your Python environment.
