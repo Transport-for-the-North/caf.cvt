@@ -140,3 +140,6 @@ dmypy.json
 *.csv
 *.xlsx
 
+# YML Files (avoid accidentially uploading config file)
+*.yml
+!config.yml

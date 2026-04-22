@@ -9,7 +9,7 @@
 
 <p align="center">
 <a href="https://transport-for-the-north.github.io/CAF-Handbook/python_tools/framework.html">
-  <img alt="CAF Status - Pre-Alpha" src="https://img.shields.io/badge/CAF%20Status-Pre--Alpha-orange">
+  <img alt="CAF Status - Beta" src="https://img.shields.io/badge/CAF%20Status-Beta-yellow">
 </a>
 </p>
 <p align="center">
@@ -35,10 +35,6 @@
 </a>
 </p>
 
-> [!WARNING]  
-> This package is in an early stage of development so features may change or be removed.
-> If using this package it is recommended to set a specific version and check before
-> upgrading to a new version.
 
 CAF.cvt is a python model that takes climate and transport data and generates a climate risk assessment for the North's key transport infrastructure. 
 
