@@ -69,29 +69,28 @@ cookiecutter template for caf.cvt package
 
 ### What does it do?
 
-> [!ATTENTION]
-> This section of the README hasn't been written yet, but it will contain a brief
-> description of what the tool is intended to do.
+> The Common Analytical Framework (CAF) Climate Vulnerability Tool (CVT) is a geospatial python package that translates complex climate and infrastructure data into a set of climate risk assessments for the North of England's key transport networks. 
 
 ### Main Features
 
-> [!ATTENTION]
-> This section of the README hasn't been written yet.
+- **Data Cleaning** - Reads and cleans a wide variety of climate and transport datasets, preprocessing into a standard format in preparation for analysis.
 
-- **Feature 1** - description
+- **Apply Functional Rules** - Applies a set of funtional rules and spatial overlays to the climate data to translate complex values into distinct hazard categories and grids. 
+
+- **Infrastructure Layering** - Layers infrastructure on top of hazard grids to assign risk to the transport assets.
 
 #### Work-in-Progress
 
-- **Work in progress feature** - description of feature not yet release.
+There are currently no work-in-progress features.
 
 > [!WARNING]
-> These features are work-in-progress and are not available in a released version of caf.space, to
-> access these features a specific branch of caf.space should be installed, see [Installation from GitHub](#installation-from-github).
+> These features are work-in-progress and are not available in a released version of caf.cvt, to
+> access these features a specific branch of caf.cvt should be installed, see [Installation from GitHub](#installation-from-github).
 
 ### Who is it for?
 
-- **Target audience:** *TODO*
-- **CAF Analytical Stage:** *TODO*
+- **Target audience:** Transport Analysts, Transport Planners, Climate Researchers
+- **CAF Analytical Stage:** Modelling
 
 ![CAF Analytical Process Diagram](https://github.com/Transport-for-the-North/.github/blob/21a428e81880639839e221940881572cdee24d5a/profile/ProcessDiagram.png?raw=true)
 
@@ -136,7 +135,7 @@ pip install "git+https://github.com/transport-for-the-north/caf.cvt.template"
 
 ## Usage
 
-CAF.space provides and Command-line (CLI) and graphical interface (GUI) to use many of it's
+CAF.cvt provides and Command-line (CLI) and graphical interface (GUI) to use many of it's
 features without the need to write any Python code, see the [Tool Usage section](https://cafcvt.readthedocs.io/en/stable/usage/index.html)
 of the user guide for more details.
 
