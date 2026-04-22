@@ -22,7 +22,7 @@ sys.path.insert(0, str(source.absolute()))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "CAF.cvt"
-copyright = "2025, Transport for the North"
+copyright = "2026, Transport for the North"
 author = "Transport for the North"
 
 # Third Party
@@ -137,7 +137,7 @@ html_theme_options = {
     "icon_links": [
         {
             "name": "GitHub",
-            "url": "https://github.com/transport-for-the-north/caf.cvt.template",
+            "url": "https://github.com/transport-for-the-north/caf.cvt",
             "icon": "fa-brands fa-square-github",
             "type": "fontawesome",
         }
@@ -146,11 +146,11 @@ html_theme_options = {
     "external_links": [
         {
             "name": "Changelog",
-            "url": "https://github.com/transport-for-the-north/caf.cvt.template/releases",
+            "url": "https://github.com/transport-for-the-north/caf.cvt/releases",
         },
         {
             "name": "Issues",
-            "url": "https://github.com/transport-for-the-north/caf.cvt.template/issues",
+            "url": "https://github.com/transport-for-the-north/caf.cvt/issues",
         },
         {
             "name": "CAF Handbook",
@@ -161,7 +161,7 @@ html_theme_options = {
     "announcement": """
         The documentation pages are currently work-in-progress, if you have any suggestions
         for improvements please raise an issue on the
-        <a href="https://github.com/transport-for-the-north/caf.cvt.template/issues/new/choose">caf.cvt repository</a>.
+        <a href="https://github.com/transport-for-the-north/caf.cvt/issues/new/choose">caf.cvt repository</a>.
     """,
 }
 html_context = {

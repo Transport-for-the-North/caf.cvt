@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "caf.cvt"
 dynamic = ["version", "dependencies", "optional-dependencies"]
-description = "cookiecutter template for caf.cvt package"
+description = "Climate Vulnerability Tool to assess the vulnerability of the transport network in the North to climate hazards."
 readme = "README.md"
 license = { "file" = "LICENSE" }
 requires-python = ">=3.13"
@@ -22,7 +22,8 @@ classifiers = [
 Homepage = "https://github.com/transport-for-the-north/caf.cvt.template"
 Source = "https://github.com/transport-for-the-north/caf.cvt.template"
 Documentation = "http://cafcvt.readthedocs.io/"
-
+[project.scripts]
+"caf.cvt" = "caf.cvt.__main__:_main"
 [tool.setuptools.dynamic]
 dependencies = { "file" = "requirements.txt" }
 

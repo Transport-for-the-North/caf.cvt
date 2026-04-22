@@ -7,9 +7,9 @@
 Welcome to CAF.cvt's documentation!
 ===========================================================
 
-cookiecutter template for caf.cvt package
+Climate Vulnerability Tool to assess the vulnerability of the transport network in the North to climate hazards.
 
-CAF.cvt source code is available on `GitHub <https://github.com/transport-for-the-north/caf.cvt.template>`_.
+CAF.cvt source code is available on `GitHub <https://github.com/transport-for-the-north/caf.cvt>`_.
 
 
 Common Analytical Framework

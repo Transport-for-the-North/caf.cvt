@@ -63,7 +63,6 @@ CAF.cvt is a python model that takes climate and transport data and generates a 
 - [What is CAF?](#what-is-caf)
 - [Contribution](#contribution)
 - [Contact Us](#contact-us)
-- [Template Usage](#template-usage)
 
 ## Overview
 
@@ -126,7 +125,7 @@ pip install caf.cvt
 The latest, unreleased, version can be installed directly from GitHub using:
 
 ```sh
-pip install "git+https://github.com/transport-for-the-north/caf.cvt.template"
+pip install "git+https://github.com/transport-for-the-north/caf.cvt"
 ```
 
 > [!TIP]
