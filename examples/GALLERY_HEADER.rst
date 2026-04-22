@@ -6,7 +6,7 @@ This section contains code examples for using some of the functionality within C
 .. attention::
     The code examples are currently work-in-progress, if you have any
     suggestions for examples please consider raising an issue on
-    `GitHub <https://github.com/transport-for-the-north/caf.cvt.template/issues>`__.
+    `GitHub <https://github.com/transport-for-the-north/caf.cvt/issues>`__.
 
 .. note::
    - For quick start guide see :ref:`quick start`
