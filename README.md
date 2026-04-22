@@ -40,7 +40,7 @@
 > If using this package it is recommended to set a specific version and check before
 > upgrading to a new version.
 
-cookiecutter template for caf.cvt package
+CAF.cvt is a python model that takes climate and transport data and generates a climate risk assessment for the North's key transport infrastructure. 
 
 > [!TIP]
 > For more detailed information including a user guide, tutorials and API reference see the full
@@ -69,7 +69,7 @@ cookiecutter template for caf.cvt package
 
 ### What does it do?
 
-> The Common Analytical Framework (CAF) Climate Vulnerability Tool (CVT) is a geospatial python package that translates complex climate and infrastructure data into a set of climate risk assessments for the North of England's key transport networks. 
+The Common Analytical Framework (CAF) Climate Vulnerability Tool (CVT) is a geospatial python package that translates complex climate and infrastructure data into a set of climate risk assessments for the North of England's key transport networks. 
 
 ### Main Features
 
@@ -98,7 +98,7 @@ For more details on CAF Analytical Stages see the [description within TfN's GitH
 
 ## Where to get it
 
-> [!ATTENTION]
+> [!IMPORTANT]
 > caf.cvt has not been published yet so cannot be installed from
 > conda-forge or PyPI, see [Installation from GitHub](#installation-from-github).
 
