@@ -11,7 +11,7 @@ from functional_rules import apply_functional_rules
 from layering import layering
 from model_config import Config
 
-import cvt
+import caf.cvt
 
 LOG = logging.getLogger(__name__)
 
@@ -34,9 +34,9 @@ def _main() -> None:
 
     args = parser.parse_args()
     config = Config.load_yaml(args.config)
-    details = ctk.log_helpers.ToolDetails(__package__, cvt.__version__, full_version=None)
+    details = ctk.log_helpers.ToolDetails(__package__, caf.cvt.__version__, full_version=None)
 
-    with ctk.LogHelper(__package__, details, log_file=config.paths.log_path / "cvt.log"):
+    with ctk.LogHelper(__package__, details, log_file=config.paths.log_path / "caf.cvt.log"):
         if config.switches.run_data_cleaning:
             LOG.info("Starting data cleaning step...")
             data_cleaning(config)

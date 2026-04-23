@@ -11,7 +11,7 @@ import pandas as pd
 import sklearn
 from shapely.geometry import box
 
-from cvt import data_cleaning, file_paths, model_config
+from caf.cvt import data_cleaning, file_paths, model_config
 
 LOG = logging.getLogger(__name__)
 
@@ -88,8 +88,7 @@ _FLOOD_TILE_SIZE_M = 10000
 _FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
 _FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
 
-
-_NUM_TILES_DONE = 449
+_NUM_TILES_DONE = 456 # Entire tile grid has been processed and overlayed.
 
 ### GENERAL FUNCTIONS
 
@@ -390,13 +389,13 @@ def apply_functional_rules(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    _extreme_weather_index(config)
+    #_extreme_weather_index(config)
     if config.switches.flood_overlay_direct:
         _flooding_index_direct(config, boundary)
     else:
         _flooding_index(config, boundary)
-    _ground_stability_index(config)
-    _coastal_erosion_index(config)
+    #_ground_stability_index(config)
+    #_coastal_erosion_index(config)
 
 
 ## HAZARDS
@@ -903,28 +902,38 @@ def _area_weighted_flood_assignment(
 ) -> gpd.GeoDataFrame:
     """Assign flood risk to grid squares using an area-weighted average."""
     # Perform chunked overlay to get intersections
-    flood_intersections, len_before_upscale = _chunked_grid_polygon_flood_overlay(
-        config, flood_path, grid, scenario, risk_column
-    )
+    # TEMPORARY SWITCH AND IF STATEMENT TO ALLOW READING FROM FILE TO SAVE TIME
+    flood_intersection_needed = True
+    if flood_intersection_needed:
+        flood_intersections, len_before_upscale = _chunked_grid_polygon_flood_overlay(
+            config, flood_path, grid, scenario, risk_column
+        )
+    else:
+        flood_intersections = pd.read_csv(
+            config.paths.model_interim_output
+            / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
+            / f"tfn_flood_risk_overlay_{scenario}.csv"
+        )
+        len_before_upscale = 0 # TEMPORARY VARIABLE, SHOULD BE REMOVED ONCE DATA IS FIXED
 
     # Compute weighted risk contribution
     flood_intersections["weighted"] = (
         flood_intersections[risk_column] * flood_intersections["area"]
     )
 
-    # Compute aggregated weighted sum and area sum
-    risk_area_agg = flood_intersections.groupby("grid_id").agg(
-        weighted_sum=("weighted", "sum"), area_sum=("area", "sum")
+    # Compute aggregated weighted sum per grid cell (total exposure)
+    exposure_agg = flood_intersections.groupby("grid_id").agg(
+        weighted_sum=("weighted", "sum")
     )
 
-    # Compute area weighted average flood risk per grid cell
-    weighted_avg_flood = risk_area_agg["weighted_sum"] / risk_area_agg["area_sum"]
-    weighted_avg_flood.name = risk_column
-
     # Assign weighted average flood risk back to the original grid
-    flood_result = grid[["grid_id"]].copy().set_index("grid_id")
+    flood_result = grid[["grid_id", "geometry"]].copy().set_index("grid_id")
+    flood_result["grid_area"] = flood_result.geometry.area
     flood_result[risk_column] = 0.0
-    flood_result.loc[weighted_avg_flood.index, risk_column] = weighted_avg_flood.to_numpy()
+    flood_result.loc[exposure_agg.index, risk_column] = (
+        exposure_agg["weighted_sum"] / flood_result.loc[exposure_agg.index, "grid_area"]
+    )
+    flood_result = flood_result.drop(columns=['geometry', 'grid_area'])
     flood_result = flood_result.reset_index()
 
     # Fill missing values with 0 (no risk) since no data means no risk in the underlying data
