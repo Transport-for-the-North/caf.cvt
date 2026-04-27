@@ -12,8 +12,9 @@ import geopandas as gpd
 import pandas as pd
 import py7zr
 import xarray as xr
-from caf.cvt import file_paths, model_config
 from shapely import geometry
+
+from cvt import file_paths, model_config
 
 LOG = logging.getLogger(__name__)
 

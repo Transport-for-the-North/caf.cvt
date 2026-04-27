@@ -9,8 +9,9 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import sklearn
-from caf.cvt import data_cleaning, file_paths, model_config
 from shapely.geometry import box
+
+from cvt import data_cleaning, file_paths, model_config
 
 LOG = logging.getLogger(__name__)
 
