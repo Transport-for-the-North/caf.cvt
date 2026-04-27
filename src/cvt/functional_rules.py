@@ -9,9 +9,8 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import sklearn
-from shapely.geometry import box
-
 from caf.cvt import data_cleaning, file_paths, model_config
+from shapely.geometry import box
 
 LOG = logging.getLogger(__name__)
 
@@ -88,7 +87,7 @@ _FLOOD_TILE_SIZE_M = 10000
 _FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
 _FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
 
-_NUM_TILES_DONE = 456 # Entire tile grid has been processed and overlayed.
+_NUM_TILES_DONE = 456  # Entire tile grid has been processed and overlayed.
 
 ### GENERAL FUNCTIONS
 
@@ -389,13 +388,13 @@ def apply_functional_rules(config: model_config.Config) -> None:
     """
     boundary = gpd.read_file(config.other_input.boundary_path)
 
-    #_extreme_weather_index(config)
+    _extreme_weather_index(config)
     if config.switches.flood_overlay_direct:
         _flooding_index_direct(config, boundary)
     else:
         _flooding_index(config, boundary)
-    #_ground_stability_index(config)
-    #_coastal_erosion_index(config)
+    _ground_stability_index(config)
+    _coastal_erosion_index(config)
 
 
 ## HAZARDS
@@ -914,7 +913,7 @@ def _area_weighted_flood_assignment(
             / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
             / f"tfn_flood_risk_overlay_{scenario}.csv"
         )
-        len_before_upscale = 0 # TEMPORARY VARIABLE, SHOULD BE REMOVED ONCE DATA IS FIXED
+        len_before_upscale = 0  # TEMPORARY VARIABLE, SHOULD BE REMOVED ONCE DATA IS FIXED
 
     # Compute weighted risk contribution
     flood_intersections["weighted"] = (
@@ -922,9 +921,7 @@ def _area_weighted_flood_assignment(
     )
 
     # Compute aggregated weighted sum per grid cell (total exposure)
-    exposure_agg = flood_intersections.groupby("grid_id").agg(
-        weighted_sum=("weighted", "sum")
-    )
+    exposure_agg = flood_intersections.groupby("grid_id").agg(weighted_sum=("weighted", "sum"))
 
     # Assign weighted average flood risk back to the original grid
     flood_result = grid[["grid_id", "geometry"]].copy().set_index("grid_id")
@@ -933,7 +930,7 @@ def _area_weighted_flood_assignment(
     flood_result.loc[exposure_agg.index, risk_column] = (
         exposure_agg["weighted_sum"] / flood_result.loc[exposure_agg.index, "grid_area"]
     )
-    flood_result = flood_result.drop(columns=['geometry', 'grid_area'])
+    flood_result = flood_result.drop(columns=["geometry", "grid_area"])
     flood_result = flood_result.reset_index()
 
     # Fill missing values with 0 (no risk) since no data means no risk in the underlying data

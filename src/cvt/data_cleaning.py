@@ -12,9 +12,8 @@ import geopandas as gpd
 import pandas as pd
 import py7zr
 import xarray as xr
-from shapely import geometry
-
 from caf.cvt import file_paths, model_config
+from shapely import geometry
 
 LOG = logging.getLogger(__name__)
 
@@ -130,7 +129,7 @@ def write_to_file(
     driver_map = {".gpkg": "GPKG", ".shp": "ESRI Shapefile"}
 
     if ext == ".csv":
-        data.to_csv(output_path, index=False, mode=mode, header=(mode == "w"))
+        data.to_csv(output_path, index=False, mode=mode, header=mode == "w")
     elif ext in driver_map:
         if not isinstance(data, gpd.GeoDataFrame):
             raise TypeError(f"{ext} requires a GeoDataFrame, got {type(data)}")
@@ -161,11 +160,12 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame, track_part: bool = False) -> gpd.
         A new GeoDataFrame containing only Polygon geometries, with a new column 'part' to keep
         track.
     """
-    multipolygon_count = 0
-    multipolygon_polygon_count = 0
-
-    geometry_collection_count = 0
-    geometry_collection_polygon_count = 0
+    counts = {
+        "multipolygon": 0,
+        "multipolygon_polygon": 0,
+        "geometry_collection": 0,
+        "geometry_collection_polygon": 0,
+    }
 
     rows = []
     for _idx, row in gdf.iterrows():
@@ -175,19 +175,19 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame, track_part: bool = False) -> gpd.
             new_row["part"] = 0
             rows.append(new_row)
         elif geom.geom_type == "MultiPolygon":
-            multipolygon_count += 1
+            counts["multipolygon"] += 1
             for i, poly in enumerate(geom.geoms):
-                multipolygon_polygon_count += 1
+                counts["multipolygon_polygon"] += 1
                 new_row = row.copy()
                 new_row.geometry = poly
                 new_row["part"] = i
                 rows.append(new_row)
         elif geom.geom_type == "GeometryCollection":
-            geometry_collection_count += 1
+            counts["geometry_collection"] += 1
             poly_count = 0
             for part in geom.geoms:
                 if part.geom_type == "Polygon":
-                    geometry_collection_polygon_count += 1
+                    counts["geometry_collection_polygon"] += 1
                     new_row = row.copy()
                     new_row.geometry = part
                     new_row["part"] = poly_count
@@ -196,9 +196,9 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame, track_part: bool = False) -> gpd.
 
     LOG.info(
         "Exploded %s MultiPolygons and %s GeometryCollections into %s Polygons.",
-        multipolygon_count,
-        geometry_collection_count,
-        multipolygon_polygon_count + geometry_collection_polygon_count,
+        counts["multipolygon"],
+        counts["geometry_collection"],
+        counts["multipolygon_polygon"] + counts["geometry_collection_polygon"],
     )
 
     exploded_gdf = gpd.GeoDataFrame(rows, crs=gdf.crs).reset_index(drop=True)
@@ -1517,6 +1517,52 @@ def _extract_flood_data(
             _extract_flood_gdb_file(config, code, number, "RoFSW", "v202509", False)
 
 
+def _process_flood_layer(
+    config: model_config.Config,
+    code: str,
+    number: str,
+    file_name: str,
+    flood_type: str,
+    version: str,
+    boundary: gpd.GeoDataFrame,
+    climate_change_switch: bool,
+    rename_risk_col: str,
+) -> gpd.GeoDataFrame | None:
+    """Read, clip, clean, and prepare a single flood layer. Helper function for clean_flood."""
+    LOG.info("Processing flood data: %s%s", code, number)
+
+    flood_data = _read_flood_gdb(
+        config,
+        code,
+        number,
+        file_name,
+        flood_type,
+        version,
+        climate_change_switch,
+        boundary,
+    )  # Read file
+    len_before_filter = len(flood_data)
+    tfn_flood_data = clip_to_boundary(flood_data, boundary)
+    if tfn_flood_data.empty:
+        LOG.info("%s%s layer empty. Continuing.", code, number)
+        return None
+    filter_removed = len_before_filter - len(tfn_flood_data)
+
+    LOG.info(
+        "%s %s %s filtered - %s of %s (%.1f percent) rows removed",
+        flood_type,
+        code,
+        number,
+        filter_removed,
+        len_before_filter,
+        (filter_removed / len_before_filter) * 100,
+    )
+
+    tfn_flood_data = _extract_poly_from_geomcollection(tfn_flood_data)
+    tfn_flood_data = tfn_flood_data[["Risk_band", "geometry"]]
+    return tfn_flood_data.rename(columns={"Risk_band": rename_risk_col})
+
+
 def _clean_flood(
     config: model_config.Config,
     file_name: str,
@@ -1532,42 +1578,24 @@ def _clean_flood(
     first_write = True
     for code, num_list in code_number_map.items():
         for number in num_list:
-            LOG.info("Processing flood data: %s%s", code, number)
-            flood_data = _read_flood_gdb(
+            tfn_flood_data = _process_flood_layer(
                 config,
                 code,
                 number,
                 file_name,
                 flood_type,
                 version,
-                climate_change_switch,
                 boundary,
-            )  # Read file
-            len_before_filter = len(flood_data)
-            tfn_flood_data = clip_to_boundary(flood_data, boundary)
-            if tfn_flood_data.empty:
-                LOG.info("%s%s layer empty. Continuing.", code, number)
-                continue
-            filter_removed = len_before_filter - len(tfn_flood_data)
-            LOG.info(
-                "%s %s %s filtered - %s of %s (%.1f percent) rows removed",
-                flood_type,
-                code,
-                number,
-                filter_removed,
-                len_before_filter,
-                (filter_removed / len_before_filter) * 100,
+                climate_change_switch,
+                rename_risk_col,
             )
-            tfn_flood_data = _extract_poly_from_geomcollection(tfn_flood_data)
-            tfn_flood_data = tfn_flood_data[["Risk_band", "geometry"]]
-            tfn_flood_data = tfn_flood_data.rename(columns={"Risk_band": rename_risk_col})
             if first_write:
                 write_to_file(tfn_flood_data, config.paths.model_input / out_path, mode="w")
                 first_write = False
             else:
                 write_to_file(tfn_flood_data, config.paths.model_input / out_path, mode="a")
 
-            del flood_data, tfn_flood_data
+            del tfn_flood_data
             gc.collect()
 
 

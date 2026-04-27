@@ -132,7 +132,7 @@ EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
 )
 
 FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Other/flood_grid.gpkg")
-FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("TfN Flood Risk/tfn_flood_risk_fix_23_04_2026.gpkg")
+FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("TfN Flood Risk/tfn_flood_risk.gpkg")
 
 TILE_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Other/tiles.gpkg")
 FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(

@@ -1,3 +1,10 @@
+"""Sphinx configuration for the Climate Vulnerability Tool documentation"""
+
+# pylint: disable=
+#   invalid-name,
+#   redefined-builtin,
+#   missing-function-docstring
+
 # Configuration file for the Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
@@ -26,9 +33,9 @@ copyright = "2024, Transport for the North"
 author = "Transport for the North"
 
 # Third Party
-import cvt
+import caf.cvt
 
-version = str(cvt.__version__)
+version = str(caf.cvt.__version__)
 release = version
 
 
