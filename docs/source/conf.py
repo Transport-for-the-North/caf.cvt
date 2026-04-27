@@ -33,9 +33,9 @@ copyright = "2024, Transport for the North"
 author = "Transport for the North"
 
 # Third Party
-import caf.cvt
+import cvt
 
-version = str(caf.cvt.__version__)
+version = str(cvt.__version__)
 release = version
 
 

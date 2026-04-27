@@ -36,7 +36,7 @@ def _main() -> None:
     config = Config.load_yaml(args.config)
     details = ctk.log_helpers.ToolDetails(__package__, cvt.__version__, full_version=None)
 
-    with ctk.LogHelper(__package__, details, log_file=config.paths.log_path / "caf.cvt.log"):
+    with ctk.LogHelper(__package__, details, log_file=config.paths.log_path / "cvt.log"):
         if config.switches.run_data_cleaning:
             LOG.info("Starting data cleaning step...")
             data_cleaning(config)

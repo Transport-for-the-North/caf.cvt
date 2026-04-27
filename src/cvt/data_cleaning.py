@@ -1905,10 +1905,12 @@ def _read_noham_h5(
     time_period: str,
     user_class: str,
     noham_path: pathlib.Path,
-    output_path: pathlib.Path,
+    output_path: pathlib.Path | None,
     extract: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Read and clean NoHAM h5 files and extract the link, routes, and od's DataFrames."""
+    if output_path is None:
+        raise ValueError("NoHAM output path must be provided.")
     if extract:
         with py7zr.SevenZipFile(noham_path, mode="r") as archive:
             archive.extract(
