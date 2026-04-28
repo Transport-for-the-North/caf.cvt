@@ -1126,11 +1126,9 @@ def _create_flood_tiles(
     )
     return tiles
 
+
 def _process_flood_overlay_tile(
-    *,
-    tile: gpd.GeoSeries,
-    layer_paths: list[pathlib.Path],
-    crs: str
+    *, tile: gpd.GeoSeries, layer_paths: list[pathlib.Path], crs: str
 ) -> gpd.GeoDataFrame | None:
     """Process flood overlay for a single tile."""
     tile_geom = tile.geometry
@@ -1153,16 +1151,13 @@ def _process_flood_overlay_tile(
     if not layer_subsets:
         return None
 
-    tile_overlay = _overlay_and_clean(
-        *layer_subsets,
-        target_crs=crs,
-        how="union"
-    )
+    tile_overlay = _overlay_and_clean(*layer_subsets, target_crs=crs, how="union")
 
     if tile_overlay.empty:
         return None
 
     return tile_overlay
+
 
 def _tile_polygon_flood_overlay(
     config: model_config.Config,
@@ -1194,29 +1189,18 @@ def _tile_polygon_flood_overlay(
             continue
         LOG.info("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
 
-        tile_overlay = _process_flood_overlay_tile(
-            tile=tile,
-            layer_paths=layer_paths,
-            crs=crs
-        )
+        tile_overlay = _process_flood_overlay_tile(tile=tile, layer_paths=layer_paths, crs=crs)
 
         # If there are no resulting geometries, skip to the next tile
         if tile_overlay is None:
             continue
 
         data_cleaning.write_to_file(
-            tile_overlay,
-            output_path,
-            mode="w" if first_write else "a",
-            layer=layer_name
+            tile_overlay, output_path, mode="w" if first_write else "a", layer=layer_name
         )
         first_write = False
 
-        LOG.info(
-            "Tile %s wrote %s geometries.",
-            tile_idx + 1,
-            len(tile_overlay)
-        )
+        LOG.info("Tile %s wrote %s geometries.", tile_idx + 1, len(tile_overlay))
 
     LOG.info("Chunked overlay completed. Output written to %s", output_path)
 

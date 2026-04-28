@@ -1,9 +1,6 @@
 """Sphinx configuration for the Climate Vulnerability Tool documentation"""
 
-# pylint: disable=
-#   invalid-name,
-#   redefined-builtin,
-#   missing-function-docstring
+# pylint: disable=invalid-name, redefined-builtin, missing-function-docstring
 
 # Configuration file for the Sphinx documentation builder.
 #

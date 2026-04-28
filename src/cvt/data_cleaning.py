@@ -5,7 +5,7 @@ import gc
 import logging
 import os
 import pathlib
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 import fiona
 import geopandas as gpd
@@ -65,6 +65,15 @@ _FLOOD_CODE_NUMBER_MAP = {
 
 _WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
 _WIND_SPEED_PERCENTILE = 0.99
+
+GEOSURE_RISK_COLS = [
+    "collapsible_deposits_risk",
+    "compressible_ground_risk",
+    "landslides_risk",
+    "running_sand_risk",
+    "shrink_swell_risk",
+    "soluble_rocks_risk",
+]
 
 ### GENERAL FUNCTIONS
 
@@ -1466,7 +1475,7 @@ def _extract_flood_gdb_file(
         LOG.info("Available layers: %s", layers)
         return gpd.read_file(gdb_path, layer=layers[0])
 
-    except Exception:
+    except (FileNotFoundError, BadZipFile):
         LOG.exception("Error processing %s%s", code, number)
         return None
 
@@ -1726,17 +1735,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
         (filter_removed / len_before_filter) * 100,
     )
 
-    tfn_geosure = tfn_geosure[
-        [
-            "collapsible_deposits_risk",
-            "compressible_ground_risk",
-            "landslides_risk",
-            "running_sand_risk",
-            "shrink_swell_risk",
-            "soluble_rocks_risk",
-            "geometry",
-        ]
-    ]
+    tfn_geosure = tfn_geosure[[*GEOSURE_RISK_COLS, "geometry"]]
     write_to_file(
         tfn_geosure,
         config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH,

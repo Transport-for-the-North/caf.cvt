@@ -24,12 +24,7 @@ _HAZARD_RISK_COLS = [
     "surface_water_flood_risk",
     "flood_risk",
     # Ground Stability risk columns
-    "collapsible_deposits_risk",
-    "compressible_ground_risk",
-    "landslides_risk",
-    "running_sand_risk",
-    "shrink_swell_risk",
-    "soluble_rocks_risk",
+    *data_cleaning.GEOSURE_RISK_COLS,
     "shrink_swell_geoclimate_risk",
     "ground_stability_risk",
     # Coastal Erosion risk columns
