@@ -88,7 +88,6 @@ _FLOOD_TILE_SIZE_M = 10000
 _FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
 _FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
 
-_NUM_TILES_DONE = 456  # Entire tile grid has been processed and overlayed.
 
 ### GENERAL FUNCTIONS
 
@@ -168,7 +167,7 @@ def _nearest_join_infilling(
     max_distance: int,
     prev_na_count: int,
 ) -> gpd.GeoDataFrame:
-    """Fill remaining NA values using nearst-join spatial infilling."""
+    """Fill remaining NA values using nearest-join spatial infilling."""
     remaining_na = risk_grid[risk_grid[variables].isna().any(axis=1)]
     if remaining_na.empty:
         return risk_grid
@@ -882,7 +881,7 @@ def _upscale_to_grid(
     scenario_map: list[tuple[pathlib.Path, str]],
     scenario: str,
 ) -> gpd.GeoDataFrame:
-    """Upscales each flood layer to the common grid and writes to file."""
+    """Upscale each flood layer to the common grid and writes to file."""
     flood_upscaled = {}
     for path, risk_col in scenario_map:
         LOG.info("Upscaling flood layer %s to a %sm grid", risk_col, _FLOOD_GRID_SIZE_M)
@@ -1185,8 +1184,6 @@ def _tile_polygon_flood_overlay(
 
     # For each tile, do spatial filtering and run overlay and clean
     for tile_idx, tile in tiles.iterrows():
-        if tile_idx + 1 <= _NUM_TILES_DONE:
-            continue
         LOG.info("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
 
         tile_overlay = _process_flood_overlay_tile(tile=tile, layer_paths=layer_paths, crs=crs)

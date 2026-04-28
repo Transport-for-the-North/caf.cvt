@@ -65,7 +65,7 @@ def _infrastructure_risk_intersect(
 ) -> gpd.GeoDataFrame:
     """Intersect infrastructure with hazard risk layers.
 
-    Spatailly combine infrastructure with hazard layers using an intersection spatial join,
+    Spatially combine infrastructure with hazard layers using an intersection spatial join,
     then calculate hazard risk score as the max risk value of the intersection. Return merged
     GeoDataFrame with hazard risk columns added.
     """
@@ -236,8 +236,8 @@ def _infrastructure_layering(
 ) -> None:
     """Layer roads, rail, and other infrastructure with hazards."""
     _get_road_risk(config, hazard_layers)
-    #_get_rail_risk(config, hazard_layers)
-    #_get_other_risk(config, hazard_layers)
+    _get_rail_risk(config, hazard_layers)
+    _get_other_risk(config, hazard_layers)
 
 
 ### ROAD
@@ -249,7 +249,7 @@ def _get_road_risk(
 ) -> None:
     """Layer OS Open Roads and NoHAM with hazards to assign risk."""
     LOG.info("Calculating road risk...")
-    #_os_open_road_risk(config, hazard_layers)
+    _os_open_road_risk(config, hazard_layers)
     _noham_road_risk(config, hazard_layers)
     LOG.info("Road risk calculation complete.")
 
@@ -336,19 +336,17 @@ def _noham_road_risk(
     non_risk_impact_cols = ["link_id", "current_or_forecast", "geometry"]
 
     # Remove suffixes from risk and impact columns
-    tfn_noham_risk_scenario["current"] = (
-        tfn_noham_risk_scenario["current"]
-        .rename(columns=lambda c: c.removesuffix("_current")
-                if c.removesuffix("_current") in risk_impact_cols
-                else c
-            )
+    tfn_noham_risk_scenario["current"] = tfn_noham_risk_scenario["current"].rename(
+        columns=lambda c: (
+            c.removesuffix("_current") if c.removesuffix("_current") in risk_impact_cols else c
+        )
     )
-    tfn_noham_risk_scenario["forecast"] = (
-        tfn_noham_risk_scenario["forecast"]
-        .rename(columns=lambda c: c.removesuffix("_forecast")
-                if c.removesuffix("_forecast") in risk_impact_cols
-                else c
-            )
+    tfn_noham_risk_scenario["forecast"] = tfn_noham_risk_scenario["forecast"].rename(
+        columns=lambda c: (
+            c.removesuffix("_forecast")
+            if c.removesuffix("_forecast") in risk_impact_cols
+            else c
+        )
     )
 
     # Concatenate
@@ -391,9 +389,7 @@ def _noham_impact_index(
     )
 
     # Calculate impact scores
-    tfn_noham_c, tfn_noham_f = _calculate_noham_impact(
-        tfn_noham_c, tfn_noham_f, user_classes
-    )
+    tfn_noham_c, tfn_noham_f = _calculate_noham_impact(tfn_noham_c, tfn_noham_f, user_classes)
 
     impact_cols_c = [f"{uc}_impact_current" for uc in user_classes] + ["impact_current"]
     impact_cols_f = [f"{uc}_impact_forecast" for uc in user_classes] + ["impact_forecast"]
@@ -593,17 +589,13 @@ def _freight_rail_risk(
     )
 
 
-def _freight_impact_index(
-    tfn_freight_network_risk: gpd.GeoDataFrame
-) -> gpd.GeoDataFrame:
+def _freight_impact_index(tfn_freight_network_risk: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Calculate impact index using freight demand data and hazard risk."""
     tfn_freight_network_risk = functional_rules.min_max_scaling_pair(
         tfn_freight_network_risk, [("demand_current", "demand_forecast")]
     )
 
-    tfn_freight_network_risk = _calculate_freight_impact(
-        tfn_freight_network_risk
-    )
+    tfn_freight_network_risk = _calculate_freight_impact(tfn_freight_network_risk)
 
     tfn_freight_network_risk = functional_rules.min_max_scaling_pair(
         tfn_freight_network_risk, [("impact_current", "impact_forecast")]
@@ -612,9 +604,7 @@ def _freight_impact_index(
     return gpd.GeoDataFrame(tfn_freight_network_risk, geometry="geometry", crs="EPSG:4326")
 
 
-def _calculate_freight_impact(
-    freight_data: pd.DataFrame
-) -> pd.DataFrame:
+def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
     """Calculate composite impact score for current and forecast years."""
     for scenario in functional_rules.SCENARIO_NAMES:
         freight_data[f"impact_{scenario}"] = (
@@ -885,7 +875,7 @@ def _rapid_transport_stations_risk(
 ) -> None:
     """Get rapid transport station risk and write to file.
 
-    Buffer rapid transport stations, then interrsect with hazard risk, clean output, and write
+    Buffer rapid transport stations, then intersect with hazard risk, clean output, and write
     to file.
     """
     LOG.info("Layering rapid transport stations with hazard risk...")

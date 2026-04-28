@@ -82,7 +82,7 @@ def clip_to_boundary(gdf: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> gpd.G
     """
     Clip a GeoDataFrame to a specified spatial boundary.
 
-    This function reprojects the boundary to match the CRS of the input GeoDataFrame and then
+    This function re-projects the boundary to match the CRS of the input GeoDataFrame and then
     clips the geometries in the GeoDataFrame so that only features within the boundary are
     retained.
 
@@ -432,7 +432,7 @@ def _clean_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> No
 def _get_rail_links(
     boundary: gpd.GeoDataFrame, os_rail_path: pathlib.Path
 ) -> gpd.GeoDataFrame:
-    """Read and clean OS Rail Network data from the Mutli-Modal Routing Network."""
+    """Read and clean OS Rail Network data from the Multi-Modal Routing Network."""
     tfn_rail_links = gpd.read_file(
         os_rail_path,
         mask=boundary,
@@ -1520,7 +1520,7 @@ def _read_flood_gdb(
 def _extract_flood_data(
     config: model_config.Config, code_number_map: dict[str, list[str]]
 ) -> None:
-    """Extract geodatabase files from raw RoFRS and RoFSW flood data."""
+    """Extract GeoDatabase files from raw RoFRS and RoFSW flood data."""
     for code, num_list in code_number_map.items():
         for number in num_list:
             # Forecast (Climate Change) data
