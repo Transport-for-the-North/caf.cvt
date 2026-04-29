@@ -1940,12 +1940,10 @@ def _read_noham_h5(
     time_period: str,
     user_class: str,
     noham_path: pathlib.Path,
-    output_path: pathlib.Path | None,
+    output_path: pathlib.Path,
     extract: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Read and clean NoHAM h5 files and extract the link, routes, and od's DataFrames."""
-    if output_path is None:
-        raise ValueError("NoHAM output path must be provided.")
     if extract:
         with py7zr.SevenZipFile(noham_path, mode="r") as archive:
             archive.extract(
@@ -2003,6 +2001,9 @@ def _process_single_noham_layer(
     user_class: str,
 ) -> pd.DataFrame:
     LOG.info("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
+
+    if config.impact.noham_demand.output_path is None:
+        raise ValueError("NoHAM output path must be provided.")
 
     noham_ods, noham_routes, noham_links = _read_noham_h5(
         route_links_store=route_links_store,
