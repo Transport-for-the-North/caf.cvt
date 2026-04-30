@@ -9,6 +9,10 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
-    # This will tell dependabot to only submit security update PRs
-    # If you want to bump minimum versions when available, increase this number. We recommend a maximum value of 3.
-    open-pull-requests-limit: 0
+    # Only allow major version updates to reduce noise from minor/patch updates
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+    # If you only want security update PRs, set this to 0
+    open-pull-requests-limit: 3
