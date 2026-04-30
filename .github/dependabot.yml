@@ -9,4 +9,6 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    # This will tell dependabot to only submit security update PRs
+    # If you want to bump minimum versions when available, increase this number. We recommend a maximum value of 3.
+    open-pull-requests-limit: 0
