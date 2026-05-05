@@ -7,11 +7,11 @@ import warnings
 
 import caf.toolkit as ctk
 
-import cvt
-from cvt.data_cleaning import data_cleaning
-from cvt.functional_rules import apply_functional_rules
-from cvt.layering import layering
-from cvt.model_config import Config
+from caf import cvt
+from caf.cvt.data_cleaning import data_cleaning
+from caf.cvt.functional_rules import apply_functional_rules
+from caf.cvt.layering import layering
+from caf.cvt.model_config import Config
 
 LOG = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
-from cvt import data_cleaning, file_paths, functional_rules, model_config
+from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 
 LOG = logging.getLogger(__name__)
 

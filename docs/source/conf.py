@@ -25,14 +25,14 @@ sys.path.insert(0, str(source.absolute()))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "CVT"
-copyright = "2024, Transport for the North"
+project = "CAF.cvt"
+copyright = "2026, Transport for the North"
 author = "Transport for the North"
 
 # Third Party
-import cvt
+import caf.cvt
 
-version = str(cvt.__version__)
+version = str(caf.cvt.__version__)
 release = version
 
 
@@ -80,12 +80,23 @@ autodoc_typehints = "description"
 # Auto summary options
 autosummary_generate = True
 autosummary_imported_members = True
-modindex_common_prefix = ["cvt."]
+modindex_common_prefix = ["caf.", "caf.cvt."]
+
+autosummary_context = {
+    # Enable inherited methods / attributes in all classes
+    "include_inherited_methods": False,
+    "include_inherited_attributes": False,
+    # Enable / disable inherited methods / attributes in some classes
+    "show_inherited": [],
+    "exclude_inherited": [],
+}
 
 # -- Options for Sphinx Examples gallery -------------------------------------
 sphinx_gallery_conf = {
     "examples_dirs": "../../examples",  # path to your example scripts
-    "gallery_dirs": "examples",  # path to where to save gallery generated output
+    "gallery_dirs": "_generated/examples",  # path to where to save gallery generated output
+    "backreferences_dir": "_generated/examples/backrefs",  # path to the backreferences files
+    "doc_module": ("caf.cvt",),
     # Regex pattern of filenames to be ran so the output can be included
     "filename_pattern": rf"{re.escape(os.sep)}run_.*\.py",
 }
@@ -130,7 +141,7 @@ html_theme_options = {
     "icon_links": [
         {
             "name": "GitHub",
-            "url": "https://github.com/transport-for-the-north/cvt",
+            "url": "https://github.com/transport-for-the-north/caf.cvt",
             "icon": "fa-brands fa-square-github",
             "type": "fontawesome",
         }
@@ -139,11 +150,11 @@ html_theme_options = {
     "external_links": [
         {
             "name": "Changelog",
-            "url": "https://github.com/transport-for-the-north/cvt/releases",
+            "url": "https://github.com/transport-for-the-north/caf.cvt/releases",
         },
         {
             "name": "Issues",
-            "url": "https://github.com/transport-for-the-north/cvt/issues",
+            "url": "https://github.com/transport-for-the-north/caf.cvt/issues",
         },
         {
             "name": "CAF Handbook",
@@ -151,11 +162,16 @@ html_theme_options = {
         },
     ],
     "primary_sidebar_end": ["indices.html", "sidebar-ethical-ads.html"],
+    "announcement": """
+        The documentation pages are currently work-in-progress, if you have any suggestions
+        for improvements please raise an issue on the
+        <a href="https://github.com/transport-for-the-north/caf.cvt/issues/new/choose">caf.cvt repository</a>.
+    """,
 }
 html_context = {
     "github_url": "https://github.com",
     "github_user": "transport-for-the-north",
-    "github_repo": "cvt",
+    "github_repo": "caf.cvt",
     "github_version": "main",
     "doc_path": "docs/source",
 }

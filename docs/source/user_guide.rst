@@ -1,7 +1,7 @@
 User Guide
 ==========
 
-This section provides an in-depth guide on using CVT.
+This section provides an in-depth guide on using CAF.cvt.
 
 .. note::
    - For quick start guide see :ref:`quick start`
@@ -13,5 +13,5 @@ This section provides an in-depth guide on using CVT.
 
    usage/index
    tutorial
-   examples/index
+   _generated/examples/index
 

@@ -4,7 +4,7 @@
 
 # Built-Ins
 
-# Third Party
+# # # IMPORTS # # #
 
 
 # # # CONSTANTS # # #
@@ -15,8 +15,8 @@
 
 # # # TESTS # # #
 class TestFunctionName:
-    """Example Class Docstring."""
+    """Example test class."""
 
     def test_something(self) -> None:
-        """Example Test Docstring."""
+        """Example unit test."""
         assert True

@@ -14,7 +14,7 @@ import py7zr
 import xarray as xr
 from shapely import geometry
 
-from cvt import file_paths, model_config
+from caf.cvt import file_paths, model_config
 
 LOG = logging.getLogger(__name__)
 

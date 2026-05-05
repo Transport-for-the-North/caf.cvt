@@ -3,7 +3,7 @@ requires = ["setuptools>=64.0.0", "versioningit"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cvt"
+name = "caf.cvt"
 dynamic = ["version", "dependencies", "optional-dependencies"]
 description = "Climate Vulnerability Tool to assess the vulnerability of the transport network in the North to climate hazards."
 readme = "README.md"
@@ -18,11 +18,12 @@ classifiers = [
 ]
 
 [project.urls]
-"Bug Tracker" = "https://github.com/transport-for-the-north/cvt/issues"
-Homepage = "https://github.com/transport-for-the-north/cvt"
-Source = "https://github.com/transport-for-the-north/cvt"
-Documentation = "http://cvt.readthedocs.io/"
-
+"Bug Tracker" = "https://github.com/transport-for-the-north/caf.cvt.template/issues"
+Homepage = "https://github.com/transport-for-the-north/caf.cvt.template"
+Source = "https://github.com/transport-for-the-north/caf.cvt.template"
+Documentation = "http://cafcvt.readthedocs.io/"
+[project.scripts]
+"caf.cvt" = "caf.cvt.__main__:_main"
 [tool.setuptools.dynamic]
 dependencies = { "file" = "requirements.txt" }
 
@@ -40,7 +41,7 @@ sdist = "versioningit.cmdclass.sdist"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"cvt" = ["py.typed"]
+"caf.cvt" = ["py.typed"]
 
 # Linters
 [tool.ruff]
@@ -97,6 +98,7 @@ ignore = [
     "SIM108", # one line if else (flake8-bandit)
     "S311",   # random.random not allowed (flake8-bandit)
     "DOC502", # docstring-extraneous-exception (sometimes necessary)
+    "ANN003", # type annotation for **kwargs
 ]
 unfixable = [
     "T20",  # print-statements (flake8-print)
@@ -150,6 +152,8 @@ disable = [
     "use-dict-literal",
     "use-list-literal",
     "wrong-import-position", # Compatibility with ruff
+    "wrong-import-order",    # Handled by ruff
+    "ungrouped-imports",     # Handled by ruff
 ]
 
 [tool.pylint.basic]
@@ -159,7 +163,7 @@ extension-pkg-allow-list = []
 ignore = ["__init__.py", "_version.py"]
 
 [tool.mypy]
-packages = ["cvt"]
+packages = ["caf.cvt"]
 namespace_packages = true
 ignore_missing_imports = true
 allow_redefinition = true
@@ -183,8 +187,8 @@ match = ["v*"]
 default-tag = "0.0.1"
 
 [tool.versioningit.onbuild]
-source-file = "src/cvt/_version.py"
-build-file = "cvt/_version.py"
+source-file = "src/caf/cvt/_version.py"
+build-file = "caf/cvt/_version.py"
 
 [tool.versioningit.format]
 distance = "{base_version}+{distance}.{vcs}{rev}"
