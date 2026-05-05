@@ -18,9 +18,9 @@ classifiers = [
 ]
 
 [project.urls]
-"Bug Tracker" = "https://github.com/transport-for-the-north/caf.cvt.template/issues"
-Homepage = "https://github.com/transport-for-the-north/caf.cvt.template"
-Source = "https://github.com/transport-for-the-north/caf.cvt.template"
+"Bug Tracker" = "https://github.com/transport-for-the-north/caf.cvt/issues"
+Homepage = "https://github.com/transport-for-the-north/caf.cvt"
+Source = "https://github.com/transport-for-the-north/caf.cvt"
 Documentation = "http://cafcvt.readthedocs.io/"
 [project.scripts]
 "caf.cvt" = "caf.cvt.__main__:_main"
