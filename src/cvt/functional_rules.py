@@ -9,7 +9,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import sklearn
-from shapely.geometry import box
+from shapely.geometry import Polygon, box
 
 from cvt import data_cleaning, file_paths, model_config
 
@@ -89,8 +89,6 @@ _FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2,
 _FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
 
 
-_NUM_TILES_DONE = 449
-
 ### GENERAL FUNCTIONS
 
 
@@ -163,6 +161,46 @@ def _spatial_infill_na_grids(
     return risk_grid
 
 
+def _nearest_join_infilling(
+    risk_grid: gpd.GeoDataFrame,
+    variables: list[str],
+    max_distance: int,
+    prev_na_count: int,
+) -> gpd.GeoDataFrame:
+    """Fill remaining NA values using nearest-join spatial infilling."""
+    remaining_na = risk_grid[risk_grid[variables].isna().any(axis=1)]
+    if remaining_na.empty:
+        return risk_grid
+
+    nearest = gpd.sjoin_nearest(
+        remaining_na,
+        risk_grid.drop(remaining_na.index),
+        how="left",
+        max_distance=max_distance,
+    )
+
+    # Calculate the average value of the neighbouring grids
+    nearest_avg = nearest.groupby(nearest.index)[[f"{var}_right" for var in variables]].mean()
+
+    for var in variables:
+        na_condition = risk_grid[var].isna()
+        risk_grid.loc[na_condition, var] = risk_grid.loc[na_condition].index.map(
+            nearest_avg[f"{var}_right"]
+        )
+
+    final_remaining = risk_grid[variables].isna().sum().sum()
+    filled_nearest = prev_na_count - final_remaining
+
+    LOG.info(
+        "Nearest-join infilling with a %sm max distance filled %s NA values; %s remain",
+        int(max_distance),
+        int(filled_nearest),
+        int(final_remaining),
+    )
+
+    return risk_grid
+
+
 def _iterative_spatial_infilling(
     risk_grid: gpd.GeoDataFrame,
     variables: list[str],
@@ -207,36 +245,19 @@ def _iterative_spatial_infilling(
         )
 
     # Fallback: nearest join for remaining NAs
-    remaining_na = risk_grid[risk_grid[variables].isna().any(axis=1)]
-    if not remaining_na.empty:
-        nearest = gpd.sjoin_nearest(
-            remaining_na,
-            risk_grid.drop(remaining_na.index),
-            how="left",
-            max_distance=nearest_join_max_distance,
-        )
+    return _nearest_join_infilling(
+        risk_grid=risk_grid,
+        variables=variables,
+        max_distance=nearest_join_max_distance,
+        prev_na_count=prev_na_count or 0,
+    )
 
-        # Calculate the average value of the neighbouring grids
-        nearest_avg = nearest.groupby(nearest.index)[
-            [f"{var}_right" for var in variables]
-        ].mean()
-        for var in variables:
-            na_condition = risk_grid[var].isna()
-            # Fill with neighbour average
-            risk_grid.loc[na_condition, var] = risk_grid.loc[na_condition].index.map(
-                nearest_avg[f"{var}_right"]
-            )
 
-        final_remaining = risk_grid[variables].isna().sum().sum()
-        filled_nearest = new_na_count - final_remaining
-        LOG.info(
-            "Nearest-join infilling with a %sm max distance filled %s NA values; %s remain",
-            int(nearest_join_max_distance),
-            int(filled_nearest),
-            int(final_remaining),
-        )
-
-    return risk_grid
+def _make_grid_cell(xmin: float, ymin: float, i: int, j: int, cell_size: int) -> Polygon:
+    """Create a single grid cell polygon."""
+    x0 = xmin + i * cell_size
+    y0 = ymin + j * cell_size
+    return box(x0, y0, x0 + cell_size, y0 + cell_size)
 
 
 def _create_grid(
@@ -245,19 +266,11 @@ def _create_grid(
     """Take bounds and a cell size and return a grid of the given size within the bounds."""
     rows = int(np.ceil((ymax - ymin) / cell_size))
     cols = int(np.ceil((xmax - xmin) / cell_size))
-    grid_cells = []
-    grid_ids = []
 
-    grid_id = 0
-    for i in range(cols):
-        for j in range(rows):
-            x0 = xmin + i * cell_size
-            y0 = ymin + j * cell_size
-            x1 = x0 + cell_size
-            y1 = y0 + cell_size
-            grid_cells.append(box(x0, y0, x1, y1))
-            grid_ids.append(grid_id)
-            grid_id += 1
+    grid_cells = [
+        _make_grid_cell(xmin, ymin, i, j, cell_size) for i in range(cols) for j in range(rows)
+    ]
+    grid_ids = list(range(len(grid_cells)))
     return gpd.GeoDataFrame(
         {"grid_id": grid_ids, "geometry": grid_cells}, crs=data_cleaning.BNG_CRS
     )
@@ -868,7 +881,7 @@ def _upscale_to_grid(
     scenario_map: list[tuple[pathlib.Path, str]],
     scenario: str,
 ) -> gpd.GeoDataFrame:
-    """Upscales each flood layer to the common grid and writes to file."""
+    """Upscale each flood layer to the common grid and writes to file."""
     flood_upscaled = {}
     for path, risk_col in scenario_map:
         LOG.info("Upscaling flood layer %s to a %sm grid", risk_col, _FLOOD_GRID_SIZE_M)
@@ -904,7 +917,11 @@ def _area_weighted_flood_assignment(
     """Assign flood risk to grid squares using an area-weighted average."""
     # Perform chunked overlay to get intersections
     flood_intersections, len_before_upscale = _chunked_grid_polygon_flood_overlay(
-        config, flood_path, grid, scenario, risk_column
+        config,
+        flood_path=flood_path,
+        flood_grid=grid,
+        scenario=scenario,
+        risk_column=risk_column,
     )
 
     # Compute weighted risk contribution
@@ -912,19 +929,17 @@ def _area_weighted_flood_assignment(
         flood_intersections[risk_column] * flood_intersections["area"]
     )
 
-    # Compute aggregated weighted sum and area sum
-    risk_area_agg = flood_intersections.groupby("grid_id").agg(
-        weighted_sum=("weighted", "sum"), area_sum=("area", "sum")
-    )
-
-    # Compute area weighted average flood risk per grid cell
-    weighted_avg_flood = risk_area_agg["weighted_sum"] / risk_area_agg["area_sum"]
-    weighted_avg_flood.name = risk_column
+    # Compute aggregated weighted sum per grid cell (total exposure)
+    exposure_agg = flood_intersections.groupby("grid_id").agg(weighted_sum=("weighted", "sum"))
 
     # Assign weighted average flood risk back to the original grid
-    flood_result = grid[["grid_id"]].copy().set_index("grid_id")
+    flood_result = grid[["grid_id", "geometry"]].copy().set_index("grid_id")
+    flood_result["grid_area"] = flood_result.geometry.area
     flood_result[risk_column] = 0.0
-    flood_result.loc[weighted_avg_flood.index, risk_column] = weighted_avg_flood.to_numpy()
+    flood_result.loc[exposure_agg.index, risk_column] = (
+        exposure_agg["weighted_sum"] / flood_result.loc[exposure_agg.index, "grid_area"]
+    )
+    flood_result = flood_result.drop(columns=["geometry", "grid_area"])
     flood_result = flood_result.reset_index()
 
     # Fill missing values with 0 (no risk) since no data means no risk in the underlying data
@@ -950,8 +965,42 @@ def _area_weighted_flood_assignment(
     return flood_result
 
 
+def _process_flood_grid_tile(
+    *,
+    flood_path: pathlib.Path,
+    grid_square: gpd.GeoSeries,
+    risk_column: str,
+) -> tuple[pd.DataFrame, int]:
+    """Process the flood overlay for a single grid tile."""
+    grid_geom = grid_square.geometry
+    grid_bbox = grid_geom.bounds
+
+    grid_square_gdf = gpd.GeoDataFrame(
+        {"grid_id": [grid_square["grid_id"]]}, geometry=[grid_geom], crs=data_cleaning.BNG_CRS
+    )
+
+    flood_layer = gpd.read_file(flood_path, bbox=grid_bbox)
+    rows_before = len(flood_layer)
+
+    if flood_layer.empty:
+        return pd.DataFrame(), rows_before
+
+    flood_layer[risk_column] = flood_layer[risk_column].map(_FLOOD_RISK_SCORE_MAP)
+
+    flood_chunk = gpd.overlay(flood_layer, grid_square_gdf, how="intersection")
+
+    if flood_chunk.empty:
+        return pd.DataFrame, rows_before
+
+    flood_chunk["area"] = flood_chunk.geometry.area
+    flood_chunk = flood_chunk.drop(columns=["geometry"])
+
+    return flood_chunk, rows_before
+
+
 def _chunked_grid_polygon_flood_overlay(
     config: model_config.Config,
+    *,
     flood_path: pathlib.Path,
     flood_grid: gpd.GeoDataFrame,
     scenario: str,
@@ -967,8 +1016,8 @@ def _chunked_grid_polygon_flood_overlay(
     )
     first_write = True
 
-    len_before_upscale = 0
-    log_total = 0
+    total_rows_read = 0
+    rows_written = 0
 
     # For each tile, do spatial filtering and run overlay and clean
     for i, grid_square in flood_grid.iterrows():
@@ -979,41 +1028,31 @@ def _chunked_grid_polygon_flood_overlay(
                 i,
                 len(flood_grid),
                 (i / len(flood_grid) * 100),
-                log_total,
+                rows_written,
             )
 
-        grid_geom = grid_square.geometry
-        grid_bbox = grid_geom.bounds
-        grid_square_gdf = gpd.GeoDataFrame(
-            {"grid_id": [grid_square["grid_id"]]},
-            geometry=[grid_geom],
-            crs=data_cleaning.BNG_CRS,
+        flood_chunk, rows_before = _process_flood_grid_tile(
+            flood_path=flood_path, grid_square=grid_square, risk_column=risk_column
         )
 
-        flood_layer_sub = gpd.read_file(flood_path, bbox=grid_bbox)
-        flood_layer_sub[risk_column] = flood_layer_sub[risk_column].map(_FLOOD_RISK_SCORE_MAP)
-        len_before_upscale += len(flood_layer_sub)
-
-        flood_chunk = gpd.overlay(flood_layer_sub, grid_square_gdf, how="intersection")
-        flood_chunk["area"] = flood_chunk.geometry.area
-
-        flood_chunk = flood_chunk.drop(columns=["geometry"])
+        total_rows_read += rows_before
 
         # If there are no resulting geometries, skip to the next tile
         if flood_chunk.empty:
             continue
 
-        if first_write:
-            data_cleaning.write_to_file(flood_chunk, output_path, mode="w")
-            first_write = False
-        else:
-            data_cleaning.write_to_file(flood_chunk, output_path, mode="a")
+        data_cleaning.write_to_file(
+            flood_chunk,
+            output_path,
+            mode="w" if first_write else "a",
+        )
+        first_write = False
 
-        log_total += len(flood_chunk)
+        rows_written += len(flood_chunk)
 
     LOG.info("Chunked overlay completed. Output written to %s", output_path)
 
-    return pd.read_csv(output_path), len_before_upscale
+    return pd.read_csv(output_path), total_rows_read
 
 
 def _flooding_index_direct(
@@ -1071,6 +1110,54 @@ def _flooding_index_direct(
     return tfn_flood_risk
 
 
+def _create_flood_tiles(
+    config: model_config.Config, boundary: gpd.GeoDataFrame, tile_size_m: int
+) -> gpd.GeoDataFrame:
+    """Create flood tiles to be used in chunked overlay."""
+    xmin, ymin, xmax, ymax = boundary.total_bounds
+    tiles = _create_grid(xmin, ymin, xmax, ymax, tile_size_m)
+    tiles = tiles[tiles.geometry.intersects(boundary.geometry.iloc[0])].copy()
+    tiles = tiles.reset_index(drop=True)
+    tiles["tile_id"] = range(len(tiles))
+    data_cleaning.write_to_file(
+        tiles,
+        config.paths.model_interim_output / file_paths.TILE_GRID_MODEL_INTERIM_OUTPUT_PATH,
+    )
+    return tiles
+
+
+def _process_flood_overlay_tile(
+    *, tile: gpd.GeoSeries, layer_paths: list[pathlib.Path], crs: str
+) -> gpd.GeoDataFrame | None:
+    """Process flood overlay for a single tile."""
+    tile_geom = tile.geometry
+    tile_bbox = tile_geom.bounds
+    tile_gdf = gpd.GeoDataFrame(geometry=[tile_geom], crs=crs)
+
+    layer_subsets: list[gpd.GeoDataFrame] = []
+
+    for layer_path in layer_paths:
+        layer_sub = gpd.read_file(layer_path, bbox=tile_bbox)
+        if layer_sub.empty:
+            continue
+
+        layer_sub = gpd.overlay(layer_sub, tile_gdf, how="intersection")
+        if layer_sub.empty:
+            return None
+
+        layer_subsets.append(layer_sub)
+
+    if not layer_subsets:
+        return None
+
+    tile_overlay = _overlay_and_clean(*layer_subsets, target_crs=crs, how="union")
+
+    if tile_overlay.empty:
+        return None
+
+    return tile_overlay
+
+
 def _tile_polygon_flood_overlay(
     config: model_config.Config,
     boundary: gpd.GeoDataFrame,
@@ -1081,15 +1168,7 @@ def _tile_polygon_flood_overlay(
     """Chunked polygon-polygon overlay using a tile grid."""
     # Create tiles
     if config.switches.create_flood_tiles:
-        xmin, ymin, xmax, ymax = boundary.total_bounds
-        tiles = _create_grid(xmin, ymin, xmax, ymax, tile_size_m)
-        tiles = tiles[tiles.geometry.intersects(boundary.geometry.iloc[0])].copy()
-        tiles = tiles.reset_index(drop=True)
-        tiles["tile_id"] = range(len(tiles))
-        data_cleaning.write_to_file(
-            tiles,
-            config.paths.model_interim_output / file_paths.TILE_GRID_MODEL_INTERIM_OUTPUT_PATH,
-        )
+        tiles = _create_flood_tiles(config, boundary, tile_size_m)
     else:
         tiles = gpd.read_file(
             config.paths.model_interim_output / file_paths.TILE_GRID_MODEL_INTERIM_OUTPUT_PATH
@@ -1101,52 +1180,22 @@ def _tile_polygon_flood_overlay(
         / file_paths.FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH
     )
     layer_name = "flood_overlay"
-    first_write = False
+    first_write = True
 
     # For each tile, do spatial filtering and run overlay and clean
     for tile_idx, tile in tiles.iterrows():
-        if tile_idx + 1 <= _NUM_TILES_DONE:
-            continue
         LOG.info("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
 
-        tile_geom = tile.geometry
-        tile_bbox = tile_geom.bounds
-        tile_gdf = gpd.GeoDataFrame(geometry=[tile_geom], crs=crs)
-
-        # Select polygons intersecting this tile for each layer
-        layer_subsets: list[gpd.GeoDataFrame] = []
-        for layer_path in layer_paths:
-            layer_sub = gpd.read_file(layer_path, bbox=tile_bbox)
-
-            if layer_sub.empty:
-                continue
-
-            # Clip to tile to filter for only tile-bound geometries
-            layer_sub = gpd.overlay(layer_sub, tile_gdf, how="intersection")
-
-            # If the overlay returns nothing, break from this layer
-            if layer_sub.empty:
-                layer_subsets = []
-                break
-
-            layer_subsets.append(layer_sub)
-
-        # If there are no overlaps for this tile, skip
-        if not layer_subsets:
-            continue
-
-        # Overlay and clean result for this tile
-        tile_overlay = _overlay_and_clean(*layer_subsets, target_crs=crs, how="union")
+        tile_overlay = _process_flood_overlay_tile(tile=tile, layer_paths=layer_paths, crs=crs)
 
         # If there are no resulting geometries, skip to the next tile
-        if tile_overlay.empty:
+        if tile_overlay is None:
             continue
 
-        if first_write:
-            data_cleaning.write_to_file(tile_overlay, output_path, mode="w", layer=layer_name)
-            first_write = False
-        else:
-            data_cleaning.write_to_file(tile_overlay, output_path, mode="a", layer=layer_name)
+        data_cleaning.write_to_file(
+            tile_overlay, output_path, mode="w" if first_write else "a", layer=layer_name
+        )
+        first_write = False
 
         LOG.info("Tile %s wrote %s geometries.", tile_idx + 1, len(tile_overlay))
 

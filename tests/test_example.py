@@ -1,4 +1,7 @@
 """Tests for the {} module."""
+
+# pylint: disable=too-few-public-methods
+
 # Built-Ins
 
 # Third Party

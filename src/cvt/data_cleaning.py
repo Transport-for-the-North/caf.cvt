@@ -5,7 +5,7 @@ import gc
 import logging
 import os
 import pathlib
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 import fiona
 import geopandas as gpd
@@ -22,6 +22,9 @@ LOG = logging.getLogger(__name__)
 
 # Minimum a and b values for NoHAM road links to keep
 _NOHAM_ROAD_THRESHOLD = int(os.getenv("NOHAM_ROAD_THRESHOLD", "10000"))
+
+_NOHAM_TIME_PERIODS = ["TS1", "TS2", "TS3"]
+_NOHAM_USER_CLASSES = ["uc1", "uc2", "uc3", "uc4", "uc5"]
 
 # British National Grid CRS, for use in spatially merging datasets
 BNG_CRS = os.getenv("BNG_CRS", "EPSG:27700")
@@ -63,6 +66,15 @@ _FLOOD_CODE_NUMBER_MAP = {
 _WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
 _WIND_SPEED_PERCENTILE = 0.99
 
+GEOSURE_RISK_COLS = [
+    "collapsible_deposits_risk",
+    "compressible_ground_risk",
+    "landslides_risk",
+    "running_sand_risk",
+    "shrink_swell_risk",
+    "soluble_rocks_risk",
+]
+
 ### GENERAL FUNCTIONS
 
 
@@ -70,7 +82,7 @@ def clip_to_boundary(gdf: gpd.GeoDataFrame, boundary: gpd.GeoDataFrame) -> gpd.G
     """
     Clip a GeoDataFrame to a specified spatial boundary.
 
-    This function reprojects the boundary to match the CRS of the input GeoDataFrame and then
+    This function re-projects the boundary to match the CRS of the input GeoDataFrame and then
     clips the geometries in the GeoDataFrame so that only features within the boundary are
     retained.
 
@@ -130,7 +142,7 @@ def write_to_file(
     driver_map = {".gpkg": "GPKG", ".shp": "ESRI Shapefile"}
 
     if ext == ".csv":
-        data.to_csv(output_path, index=False, mode=mode, header=(mode == "w"))
+        data.to_csv(output_path, index=False, mode=mode, header=mode == "w")
     elif ext in driver_map:
         if not isinstance(data, gpd.GeoDataFrame):
             raise TypeError(f"{ext} requires a GeoDataFrame, got {type(data)}")
@@ -161,11 +173,12 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame, track_part: bool = False) -> gpd.
         A new GeoDataFrame containing only Polygon geometries, with a new column 'part' to keep
         track.
     """
-    multipolygon_count = 0
-    multipolygon_polygon_count = 0
-
-    geometry_collection_count = 0
-    geometry_collection_polygon_count = 0
+    counts = {
+        "multipolygon": 0,
+        "multipolygon_polygon": 0,
+        "geometry_collection": 0,
+        "geometry_collection_polygon": 0,
+    }
 
     rows = []
     for _idx, row in gdf.iterrows():
@@ -175,19 +188,19 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame, track_part: bool = False) -> gpd.
             new_row["part"] = 0
             rows.append(new_row)
         elif geom.geom_type == "MultiPolygon":
-            multipolygon_count += 1
+            counts["multipolygon"] += 1
             for i, poly in enumerate(geom.geoms):
-                multipolygon_polygon_count += 1
+                counts["multipolygon_polygon"] += 1
                 new_row = row.copy()
                 new_row.geometry = poly
                 new_row["part"] = i
                 rows.append(new_row)
         elif geom.geom_type == "GeometryCollection":
-            geometry_collection_count += 1
+            counts["geometry_collection"] += 1
             poly_count = 0
             for part in geom.geoms:
                 if part.geom_type == "Polygon":
-                    geometry_collection_polygon_count += 1
+                    counts["geometry_collection_polygon"] += 1
                     new_row = row.copy()
                     new_row.geometry = part
                     new_row["part"] = poly_count
@@ -196,9 +209,9 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame, track_part: bool = False) -> gpd.
 
     LOG.info(
         "Exploded %s MultiPolygons and %s GeometryCollections into %s Polygons.",
-        multipolygon_count,
-        geometry_collection_count,
-        multipolygon_polygon_count + geometry_collection_polygon_count,
+        counts["multipolygon"],
+        counts["geometry_collection"],
+        counts["multipolygon_polygon"] + counts["geometry_collection_polygon"],
     )
 
     exploded_gdf = gpd.GeoDataFrame(rows, crs=gdf.crs).reset_index(drop=True)
@@ -419,7 +432,7 @@ def _clean_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> No
 def _get_rail_links(
     boundary: gpd.GeoDataFrame, os_rail_path: pathlib.Path
 ) -> gpd.GeoDataFrame:
-    """Read and clean OS Rail Network data from the Mutli-Modal Routing Network."""
+    """Read and clean OS Rail Network data from the Multi-Modal Routing Network."""
     tfn_rail_links = gpd.read_file(
         os_rail_path,
         mask=boundary,
@@ -1361,56 +1374,56 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     LOG.info("Cleaning climate change river and sea flooding data...")
     _clean_flood(
         config,
-        "RoFRS",
-        "RoFRS",
-        "v202501",
-        boundary,
-        file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-        True,
-        _FLOOD_CODE_NUMBER_MAP,
-        "rivers_sea_flood_risk_forecast",
+        file_name="RoFRS",
+        flood_type="RoFRS",
+        version="v202501",
+        boundary=boundary,
+        out_path=file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+        climate_change_switch=True,
+        code_number_map=_FLOOD_CODE_NUMBER_MAP,
+        rename_risk_col="rivers_sea_flood_risk_forecast",
     )
     LOG.info("Finished cleaning climate change river and sea flooding data.")
 
     LOG.info("Cleaning river and sea flooding data...")
     _clean_flood(
         config,
-        "RoFRS",
-        "RoFRS",
-        "v202501",
-        boundary,
-        file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
-        False,
-        _FLOOD_CODE_NUMBER_MAP,
-        "rivers_sea_flood_risk_current",
+        file_name="RoFRS",
+        flood_type="RoFRS",
+        version="v202501",
+        boundary=boundary,
+        out_path=file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
+        climate_change_switch=False,
+        code_number_map=_FLOOD_CODE_NUMBER_MAP,
+        rename_risk_col="rivers_sea_flood_risk_current",
     )
     LOG.info("Finished cleaning river and sea flooding data.")
 
     LOG.info("Cleaning climate change surface water flooding data...")
     _clean_flood(
         config,
-        "RoFSW CC",
-        "RoFSW",
-        "v202509",
-        boundary,
-        file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-        True,
-        _FLOOD_CODE_NUMBER_MAP,
-        "surface_water_flood_risk_forecast",
+        file_name="RoFSW CC",
+        flood_type="RoFSW",
+        version="v202509",
+        boundary=boundary,
+        out_path=file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+        climate_change_switch=True,
+        code_number_map=_FLOOD_CODE_NUMBER_MAP,
+        rename_risk_col="surface_water_flood_risk_forecast",
     )
     LOG.info("Finished cleaning climate change surface water flooding data.")
 
     LOG.info("Cleaning surface water flooding data...")
     _clean_flood(
         config,
-        "RoFSW",
-        "RoFSW",
-        "v202509",
-        boundary,
-        file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
-        False,
-        _FLOOD_CODE_NUMBER_MAP,
-        "surface_water_flood_risk_current",
+        file_name="RoFSW",
+        flood_type="RoFSW",
+        version="v202509",
+        boundary=boundary,
+        out_path=file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
+        climate_change_switch=False,
+        code_number_map=_FLOOD_CODE_NUMBER_MAP,
+        rename_risk_col="surface_water_flood_risk_current",
     )
     LOG.info("Finished cleaning surface water flooding data.")
     LOG.info("Finished cleaning flooding data.")
@@ -1418,6 +1431,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
 
 def _extract_flood_gdb_file(
     config: model_config.Config,
+    *,
     code: str,
     number: str,
     flood_data: str,
@@ -1461,13 +1475,14 @@ def _extract_flood_gdb_file(
         LOG.info("Available layers: %s", layers)
         return gpd.read_file(gdb_path, layer=layers[0])
 
-    except Exception:
+    except (FileNotFoundError, BadZipFile):
         LOG.exception("Error processing %s%s", code, number)
         return None
 
 
 def _read_flood_gdb(
     config: model_config.Config,
+    *,
     code: str,
     number: str,
     file_name: str,
@@ -1505,20 +1520,96 @@ def _read_flood_gdb(
 def _extract_flood_data(
     config: model_config.Config, code_number_map: dict[str, list[str]]
 ) -> None:
-    """Extract geodatabase files from raw RoFRS and RoFSW flood data."""
+    """Extract GeoDatabase files from raw RoFRS and RoFSW flood data."""
     for code, num_list in code_number_map.items():
         for number in num_list:
             # Forecast (Climate Change) data
-            _extract_flood_gdb_file(config, code, number, "RoFRS", "v202501", True)
-            _extract_flood_gdb_file(config, code, number, "RoFSW", "v202509", True)
+            _extract_flood_gdb_file(
+                config,
+                code=code,
+                number=number,
+                flood_data="RoFRS",
+                version="v202501",
+                cc=True,
+            )
+            _extract_flood_gdb_file(
+                config,
+                code=code,
+                number=number,
+                flood_data="RoFSW",
+                version="v202509",
+                cc=True,
+            )
 
             # Current data
-            _extract_flood_gdb_file(config, code, number, "RoFRS", "v202501", False)
-            _extract_flood_gdb_file(config, code, number, "RoFSW", "v202509", False)
+            _extract_flood_gdb_file(
+                config,
+                code=code,
+                number=number,
+                flood_data="RoFRS",
+                version="v202501",
+                cc=False,
+            )
+            _extract_flood_gdb_file(
+                config,
+                code=code,
+                number=number,
+                flood_data="RoFSW",
+                version="v202509",
+                cc=False,
+            )
+
+
+def _process_flood_layer(
+    config: model_config.Config,
+    *,
+    code: str,
+    number: str,
+    file_name: str,
+    flood_type: str,
+    version: str,
+    boundary: gpd.GeoDataFrame,
+    climate_change_switch: bool,
+    rename_risk_col: str,
+) -> gpd.GeoDataFrame | None:
+    """Read, clip, clean, and prepare a single flood layer. Helper function for clean_flood."""
+    LOG.info("Processing flood data: %s%s", code, number)
+
+    flood_data = _read_flood_gdb(
+        config,
+        code=code,
+        number=number,
+        file_name=file_name,
+        flood_type=flood_type,
+        version=version,
+        climate_change_switch=climate_change_switch,
+        boundary=boundary,
+    )  # Read file
+    len_before_filter = len(flood_data)
+    tfn_flood_data = clip_to_boundary(flood_data, boundary)
+    if tfn_flood_data.empty:
+        LOG.info("%s%s layer empty. Continuing.", code, number)
+        return None
+    filter_removed = len_before_filter - len(tfn_flood_data)
+
+    LOG.info(
+        "%s %s %s filtered - %s of %s (%.1f percent) rows removed",
+        flood_type,
+        code,
+        number,
+        filter_removed,
+        len_before_filter,
+        (filter_removed / len_before_filter) * 100,
+    )
+
+    tfn_flood_data = _extract_poly_from_geomcollection(tfn_flood_data)
+    tfn_flood_data = tfn_flood_data[["Risk_band", "geometry"]]
+    return tfn_flood_data.rename(columns={"Risk_band": rename_risk_col})
 
 
 def _clean_flood(
     config: model_config.Config,
+    *,
     file_name: str,
     flood_type: str,
     version: str,
@@ -1532,42 +1623,24 @@ def _clean_flood(
     first_write = True
     for code, num_list in code_number_map.items():
         for number in num_list:
-            LOG.info("Processing flood data: %s%s", code, number)
-            flood_data = _read_flood_gdb(
+            tfn_flood_data = _process_flood_layer(
                 config,
-                code,
-                number,
-                file_name,
-                flood_type,
-                version,
-                climate_change_switch,
-                boundary,
-            )  # Read file
-            len_before_filter = len(flood_data)
-            tfn_flood_data = clip_to_boundary(flood_data, boundary)
-            if tfn_flood_data.empty:
-                LOG.info("%s%s layer empty. Continuing.", code, number)
-                continue
-            filter_removed = len_before_filter - len(tfn_flood_data)
-            LOG.info(
-                "%s %s %s filtered - %s of %s (%.1f percent) rows removed",
-                flood_type,
-                code,
-                number,
-                filter_removed,
-                len_before_filter,
-                (filter_removed / len_before_filter) * 100,
+                code=code,
+                number=number,
+                file_name=file_name,
+                flood_type=flood_type,
+                version=version,
+                boundary=boundary,
+                climate_change_switch=climate_change_switch,
+                rename_risk_col=rename_risk_col,
             )
-            tfn_flood_data = _extract_poly_from_geomcollection(tfn_flood_data)
-            tfn_flood_data = tfn_flood_data[["Risk_band", "geometry"]]
-            tfn_flood_data = tfn_flood_data.rename(columns={"Risk_band": rename_risk_col})
             if first_write:
                 write_to_file(tfn_flood_data, config.paths.model_input / out_path, mode="w")
                 first_write = False
             else:
                 write_to_file(tfn_flood_data, config.paths.model_input / out_path, mode="a")
 
-            del flood_data, tfn_flood_data
+            del tfn_flood_data
             gc.collect()
 
 
@@ -1662,17 +1735,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
         (filter_removed / len_before_filter) * 100,
     )
 
-    tfn_geosure = tfn_geosure[
-        [
-            "collapsible_deposits_risk",
-            "compressible_ground_risk",
-            "landslides_risk",
-            "running_sand_risk",
-            "shrink_swell_risk",
-            "soluble_rocks_risk",
-            "geometry",
-        ]
-    ]
+    tfn_geosure = tfn_geosure[[*GEOSURE_RISK_COLS, "geometry"]]
     write_to_file(
         tfn_geosure,
         config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH,
@@ -1871,6 +1934,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
 
 
 def _read_noham_h5(
+    *,
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
     year: str,
     time_period: str,
@@ -1928,50 +1992,71 @@ def _aggregate_link_flows(
     return link_demand.merge(links[["a", "b"]], left_on="link_id", right_index=True)
 
 
+def _process_single_noham_layer(
+    config: model_config.Config,
+    *,
+    year: str,
+    route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
+    time_period: str,
+    user_class: str,
+) -> pd.DataFrame:
+    LOG.info("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
+
+    if config.impact.noham_demand.output_path is None:
+        raise ValueError("NoHAM output path must be provided.")
+
+    noham_ods, noham_routes, noham_links = _read_noham_h5(
+        route_links_store=route_links_store,
+        year=year,
+        time_period=time_period,
+        user_class=user_class,
+        noham_path=config.impact.noham_demand.zip_path,
+        output_path=config.impact.noham_demand.output_path,
+        extract=config.switches.noham_zip_extract,
+    )
+    link_demand = _aggregate_link_flows(
+        noham_ods, noham_routes, noham_links
+    )  # Get link based demand
+    link_demand = link_demand.rename(
+        columns={"abs_demand": f"{user_class}_{time_period}"}
+    )  # Rename demand column
+    link_demand["link_id"] = (
+        link_demand["a"].astype(str) + "_" + link_demand["b"].astype(str)
+    )  # Create unique noham link id
+    link_demand = link_demand[
+        ["link_id", f"{user_class}_{time_period}"]
+    ]  # Keep relevant columns
+    LOG.info(
+        "%s ODs, %s Routes and %s Links aggregated to %s link flows",
+        len(noham_ods),
+        len(noham_routes),
+        len(noham_links),
+        len(link_demand),
+    )
+
+    return link_demand
+
+
 def _aggregate_link_flows_year(
     config: model_config.Config, scenario: str
 ) -> dict[str, pd.DataFrame]:
     """Aggregate link flows for each year, time period, and user class."""
     year = config.infrastructure.road.noham[scenario].year
 
-    time_periods = ["TS1", "TS2", "TS3"]
-    user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
-
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}
 
     ts_dfs = []
-    for time_period in time_periods:
+    for time_period in _NOHAM_TIME_PERIODS:
         uc_dfs = []
-        for user_class in user_classes:
-            LOG.info("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
-            noham_ods, noham_routes, noham_links = _read_noham_h5(
-                route_links_store,
-                year,
-                time_period,
-                user_class,
-                config.impact.noham_demand.zip_path,
-                config.impact.noham_demand.output_path,
-                config.switches.noham_zip_extract,
-            )
-            link_demand = _aggregate_link_flows(
-                noham_ods, noham_routes, noham_links
-            )  # Get link based demand
-            link_demand = link_demand.rename(
-                columns={"abs_demand": f"{user_class}_{time_period}"}
-            )  # Rename demand column
-            link_demand["link_id"] = (
-                link_demand["a"].astype(str) + "_" + link_demand["b"].astype(str)
-            )  # Create unique noham link id
-            link_demand = link_demand[
-                ["link_id", f"{user_class}_{time_period}"]
-            ]  # Keep relevant columns
-            uc_dfs.append(link_demand)  # Add to list of df's
-            LOG.info(
-                "%s ODs, %s Routes and %s Links aggregated to %s link flows",
-                len(noham_ods),
-                len(noham_routes),
-                len(noham_links),
-                len(link_demand),
+        for user_class in _NOHAM_USER_CLASSES:
+            uc_dfs.append(
+                _process_single_noham_layer(
+                    config,
+                    year=year,
+                    route_links_store=route_links_store,
+                    time_period=time_period,
+                    user_class=user_class,
+                )
             )
 
         # Merge all user class dataframes
@@ -1981,7 +2066,7 @@ def _aggregate_link_flows_year(
 
         # Compute total demand for all vehicles for each time period
         combined_uc_df[f"all_vehs_{time_period}"] = combined_uc_df[
-            [f"{uc}_{time_period}" for uc in user_classes]
+            [f"{uc}_{time_period}" for uc in _NOHAM_USER_CLASSES]
         ].sum(axis=1)
 
         # Store result
@@ -1993,14 +2078,14 @@ def _aggregate_link_flows_year(
         combined_ts_df = combined_ts_df.merge(df_ts, on="link_id", how="outer")
 
     # Compute totals for each user class across all time periods
-    for uc in user_classes:
+    for uc in _NOHAM_USER_CLASSES:
         combined_ts_df[f"{uc}_total"] = combined_ts_df[
-            [f"{uc}_{tp}" for tp in time_periods]
+            [f"{uc}_{tp}" for tp in _NOHAM_TIME_PERIODS]
         ].sum(axis=1)
 
     # Compute total of each user class across all time periods
     combined_ts_df["all_vehs_total"] = combined_ts_df[
-        [f"all_vehs_{tp}" for tp in time_periods]
+        [f"all_vehs_{tp}" for tp in _NOHAM_TIME_PERIODS]
     ].sum(axis=1)
 
     return combined_ts_df
