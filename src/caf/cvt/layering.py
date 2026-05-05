@@ -24,17 +24,22 @@ _HAZARD_RISK_COLS = [
     "surface_water_flood_risk",
     "flood_risk",
     # Ground Stability risk columns
-    "collapsible_deposits_risk",
-    "compressible_ground_risk",
-    "landslides_risk",
-    "running_sand_risk",
-    "shrink_swell_risk",
-    "soluble_rocks_risk",
+    *data_cleaning.GEOSURE_RISK_COLS,
     "shrink_swell_geoclimate_risk",
     "ground_stability_risk",
     # Coastal Erosion risk columns
     "coastal_erosion_risk",
 ]
+
+_NOHAM_IMPACT_COLS = [
+    "uc1_impact",
+    "uc2_impact",
+    "uc3_impact",
+    "uc4_impact",
+    "uc5_impact",
+    "impact",
+]
+
 
 _IMPACT_WEIGHTS = {
     "demand": 0.5,  # Weight demand as half of impact score
@@ -60,7 +65,7 @@ def _infrastructure_risk_intersect(
 ) -> gpd.GeoDataFrame:
     """Intersect infrastructure with hazard risk layers.
 
-    Spatailly combine infrastructure with hazard layers using an intersection spatial join,
+    Spatially combine infrastructure with hazard layers using an intersection spatial join,
     then calculate hazard risk score as the max risk value of the intersection. Return merged
     GeoDataFrame with hazard risk columns added.
     """
@@ -195,7 +200,7 @@ def layering(config: model_config.Config) -> None:
         Main config for the model, containing paths and settings.
     """
     hazard_layers = _read_hazard_layers(config)
-    _infrastructure_layering(config, hazard_layers, _HAZARD_RISK_COLS, _IMPACT_WEIGHTS)
+    _infrastructure_layering(config, hazard_layers)
 
 
 ## HAZARD LAYERS
@@ -228,13 +233,11 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
 def _infrastructure_layering(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
-    impact_weights: dict[str, float],
 ) -> None:
     """Layer roads, rail, and other infrastructure with hazards."""
-    _get_road_risk(config, hazard_layers, risk_cols, impact_weights)
-    _get_rail_risk(config, hazard_layers, risk_cols, impact_weights)
-    _get_other_risk(config, hazard_layers, risk_cols)
+    _get_road_risk(config, hazard_layers)
+    _get_rail_risk(config, hazard_layers)
+    _get_other_risk(config, hazard_layers)
 
 
 ### ROAD
@@ -243,13 +246,11 @@ def _infrastructure_layering(
 def _get_road_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
-    impact_weights: dict[str, float],
 ) -> None:
     """Layer OS Open Roads and NoHAM with hazards to assign risk."""
     LOG.info("Calculating road risk...")
-    _os_open_road_risk(config, hazard_layers, risk_cols)
-    _noham_road_risk(config, hazard_layers, risk_cols, impact_weights)
+    _os_open_road_risk(config, hazard_layers)
+    _noham_road_risk(config, hazard_layers)
     LOG.info("Road risk calculation complete.")
 
 
@@ -259,7 +260,6 @@ def _get_road_risk(
 def _os_open_road_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Intersect OS Road infrastructure with hazards, clean output, and write to file."""
     LOG.info("Layering OS Open Roads with hazard risk...")
@@ -271,7 +271,7 @@ def _os_open_road_risk(
         risk_data=tfn_os_road_risk,
         drop_cols=[],
         rename_map={"identifier": "id"},
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -286,8 +286,6 @@ def _os_open_road_risk(
 def _noham_road_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
-    impact_weights: dict[str, float],
 ) -> None:
     """Get NoHAM road risk and write to file.
 
@@ -331,18 +329,25 @@ def _noham_road_risk(
         _noham_impact_index(
             tfn_noham_risk_scenario["current"],
             tfn_noham_risk_scenario["forecast"],
-            impact_weights,
-            risk_cols,
         )
     )
 
+    risk_impact_cols = [*_HAZARD_RISK_COLS, *_NOHAM_IMPACT_COLS]
+    non_risk_impact_cols = ["link_id", "current_or_forecast", "geometry"]
+
     # Remove suffixes from risk and impact columns
-    tfn_noham_risk_scenario["current"].columns = [
-        col.removesuffix("_current") for col in tfn_noham_risk_scenario["current"].columns
-    ]
-    tfn_noham_risk_scenario["forecast"].columns = [
-        col.removesuffix("_forecast") for col in tfn_noham_risk_scenario["forecast"].columns
-    ]
+    tfn_noham_risk_scenario["current"] = tfn_noham_risk_scenario["current"].rename(
+        columns=lambda c: (
+            c.removesuffix("_current") if c.removesuffix("_current") in risk_impact_cols else c
+        )
+    )
+    tfn_noham_risk_scenario["forecast"] = tfn_noham_risk_scenario["forecast"].rename(
+        columns=lambda c: (
+            c.removesuffix("_forecast")
+            if c.removesuffix("_forecast") in risk_impact_cols
+            else c
+        )
+    )
 
     # Concatenate
     tfn_noham_risk = pd.concat(
@@ -350,26 +355,15 @@ def _noham_road_risk(
         ignore_index=True,
     )
 
-    noham_impact_cols = [
-        "uc1_impact",
-        "uc2_impact",
-        "uc3_impact",
-        "uc4_impact",
-        "uc5_impact",
-        "impact",
-    ]
     tfn_noham_risk = tfn_noham_risk[
-        ["link_id", "current_or_forecast", "geometry", *risk_cols, *noham_impact_cols]
+        [*non_risk_impact_cols, *_HAZARD_RISK_COLS, *_NOHAM_IMPACT_COLS]
     ]
 
-    cols_to_round = [
-        col for col in tfn_noham_risk.columns if col not in ["link_id", "geometry"]
-    ]
-    tfn_noham_risk[cols_to_round] = tfn_noham_risk[cols_to_round].round(1)
+    tfn_noham_risk[risk_impact_cols] = tfn_noham_risk[risk_impact_cols].round(1)
     tfn_noham_risk = tfn_noham_risk.to_crs(data_cleaning.BNG_CRS)
     tfn_noham_risk = tfn_noham_risk.rename(columns={"link_id": "id"})
     tfn_noham_risk = tfn_noham_risk.rename(
-        columns={col: f"{col}_score" for col in cols_to_round}
+        columns={col: f"{col}_score" for col in risk_impact_cols}
     )
 
     _split_csv_shapefile(
@@ -382,8 +376,6 @@ def _noham_road_risk(
 def _noham_impact_index(
     tfn_noham_c: gpd.GeoDataFrame,
     tfn_noham_f: gpd.GeoDataFrame,
-    impact_weights: dict[str, float],
-    risk_cols: list[str],
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """Normalise NoHAM demand, then calculate impact index."""
     user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
@@ -397,9 +389,7 @@ def _noham_impact_index(
     )
 
     # Calculate impact scores
-    tfn_noham_c, tfn_noham_f = _calculate_noham_impact(
-        tfn_noham_c, tfn_noham_f, user_classes, impact_weights
-    )
+    tfn_noham_c, tfn_noham_f = _calculate_noham_impact(tfn_noham_c, tfn_noham_f, user_classes)
 
     impact_cols_c = [f"{uc}_impact_current" for uc in user_classes] + ["impact_current"]
     impact_cols_f = [f"{uc}_impact_forecast" for uc in user_classes] + ["impact_forecast"]
@@ -409,10 +399,10 @@ def _noham_impact_index(
     )
 
     tfn_noham_c = tfn_noham_c[
-        ["link_id", "current_or_forecast", "geometry", *risk_cols, *impact_cols_c]
+        ["link_id", "current_or_forecast", "geometry", *_HAZARD_RISK_COLS, *impact_cols_c]
     ]
     tfn_noham_f = tfn_noham_f[
-        ["link_id", "current_or_forecast", "geometry", *risk_cols, *impact_cols_f]
+        ["link_id", "current_or_forecast", "geometry", *_HAZARD_RISK_COLS, *impact_cols_f]
     ]
 
     return tfn_noham_c, tfn_noham_f
@@ -470,27 +460,26 @@ def _calculate_noham_impact(
     noham_c: pd.DataFrame,
     noham_f: pd.DataFrame,
     user_classes: list[str],
-    impact_weights: dict[str, float],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Calculate NoHAM impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
     for uc in user_classes:
         for noham_data, scenario in [(noham_c, "current"), (noham_f, "forecast")]:
             noham_data[f"{uc}_impact_{scenario}"] = (
-                noham_data[f"{uc}_demand_{scenario}"] * impact_weights["demand"]
-                + noham_data["flood_risk"] * impact_weights["flood"]
-                + noham_data["extreme_weather_risk"] * impact_weights["extreme_weather"]
-                + noham_data["ground_stability_risk"] * impact_weights["ground_stability"]
-                + noham_data["coastal_erosion_risk"] * impact_weights["coastal_erosion"]
+                noham_data[f"{uc}_demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+                + noham_data["flood_risk"] * _IMPACT_WEIGHTS["flood"]
+                + noham_data["extreme_weather_risk"] * _IMPACT_WEIGHTS["extreme_weather"]
+                + noham_data["ground_stability_risk"] * _IMPACT_WEIGHTS["ground_stability"]
+                + noham_data["coastal_erosion_risk"] * _IMPACT_WEIGHTS["coastal_erosion"]
             )
 
     for noham_data, scenario in [(noham_c, "current"), (noham_f, "forecast")]:
         noham_data[f"impact_{scenario}"] = (
-            noham_data[f"demand_{scenario}"] * impact_weights["demand"]
-            + noham_data["flood_risk"] * impact_weights["flood"]
-            + noham_data["extreme_weather_risk"] * impact_weights["extreme_weather"]
-            + noham_data["ground_stability_risk"] * impact_weights["ground_stability"]
-            + noham_data["coastal_erosion_risk"] * impact_weights["coastal_erosion"]
+            noham_data[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+            + noham_data["flood_risk"] * _IMPACT_WEIGHTS["flood"]
+            + noham_data["extreme_weather_risk"] * _IMPACT_WEIGHTS["extreme_weather"]
+            + noham_data["ground_stability_risk"] * _IMPACT_WEIGHTS["ground_stability"]
+            + noham_data["coastal_erosion_risk"] * _IMPACT_WEIGHTS["coastal_erosion"]
         )
 
     return noham_c, noham_f
@@ -502,13 +491,11 @@ def _calculate_noham_impact(
 def _get_rail_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
-    impact_weights: dict[str, float],
 ) -> None:
     """Layer passenger rail and freight rail network with hazard to assign risk."""
     LOG.info("Calculating rail risk...")
-    _passenger_rail_risk(config, hazard_layers, risk_cols)
-    _freight_rail_risk(config, hazard_layers, risk_cols, impact_weights)
+    _passenger_rail_risk(config, hazard_layers)
+    _freight_rail_risk(config, hazard_layers)
     LOG.info("Rail risk calculation complete.")
 
 
@@ -518,7 +505,6 @@ def _get_rail_risk(
 def _passenger_rail_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Intersect passenger rail network with hazard to assign risk, clean and write to file."""
     LOG.info("Layering passenger rail network with hazard risk...")
@@ -538,7 +524,7 @@ def _passenger_rail_risk(
             "rail_use": "railway_use",
             "track_rep": "track_representation",
         },
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -557,8 +543,6 @@ def _passenger_rail_risk(
 def _freight_rail_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
-    impact_weights: dict[str, float],
 ) -> None:
     """Calculate freight rail risk and write to file.
 
@@ -574,7 +558,7 @@ def _freight_rail_risk(
         tfn_freight_network, hazard_layers
     )
 
-    tfn_freight_network_risk = _freight_impact_index(tfn_freight_network_risk, impact_weights)
+    tfn_freight_network_risk = _freight_impact_index(tfn_freight_network_risk)
 
     # Set the correct CRS
     tfn_freight_network_risk = tfn_freight_network_risk.set_crs(
@@ -591,7 +575,7 @@ def _freight_rail_risk(
             "rail_use": "railway_use",
             "track_rep": "track_representation",
         },
-        risk_cols_order=[*risk_cols, "impact"],
+        risk_cols_order=[*_HAZARD_RISK_COLS, "impact"],
     )
 
     _split_csv_shapefile(
@@ -605,17 +589,13 @@ def _freight_rail_risk(
     )
 
 
-def _freight_impact_index(
-    tfn_freight_network_risk: gpd.GeoDataFrame, impact_weights: dict[str, float]
-) -> gpd.GeoDataFrame:
+def _freight_impact_index(tfn_freight_network_risk: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Calculate impact index using freight demand data and hazard risk."""
     tfn_freight_network_risk = functional_rules.min_max_scaling_pair(
         tfn_freight_network_risk, [("demand_current", "demand_forecast")]
     )
 
-    tfn_freight_network_risk = _calculate_freight_impact(
-        tfn_freight_network_risk, impact_weights
-    )
+    tfn_freight_network_risk = _calculate_freight_impact(tfn_freight_network_risk)
 
     tfn_freight_network_risk = functional_rules.min_max_scaling_pair(
         tfn_freight_network_risk, [("impact_current", "impact_forecast")]
@@ -624,20 +604,18 @@ def _freight_impact_index(
     return gpd.GeoDataFrame(tfn_freight_network_risk, geometry="geometry", crs="EPSG:4326")
 
 
-def _calculate_freight_impact(
-    freight_data: pd.DataFrame, impact_weights: dict[str, float]
-) -> pd.DataFrame:
+def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
     """Calculate composite impact score for current and forecast years."""
     for scenario in functional_rules.SCENARIO_NAMES:
         freight_data[f"impact_{scenario}"] = (
-            freight_data[f"demand_{scenario}"] * impact_weights["demand"]
-            + freight_data[f"flood_risk_{scenario}"] * impact_weights["flood"]
+            freight_data[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+            + freight_data[f"flood_risk_{scenario}"] * _IMPACT_WEIGHTS["flood"]
             + freight_data[f"extreme_weather_risk_{scenario}"]
-            * impact_weights["extreme_weather"]
+            * _IMPACT_WEIGHTS["extreme_weather"]
             + freight_data[f"ground_stability_risk_{scenario}"]
-            * impact_weights["ground_stability"]
+            * _IMPACT_WEIGHTS["ground_stability"]
             + freight_data[f"coastal_erosion_risk_{scenario}"]
-            * impact_weights["coastal_erosion"]
+            * _IMPACT_WEIGHTS["coastal_erosion"]
         )
 
     return freight_data
@@ -649,22 +627,21 @@ def _calculate_freight_impact(
 def _get_other_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Layer other infrastructure with hazards to assign risk."""
     LOG.info("Calculating risk for other infrastructure...")
-    _train_stations_risk(config, hazard_layers, risk_cols)
-    _ev_charging_sites_risk(config, hazard_layers, risk_cols)
-    _airports_risk(config, hazard_layers, risk_cols)
-    _bus_coach_stations_risk(config, hazard_layers, risk_cols)
-    _bus_stops_risk(config, hazard_layers, risk_cols)
-    _tram_stations_risk(config, hazard_layers, risk_cols)
-    _rapid_transport_stations_risk(config, hazard_layers, risk_cols)
-    _ferry_terminals_risk(config, hazard_layers, risk_cols)
-    _petrol_stations_risk(config, hazard_layers, risk_cols)
-    _ncn_risk(config, hazard_layers, risk_cols)
-    _tram_network_risk(config, hazard_layers, risk_cols)
-    _rapid_transport_network_risk(config, hazard_layers, risk_cols)
+    _train_stations_risk(config, hazard_layers)
+    _ev_charging_sites_risk(config, hazard_layers)
+    _airports_risk(config, hazard_layers)
+    _bus_coach_stations_risk(config, hazard_layers)
+    _bus_stops_risk(config, hazard_layers)
+    _tram_stations_risk(config, hazard_layers)
+    _rapid_transport_stations_risk(config, hazard_layers)
+    _ferry_terminals_risk(config, hazard_layers)
+    _petrol_stations_risk(config, hazard_layers)
+    _ncn_risk(config, hazard_layers)
+    _tram_network_risk(config, hazard_layers)
+    _rapid_transport_network_risk(config, hazard_layers)
     LOG.info("Risk calculation for other infrastructure complete.")
 
 
@@ -681,7 +658,6 @@ def _buffer_geometry(infrastructure: gpd.GeoDataFrame, buffer_size_m: int) -> gp
 def _train_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get train station risk and write to file.
 
@@ -700,7 +676,7 @@ def _train_stations_risk(
         risk_data=tfn_train_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -718,7 +694,6 @@ def _train_stations_risk(
 def _ev_charging_sites_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get EV charging site risk and write to file.
 
@@ -737,7 +712,7 @@ def _ev_charging_sites_risk(
         risk_data=tfn_chg_sites_risk,
         drop_cols=[],
         rename_map={"devices": "installed_devices"},
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -755,7 +730,6 @@ def _ev_charging_sites_risk(
 def _airports_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get airport risk and write to file.
 
@@ -772,7 +746,7 @@ def _airports_risk(
         risk_data=tfn_airports_risk,
         drop_cols=[],
         rename_map={},
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -790,7 +764,6 @@ def _airports_risk(
 def _bus_coach_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get bus and coach station risk and write to file.
 
@@ -814,7 +787,7 @@ def _bus_coach_stations_risk(
         risk_data=tfn_bus_coach_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -832,7 +805,6 @@ def _bus_coach_stations_risk(
 def _bus_stops_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Intersect bus stops with hazard risk, clean output, and write to file."""
     LOG.info("Layering bus stops with hazard risk...")
@@ -846,7 +818,7 @@ def _bus_stops_risk(
         risk_data=tfn_bus_stops_risk,
         drop_cols=[],
         rename_map={"stop_id": "id"},
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -864,7 +836,6 @@ def _bus_stops_risk(
 def _tram_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get tram station risk and write to file.
 
@@ -883,7 +854,7 @@ def _tram_stations_risk(
         risk_data=tfn_tram_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -901,11 +872,10 @@ def _tram_stations_risk(
 def _rapid_transport_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get rapid transport station risk and write to file.
 
-    Buffer rapid transport stations, then interrsect with hazard risk, clean output, and write
+    Buffer rapid transport stations, then intersect with hazard risk, clean output, and write
     to file.
     """
     LOG.info("Layering rapid transport stations with hazard risk...")
@@ -925,7 +895,7 @@ def _rapid_transport_stations_risk(
         risk_data=tfn_rapid_transport_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -945,7 +915,6 @@ def _rapid_transport_stations_risk(
 def _ferry_terminals_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get ferry terminal risk and write to file.
 
@@ -966,7 +935,7 @@ def _ferry_terminals_risk(
         risk_data=tfn_ferry_terminals_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -984,7 +953,6 @@ def _ferry_terminals_risk(
 def _petrol_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get petrol station risk and write to file.
 
@@ -1005,7 +973,7 @@ def _petrol_stations_risk(
         risk_data=tfn_petrol_stations_risk,
         drop_cols=[],
         rename_map={},
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -1023,7 +991,6 @@ def _petrol_stations_risk(
 def _ncn_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get NCN risk and write to file.
 
@@ -1051,7 +1018,7 @@ def _ncn_risk(
             "RoadClass": "road_class",
             "SegmentID": "id",
         },
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -1069,7 +1036,6 @@ def _ncn_risk(
 def _tram_network_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get tram network risk and write to file.
 
@@ -1092,7 +1058,7 @@ def _tram_network_risk(
             "rail_use": "railway_use",
             "track_rep": "track_representation",
         },
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
@@ -1110,7 +1076,6 @@ def _tram_network_risk(
 def _rapid_transport_network_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
-    risk_cols: list[str],
 ) -> None:
     """Get rapid transport network risk and write to file.
 
@@ -1135,7 +1100,7 @@ def _rapid_transport_network_risk(
             "rail_use": "railway_use",
             "track_rep": "track_representation",
         },
-        risk_cols_order=risk_cols,
+        risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
