@@ -3,11 +3,33 @@
 # Model Section Switches
 switches:
   # If running from scratch using only the raw input files these switches should all be true
-  run_data_cleaning: false
-  run_functional_rules: true
+  run_data_cleaning: true
+  run_functional_rules: false
   run_layering: false
+
+  # Infrastructure switches 
+  all_roads: true
+  noham_roads: true
+
+  passenger_rail: true
+  freight_rail: true
+
+  airports: false
+  bus_stops: false
+  petrol_stations: false
+  charging_sites: false
+  national_cycle_network: false
+  train_stations: false
+  tram_stations: false
+  rapid_transport_stations: false
+  ferry_terminals: false
+  bus_coach_stations: false
+  tram_network: true
+  rapid_transport_network: false
+
+  
   # True if overlaying the flood data directly to retain maximum spatial detail (this takes months), False if upscaling flood data to 1km grid
-  flood_overlay_direct: true
+  flood_overlay_direct: false
 
   # True if the raw flood data from Defra data services needs to be extracted from the zip files (this is time consuming)
   flood_zip_extract: false
@@ -19,18 +41,37 @@ switches:
   create_flood_tiles: false
 
 
+parameters:
+  # Name of Sub-National Transport Body to run the tool for (this must exactly match the name in the boundary data)
+  # Should be empty if running for CA rather than STB
+  # Options include: 'Transport for the North' (model only works for North of England at present)
+  stb:
+
+  # Name of Combined Authority to run the tool for (this must exactly match the name in the boundary data)
+  # Should be empty if running for STB rather than CA
+  # Options include: 'Greater Manchester', 'South Yorkshire', 'West Yorkshire', 'Liverpool City Region', 'Tees Valley', 
+  #                  'York and North Yorkshire', 'North East', 'Hull and East Yorkshire', 'Lancashire'
+  ca: South Yorkshire
+
+
 ###### FILE PATHS ######
 
 paths:
-  root: D:/Climate Vulnerability Tool/Data
+  root: D:/Climate Vulnerability Tool/Localisation/v1/Data # This is the root of any outputs of the model
   raw_input: D:/Climate Vulnerability Tool/Data/raw inputs
 
 other_input:
-  boundary_path: D:/Climate Vulnerability Tool/Data/raw inputs/Other/TfN Boundary/Transport_for_the_north_boundary_2020_generalised.shp
+  # If using a specific boundary file rather than from OpenGeographyPortal, provide the path here, otherwise leave empty
+  boundary_path:
+  stb_path: D:/Climate Vulnerability Tool/Data/raw inputs/Other/STB_2023/STB_Boundary_2023.shp
+  ca_path: D:/Climate Vulnerability Tool/Data/raw inputs/Other/Combined_Authorities_December_2025_Boundaries_EN_BFC.gpkg
 
 infrastructure:
   road:
-    os_road: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/TfN OS Open Roads/os_open_gb_road_links_tfn.shp
+    os_road:
+      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/oproad_gpkg_gb.zip
+      file_path: Data/oproad_gb.gpkg
+      output_path: 
     noham:
       "current": 
           year: 2023
@@ -39,7 +80,7 @@ infrastructure:
           year: 2048
           file_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2048/NoHAM_Decarb_DM_Core_2048_carbon.shp
   rail:
-    tfn_rail_links: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/OS Rail Network/TfN_Area_tfn_ntwk_railwaylink.gpkg
+    rail_links: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/OS Rail Network/TfN_Area_tfn_ntwk_railwaylink.gpkg
   other:
     bus_stops:
       north_east: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ne.csv
@@ -50,6 +91,7 @@ infrastructure:
     poi_uk:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/poi_uk.zip
       file_path: poi_uk.gpkg
+      output_path: 
     zapmap: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/ZapMap/ZapMap Site Devices.csv
     airports: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/TfN Airports/tfn_airports.shp
 
@@ -66,36 +108,47 @@ hazards:
     rain_days:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_10mm_Rain_Days_1991_2020.zip
       file_path: Annual_Count_of_10mm_Rain_Days_1991-2020.shp
+      output_path: 
     extreme_summer_days:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Extreme_Summer_Days_Projections_12km_Grid.zip
       file_path: annual_count_of_extreme_summer_days_projections_12km.shp
+      output_path: 
     frost_days:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Frost_Days_Projections_12km_Grid.zip
       file_path: annual_count_of_frost_days_projections_12km.shp
+      output_path: 
     hot_days:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Hot_Days___Projections__12km_grid.zip
       file_path: annual_count_of_hot_summer_days_projections_12km.shp
+      output_path: 
     icing_days:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Icing_Days___Projections__12km_grid.zip
       file_path: annual_count_of_icing_days_projections_12km.shp
+      output_path: 
     wdr_index:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Index_of_Wind_Driven_Rain_Projections_5km.zip
       file_path: Annual_Index_of_Wind_Driven_Rain_-_Projections_(5km).shp
+      output_path: 
     drought_index:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Drought_Severity_Index_12_Month_Accumulations.zip
       file_path: Drought_Severity_Index_12_Month_Accumulations_-_Projections.shp
+      output_path: 
     max_temp_summer:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Summer_Maximum_Temperature_Change___Projections_12km_grid.zip
       file_path: summer_maximum_temperature_change_projections_12km.shp
+      output_path: 
     precip_summer:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Summer_Precipitation_Change___Projections_12km_grid.zip
       file_path: summer_precipitation_change_projections_12km.shp
+      output_path: 
     min_temp_winter:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Winter_Minimum_Temperature_Change___Projections_12km_grid.zip
       file_path: winter_minimum_temperature_change_projections_12km.shp
+      output_path: 
     precip_winter:
       zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Winter_Precipitation_Change___Projections_12km_grid.zip
       file_path: winter_precipitation_change_projections_12km.shp
+      output_path: 
   flooding:
     flood_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Flooding
   ground_stability:
@@ -115,6 +168,7 @@ impact:
   freight_demand: D:/Climate Vulnerability Tool/Data/raw inputs/Impact/Freight/rail_freight_network_demand.gpkg
   noham_demand:
     zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Impact/NoHAM Link Flows/input h5s.7z
+    file_path: 
     output_path: D:/Climate Vulnerability Tool/Data/raw inputs/Impact/NoHAM Link Flows/h5 files
 
 

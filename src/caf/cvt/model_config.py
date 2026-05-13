@@ -1,8 +1,18 @@
 """Module for setting up the model configuration."""
 
 import pathlib
+from typing import Annotated, Self
 
 import caf.toolkit as ctk
+import pydantic
+
+### FUNCTIONS
+
+def _check_none(value: str) -> str | None:
+    value = value.strip()
+    if value in ("", "null"):
+        return None
+    return value
 
 ### CONFIG SET UP
 
@@ -12,9 +22,9 @@ class ZipFileEntry(ctk.BaseConfig):
 
     zip_path: pathlib.Path
     """Path to the zip file"""
-    file_path: str | None = None
+    file_path: Annotated[str | None, pydantic.BeforeValidator(_check_none)] = None
     """Path within the zip file."""
-    output_path: pathlib.Path | None = None
+    output_path: Annotated[pathlib.Path | None, pydantic.BeforeValidator(_check_none)] = None
     """Output path for the extracted file"""
 
 
@@ -71,11 +81,17 @@ class OtherInput(ctk.BaseConfig):
 
     Attributes
     ----------
-    boundary_path : pathlib.Path
-        Path to the STB boundary which the model is running for.
+    boundary_path : pathlib.Path | None = None
+        Path to the specific boundary file of the region which the model is running for.
+    stb_path : pathlib.Path
+        Path to the boundary file of all STBs.
+    ca_path : pathlib.Path
+        Path to the boundary file of all CAs.
     """
 
-    boundary_path: pathlib.Path
+    boundary_path: Annotated[pathlib.Path | None, pydantic.BeforeValidator(_check_none)] = None
+    stb_path: pathlib.Path
+    ca_path: pathlib.Path
 
 
 class NoHAMEntry(ctk.BaseConfig):
@@ -98,13 +114,13 @@ class Road(ctk.BaseConfig):
 
     Attributes
     ----------
-    os_road : pathlib.Path
-        Path to the OS road data.
+    os_road : ZipFileEntry
+        Configuration for the OS road zip file entry.
     noham: dict[str, NoHAMEntry]
         Dictionary containing scenario linked to year and file path in a NoHAM entry class.
     """
 
-    os_road: pathlib.Path
+    os_road: ZipFileEntry
     noham: dict[str, NoHAMEntry]
 
 
@@ -113,11 +129,11 @@ class Rail(ctk.BaseConfig):
 
     Attributes
     ----------
-    tfn_rail_links : pathlib.Path
-        Path to the TfN rail links data.
+    rail_links : pathlib.Path
+        Path to the rail links data.
     """
 
-    tfn_rail_links: pathlib.Path
+    rail_links: pathlib.Path
 
 
 class Other(ctk.BaseConfig):
@@ -126,7 +142,7 @@ class Other(ctk.BaseConfig):
     Attributes
     ----------
     bus_stops : dict[str, pathlib.Path]
-        Mapping of region name to bus stips data path.
+        Mapping of region name to bus stops data path.
     ncn_sustrans : pathlib.Path
         Path to the NCN Sustrans data.
     os_mmrn : pathlib.Path
@@ -335,6 +351,38 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to run functional rules.
     run_layering : bool
         Whether to run layering.
+    all_roads : bool
+        Whether to include all roads in the analysis.
+    noham_roads : bool
+        Whether to include NoHAM roads in the analysis.
+    passenger_rail : bool
+        Whether to include passenger rail in the analysis.
+    freight_rail : bool
+        Whether to include freight rail in the analysis.
+    airports : bool
+        Whether to include airports in the analysis.
+    bus_stops : bool
+        Whether to include bus stops in the analysis.
+    petrol_stations : bool
+        Whether to include petrol stations in the analysis.
+    charging_sites : bool
+        Whether to include EV charging sites in the analysis.
+    national_cycle_network : bool
+        Whether to include the national cycle network in the analysis.
+    train_stations : bool
+        Whether to include train stations in the analysis.
+    tram_stations : bool
+        Whether to include tram stations in the analysis.
+    rapid_transport_stations : bool
+        Whether to include rapid transport stations in the analysis.
+    ferry_terminals : bool
+        Whether to include ferry terminals in the analysis.
+    bus_coach_stations : bool
+        Whether to include bus coach stations in the analysis.
+    tram_network : bool
+        Whether to include the tram network in the analysis.
+    rapid_transport_network : bool
+        Whether to include the rapid transport network in the analysis.
     flood_overlay_direct: bool
         Whether to use a direct overlay of flood data.
     flood_zip_extract : bool
@@ -347,14 +395,55 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to create flood tiles.
     """
 
-    run_data_cleaning: bool = False
-    run_functional_rules: bool = False
-    run_layering: bool = False
+    run_data_cleaning: bool
+    run_functional_rules: bool
+    run_layering: bool
+
+    all_roads: bool
+    noham_roads: bool
+    passenger_rail: bool
+    freight_rail: bool
+    airports: bool
+    bus_stops: bool
+    petrol_stations: bool
+    charging_sites: bool
+    national_cycle_network: bool
+    train_stations: bool
+    tram_stations: bool
+    rapid_transport_stations: bool
+    ferry_terminals: bool
+    bus_coach_stations: bool
+    tram_network: bool
+    rapid_transport_network: bool
+
+
     flood_overlay_direct: bool = False
     flood_zip_extract: bool = False
     noham_zip_extract: bool = False
     create_flood_grid: bool = False
     create_flood_tiles: bool = False
+
+class ParameterConfig(ctk.BaseConfig):
+    """Configuration for model parameters.
+
+    Attributes
+    ----------
+    stb : str | None = None
+        Name of Sub-National Transport Body to run the tool for (this must exactly match the
+        name in the boundary data). Should be empty if running for a CA rather than STB.
+    ca : str | None = None
+        Name of Combined Authority to run the tool for (this must exactly match the name in the
+        boundary data). Should be empty if running for a STB rather than CA.
+    """
+
+    stb: Annotated[str | None, pydantic.BeforeValidator(_check_none)] = None
+    ca: Annotated[str | None, pydantic.BeforeValidator(_check_none)] = None
+
+    @pydantic.model_validator(mode="after")
+    def _check(self) -> Self:
+        if not ((self.stb is None) ^ (self.ca is None)):
+            raise ValueError("Exactly one of 'stb' or 'ca' must be provided, but not both.")
+        return self
 
 
 # -------------------------
@@ -369,6 +458,8 @@ class Config(ctk.BaseConfig):
     ----------
     switches : SwitchConfig
         Configuration for model switches.
+    parameters: ParameterConfig
+        Configuration for model parameters.
     paths : PathConfig
         Configuration for base paths.
     infrastructure : InfrastructureConfig
@@ -380,6 +471,7 @@ class Config(ctk.BaseConfig):
     """
 
     switches: SwitchConfig
+    parameters: ParameterConfig
     paths: PathConfig
     other_input: OtherInput
     infrastructure: InfrastructureConfig
