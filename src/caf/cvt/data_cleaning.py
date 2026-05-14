@@ -353,7 +353,7 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = _get_boundary(config)
 
-    _clean_infrastructure(config, boundary)
+    #_clean_infrastructure(config, boundary)
     _clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
@@ -591,7 +591,7 @@ def _clean_other(
     if config.switches.charging_sites:
         LOG.info("Cleaning charging sites data...")
         _clean_charging_sites(config, boundary)
-    if config.switches.ncn:
+    if config.switches.national_cycle_network:
         LOG.info("Cleaning NCN data...")
         _clean_ncn(config, boundary)
     if config.switches.train_stations:
@@ -944,7 +944,7 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
 def _clean_hazards(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean hazard data ready for analysis."""
     LOG.info("Cleaning hazard data...")
-    _clean_extreme_weather(config, boundary)
+    #_clean_extreme_weather(config, boundary)
     _clean_flooding(config, boundary)
     _clean_ground_stability(config, boundary)
     _clean_coastal_erosion(config, boundary)
