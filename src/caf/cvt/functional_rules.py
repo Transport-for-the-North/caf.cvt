@@ -403,12 +403,12 @@ def apply_functional_rules(config: model_config.Config) -> None:
     """
     boundary = data_cleaning.get_boundary(config)
 
-    #_extreme_weather_index(config)
-    #if config.switches.flood_overlay_direct:
-     #   _flooding_index_direct(config, boundary)
-    #else:
-     #   _flooding_index(config, boundary)
-    #_ground_stability_index(config)
+    _extreme_weather_index(config)
+    if config.switches.flood_overlay_direct:
+        _flooding_index_direct(config, boundary)
+    else:
+        _flooding_index(config, boundary)
+    _ground_stability_index(config)
     _coastal_erosion_index(config)
 
 

@@ -390,10 +390,19 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     os_road = gpd.read_file(
         f"zip://{config.infrastructure.road.os_road.zip_path}!{config.infrastructure.road.os_road.file_path}",
         mask=boundary,
-        columns=["id", "road_classification", "road_function", "form_of_way",
-                 "road_classification_number", "name_1", "road_structure",
-                 "primary_route", "trunk_road", "geometry"],
-        layer="road_link"
+        columns=[
+            "id",
+            "road_classification",
+            "road_function",
+            "form_of_way",
+            "road_classification_number",
+            "name_1",
+            "road_structure",
+            "primary_route",
+            "trunk_road",
+            "geometry",
+        ],
+        layer="road_link",
     )
     len_before_filter = len(os_road)
     os_road = os_road.drop_duplicates(subset=["id", "geometry"])
@@ -411,7 +420,7 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     )
     write_to_file(
         region_os_road,
-        config.paths.model_input / file_paths.OS_ROAD_MODEL_INPUT_PATH ,
+        config.paths.model_input / file_paths.OS_ROAD_MODEL_INPUT_PATH,
     )
 
 
@@ -487,9 +496,7 @@ def _get_rail_links(
     rail_links = rail_links[rail_links["operationalstatus"] == "Active"]
     rail_links = rail_links.drop(columns="operationalstatus")
     rail_links = rail_links[
-        ~rail_links["description"].isin(
-            ["Preserved", "Funicular", "Mineral", "Static Museum"]
-        )
+        ~rail_links["description"].isin(["Preserved", "Funicular", "Mineral", "Static Museum"])
     ]
     rail_links = rail_links.drop_duplicates(subset=["osid", "geometry"])
     rail_links[
@@ -545,9 +552,8 @@ def _clean_passenger_rail(
 
 
 def _clean_freight_rail(
-        config: model_config.Config,
-        region_rail_links: gpd.GeoDataFrame
-    ) -> None:
+    config: model_config.Config, region_rail_links: gpd.GeoDataFrame
+) -> None:
     """Filter OS rail data to freight rail network, then write to file."""
     len_before_filter = len(region_rail_links)
     region_freight_rail = region_rail_links[
@@ -572,7 +578,7 @@ def _clean_freight_rail(
 def _clean_other(
     config: model_config.Config,
     boundary: gpd.GeoDataFrame,
-    region_rail_links: gpd.GeoDataFrame
+    region_rail_links: gpd.GeoDataFrame,
 ) -> None:
     """Clean all other datasets ready for analysis."""
     LOG.info("Cleaning other infrastructure data...")
@@ -620,8 +626,7 @@ def _clean_airports(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     airports = gpd.read_file(config.infrastructure.other.airports)
     region_airports = clip_to_boundary(airports, boundary)
     write_to_file(
-        region_airports,
-        config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH
+        region_airports, config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH
     )
 
 
@@ -729,7 +734,7 @@ def _clean_tram_stations(config: model_config.Config, boundary: gpd.GeoDataFrame
     )
     write_to_file(
         region_tram_stations,
-        config.paths.model_input / file_paths.TRAM_STATIONS_MODEL_INPUT_PATH
+        config.paths.model_input / file_paths.TRAM_STATIONS_MODEL_INPUT_PATH,
     )
 
 
@@ -808,9 +813,8 @@ def _clean_bus_coach_stations(config: model_config.Config, boundary: gpd.GeoData
 
 
 def _clean_tram_network(
-        config: model_config.Config,
-        region_rail_links: gpd.GeoDataFrame
-    ) -> None:
+    config: model_config.Config, region_rail_links: gpd.GeoDataFrame
+) -> None:
     """Filter OS rail links for tram network, then write to file."""
     len_before_filter = len(region_rail_links)
     region_tram_links = region_rail_links[
@@ -1877,7 +1881,7 @@ def _clean_ground_instability_zones(
         LOG.info("Ground Instability Zones layer empty after filtering. Writing empty file.")
         write_to_file(
             gpd.GeoDataFrame(columns=["smp_no", "geometry"], geometry="geometry", crs=BNG_CRS),
-            config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH
+            config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH,
         )
         return
     len_before_filter = len(ncerm_giz)
@@ -1910,9 +1914,7 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
             LOG.info("NCERM %s layer empty after filtering. Writing empty file.", year)
             write_to_file(
                 gpd.GeoDataFrame(
-                    columns=["smp_name", "geometry"],
-                    geometry="geometry",
-                    crs=BNG_CRS
+                    columns=["smp_name", "geometry"], geometry="geometry", crs=BNG_CRS
                 ),
                 config.paths.model_input
                 / file_paths.NCERM_MODEL_INPUT_PATH
@@ -2210,7 +2212,5 @@ def _merge_noham_flow_network(
         how="left",  # Keep all network, adding flows where available
     )
     return gpd.GeoDataFrame(
-        region_noham_net_flows,
-        geometry="geometry",
-        crs=region_noham_link.crs
+        region_noham_net_flows, geometry="geometry", crs=region_noham_link.crs
     )

@@ -18,9 +18,7 @@ FREIGHT_RAIL_MODEL_INPUT_PATH = pathlib.Path(
 
 AIRPORTS_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/Airports/airports.gpkg")
 
-BUS_STOPS_MODEL_INPUT_PATH = pathlib.Path(
-    "Infrastructure/Other/Bus Stops/bus_stops.gpkg"
-)
+BUS_STOPS_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/Bus Stops/bus_stops.gpkg")
 
 PETROL_STATIONS_MODEL_INPUT_PATH = pathlib.Path(
     "Infrastructure/Other/Petrol Stations/petrol_stations.gpkg"
@@ -51,9 +49,7 @@ RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH = pathlib.Path(
 CHARGING_SITES_MODEL_INPUT_PATH = pathlib.Path(
     "Infrastructure/Other/EV Charging Sites/chg_sites.gpkg"
 )
-NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH = pathlib.Path(
-    "Infrastructure/Other/NCN/ncn.gpkg"
-)
+NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/NCN/ncn.gpkg")
 
 # Hazards Model Inputs Paths
 HAZARD_GRID_MODEL_INPUT_PATH = pathlib.Path(
@@ -108,12 +104,8 @@ FLOOD_RIVERS_SEA_MODEL_INPUT_PATH = pathlib.Path("Hazards/Flooding/RoFRS/rofrs.g
 FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Flooding/RoFSW CC/rofsw_cc.gpkg"
 )
-FLOOD_SURFACE_WATER_MODEL_INPUT_PATH = pathlib.Path(
-    "Hazards/Flooding/RoFSW/rofsw.gpkg"
-)
-GEOSURE_MODEL_INPUT_PATH = pathlib.Path(
-    "Hazards/Ground Stability/GeoSure/geosure.gpkg"
-)
+FLOOD_SURFACE_WATER_MODEL_INPUT_PATH = pathlib.Path("Hazards/Flooding/RoFSW/rofsw.gpkg")
+GEOSURE_MODEL_INPUT_PATH = pathlib.Path("Hazards/Ground Stability/GeoSure/geosure.gpkg")
 GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Ground Stability/BGS Shrink Swell"
 )
@@ -140,9 +132,7 @@ TILE_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Other/tiles.gpkg")
 FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
     "Flood Risk/flood_risk_tile_overlay.gpkg"
 )
-FLOOD_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
-    "Flood Risk/flood_risk_direct.gpkg"
-)
+FLOOD_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Flood Risk/flood_risk_direct.gpkg")
 FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Flood Risk")
 
 GROUND_STABILITY_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(

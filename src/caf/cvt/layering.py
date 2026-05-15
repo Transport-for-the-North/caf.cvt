@@ -249,8 +249,10 @@ def _get_road_risk(
 ) -> None:
     """Layer OS Open Roads and NoHAM with hazards to assign risk."""
     LOG.info("Calculating road risk...")
-    _os_open_road_risk(config, hazard_layers)
-    _noham_road_risk(config, hazard_layers)
+    if config.switches.all_roads:
+        _os_open_road_risk(config, hazard_layers)
+    if config.switches.noham_roads:
+        _noham_road_risk(config, hazard_layers)
     LOG.info("Road risk calculation complete.")
 
 
@@ -494,8 +496,10 @@ def _get_rail_risk(
 ) -> None:
     """Layer passenger rail and freight rail network with hazard to assign risk."""
     LOG.info("Calculating rail risk...")
-    _passenger_rail_risk(config, hazard_layers)
-    _freight_rail_risk(config, hazard_layers)
+    if config.switches.passenger_rail:
+        _passenger_rail_risk(config, hazard_layers)
+    if config.switches.freight_rail:
+        _freight_rail_risk(config, hazard_layers)
     LOG.info("Rail risk calculation complete.")
 
 
@@ -630,18 +634,30 @@ def _get_other_risk(
 ) -> None:
     """Layer other infrastructure with hazards to assign risk."""
     LOG.info("Calculating risk for other infrastructure...")
-    _train_stations_risk(config, hazard_layers)
-    _ev_charging_sites_risk(config, hazard_layers)
-    _airports_risk(config, hazard_layers)
-    _bus_coach_stations_risk(config, hazard_layers)
-    _bus_stops_risk(config, hazard_layers)
-    _tram_stations_risk(config, hazard_layers)
-    _rapid_transport_stations_risk(config, hazard_layers)
-    _ferry_terminals_risk(config, hazard_layers)
-    _petrol_stations_risk(config, hazard_layers)
-    _ncn_risk(config, hazard_layers)
-    _tram_network_risk(config, hazard_layers)
-    _rapid_transport_network_risk(config, hazard_layers)
+    if config.switches.train_stations:
+        _train_stations_risk(config, hazard_layers)
+    if config.switches.ev_charging_sites:
+        _ev_charging_sites_risk(config, hazard_layers)
+    if config.switches.airports:
+        _airports_risk(config, hazard_layers)
+    if config.switches.bus_coach_stations:
+        _bus_coach_stations_risk(config, hazard_layers)
+    if config.switches.bus_stops:
+        _bus_stops_risk(config, hazard_layers)
+    if config.switches.tram_stations:
+        _tram_stations_risk(config, hazard_layers)
+    if config.switches.rapid_transport_stations:
+        _rapid_transport_stations_risk(config, hazard_layers)
+    if config.switches.ferry_terminals:
+        _ferry_terminals_risk(config, hazard_layers)
+    if config.switches.petrol_stations:
+        _petrol_stations_risk(config, hazard_layers)
+    if config.switches.ncn:
+        _ncn_risk(config, hazard_layers)
+    if config.switches.tram_network:
+        _tram_network_risk(config, hazard_layers)
+    if config.switches.rapid_transport_network:
+        _rapid_transport_network_risk(config, hazard_layers)
     LOG.info("Risk calculation for other infrastructure complete.")
 
 

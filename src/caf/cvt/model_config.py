@@ -8,11 +8,13 @@ import pydantic
 
 ### FUNCTIONS
 
+
 def _check_none(value: str) -> str | None:
     value = value.strip()
     if value in ("", "null"):
         return None
     return value
+
 
 ### CONFIG SET UP
 
@@ -426,6 +428,7 @@ class SwitchConfig(ctk.BaseConfig):
     create_flood_tiles: bool = False
 
     noham_zip_extract: bool = False
+
 
 class ParameterConfig(ctk.BaseConfig):
     """Configuration for model parameters.
