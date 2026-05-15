@@ -353,7 +353,7 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = _get_boundary(config)
 
-    #_clean_infrastructure(config, boundary)
+    _clean_infrastructure(config, boundary)
     _clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
@@ -944,7 +944,7 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
 def _clean_hazards(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean hazard data ready for analysis."""
     LOG.info("Cleaning hazard data...")
-    #_clean_extreme_weather(config, boundary)
+    _clean_extreme_weather(config, boundary)
     _clean_flooding(config, boundary)
     _clean_ground_stability(config, boundary)
     _clean_coastal_erosion(config, boundary)
@@ -1711,6 +1711,8 @@ def _clean_flood(
                 climate_change_switch=climate_change_switch,
                 rename_risk_col=rename_risk_col,
             )
+            if region_flood_data is None:
+                continue
             if first_write:
                 write_to_file(region_flood_data, config.paths.model_input / out_path, mode="w")
                 first_write = False
@@ -1775,6 +1777,11 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
 
     region_geosure_layers = {}
     for code, geosure_data in geosure_layers.items():
+        if geosure_data.empty:
+            raise ValueError(
+                f"GeoSure {code} layer is empty after reading. "
+                f"Check the source file and boundary."
+            )
         len_before_filter = len(geosure_data)
         geosure_data_clean = geosure_data.rename(columns={"CLASS": f"{code}_risk"})
         region_geosure_layers[code] = clip_to_boundary(geosure_data_clean, boundary)
@@ -1823,6 +1830,9 @@ def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     """Read and clean GeoClimate Shrink-Swell data, then write to file."""
     for year, filepath in config.hazards.ground_stability.geo_shrink_swell.items():
         geoclimate_data = gpd.read_file(filepath, mask=boundary, columns=["CLASS"])
+        if geoclimate_data.empty:
+            LOG.info("GeoClimate shrink-swell %s layer empty. Continuing.", year)
+            continue
         geoclimate_data = geoclimate_data.rename(
             columns={"CLASS": "shrink_swell_geoclimate_risk"}
         )
@@ -1866,6 +1876,9 @@ def _clean_ground_instability_zones(
         mask=boundary,
         columns=["smp_no"],
     )
+    if ncerm_giz.empty:
+        LOG.info("Ground Instability Zones layer empty. Continuing.")
+        return
     len_before_filter = len(ncerm_giz)
     region_ncerm_giz = clip_to_boundary(ncerm_giz, boundary)
     filter_removed = len_before_filter - len(region_ncerm_giz)
@@ -1892,6 +1905,9 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
             mask=boundary,
             columns=["smp_name"],
         )
+        if erosion_data.empty:
+            LOG.info("NCERM %s layer empty. Continuing.", year)
+            continue
         len_before_filter = len(erosion_data)
         region_erosion_data = clip_to_boundary(erosion_data, boundary)
         filter_removed = len_before_filter - len(region_erosion_data)
@@ -2002,13 +2018,13 @@ def _clean_noham_flows(config: model_config.Config) -> None:
             region_noham_flows,
             config.paths.model_input
             / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-            / f"region_noham_{scenario}.gpkg",
+            / f"noham_{scenario}.gpkg",
         )
         write_to_file(
             region_noham_net_flows,
             config.paths.model_input
             / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
-            / f"region_noham_net_flows_{scenario}.gpkg",
+            / f"noham_net_flows_{scenario}.gpkg",
         )
 
 
