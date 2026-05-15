@@ -3,8 +3,8 @@
 # Model Section Switches
 switches:
   # If running from scratch using only the raw input files these switches should all be true
-  run_data_cleaning: true
-  run_functional_rules: false
+  run_data_cleaning: false
+  run_functional_rules: true
   run_layering: false
 
   # Infrastructure switches 
@@ -28,17 +28,24 @@ switches:
   rapid_transport_network: false
 
   
-  # True if overlaying the flood data directly to retain maximum spatial detail (this takes months), False if upscaling flood data to 1km grid
-  flood_overlay_direct: false
+
 
   # True if the raw flood data from Defra data services needs to be extracted from the zip files (this is time consuming)
   flood_zip_extract: false
-  # True if the raw NoHAM h5 files need to be extracted from zip file
-  noham_zip_extract: false
   # True if the flood grid needs to be created before upscaling the flood data to this grid
   create_flood_grid: false
+
+  # True if overlaying the flood data directly to retain maximum spatial detail (this takes several months), 
+  # False if upscaling flood data to 1km grid
+  compute_flood_overlay: false
+  # True if using the direct flood overlay to calculate flood risk
+  flood_overlay_direct: true
   # True if the flood tiles need to be created before using these in the direct flood overlay
   create_flood_tiles: false
+
+  # True if the raw NoHAM h5 files need to be extracted from zip file
+  noham_zip_extract: false
+
 
 
 parameters:

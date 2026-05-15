@@ -134,9 +134,6 @@ def write_to_file(
         parents=True, exist_ok=True
     )  # Ensure the directory exists, make one if not
 
-    if data.empty:
-        raise ValueError(f"GeoDataFrame is empty. Nothing written to {output_path}")
-
     ext = pathlib.Path(output_path).suffix.lower()
 
     driver_map = {".gpkg": "GPKG", ".shp": "ESRI Shapefile"}
@@ -222,7 +219,7 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame, track_part: bool = False) -> gpd.
     return exploded_gdf.drop(columns=["part"])
 
 
-def _get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
+def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
     """Get the boundary to use for clipping and filtering datasets based on the config."""
     if config.other_input.boundary_path is not None:
         LOG.info("Using specific boundary file: %s", config.other_input.boundary_path)
@@ -351,7 +348,7 @@ def data_cleaning(config: model_config.Config) -> None:
     config : Config
         Main config for the model, containing paths and settings.
     """
-    boundary = _get_boundary(config)
+    boundary = get_boundary(config)
 
     _clean_infrastructure(config, boundary)
     _clean_hazards(config, boundary)
@@ -1852,7 +1849,7 @@ def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -
             region_geoclimate_data,
             config.paths.model_input
             / file_paths.GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH
-            / f"region_bgs_ss_{year}.gpkg",
+            / f"bgs_ss_{year}.gpkg",
         )
 
 
@@ -1877,7 +1874,11 @@ def _clean_ground_instability_zones(
         columns=["smp_no"],
     )
     if ncerm_giz.empty:
-        LOG.info("Ground Instability Zones layer empty. Continuing.")
+        LOG.info("Ground Instability Zones layer empty after filtering. Writing empty file.")
+        write_to_file(
+            gpd.GeoDataFrame(columns=["smp_no", "geometry"], geometry="geometry", crs=BNG_CRS),
+            config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH
+        )
         return
     len_before_filter = len(ncerm_giz)
     region_ncerm_giz = clip_to_boundary(ncerm_giz, boundary)
@@ -1906,8 +1907,20 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
             columns=["smp_name"],
         )
         if erosion_data.empty:
-            LOG.info("NCERM %s layer empty. Continuing.", year)
-            continue
+            LOG.info("NCERM %s layer empty after filtering. Writing empty file.", year)
+            write_to_file(
+                gpd.GeoDataFrame(
+                    columns=["smp_name", "geometry"],
+                    geometry="geometry",
+                    crs=BNG_CRS
+                ),
+                config.paths.model_input
+                / file_paths.NCERM_MODEL_INPUT_PATH
+                / f"ncerm_smp_{year}_70CC.gpkg",
+            )
+            if year == "2055":
+                continue
+            return
         len_before_filter = len(erosion_data)
         region_erosion_data = clip_to_boundary(erosion_data, boundary)
         filter_removed = len_before_filter - len(region_erosion_data)
@@ -1924,7 +1937,7 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
             region_erosion_data,
             config.paths.model_input
             / file_paths.NCERM_MODEL_INPUT_PATH
-            / f"region_ncerm_smp_{year}_70CC.gpkg",
+            / f"ncerm_smp_{year}_70CC.gpkg",
         )
 
 

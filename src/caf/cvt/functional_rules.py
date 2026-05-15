@@ -401,14 +401,14 @@ def apply_functional_rules(config: model_config.Config) -> None:
     config : Config
         Main config for the model, containing paths and settings.
     """
-    boundary = gpd.read_file(config.other_input.boundary_path)
+    boundary = data_cleaning.get_boundary(config)
 
-    _extreme_weather_index(config)
-    if config.switches.flood_overlay_direct:
-        _flooding_index_direct(config, boundary)
-    else:
-        _flooding_index(config, boundary)
-    _ground_stability_index(config)
+    #_extreme_weather_index(config)
+    #if config.switches.flood_overlay_direct:
+     #   _flooding_index_direct(config, boundary)
+    #else:
+     #   _flooding_index(config, boundary)
+    #_ground_stability_index(config)
     _coastal_erosion_index(config)
 
 
@@ -1060,26 +1060,38 @@ def _flooding_index_direct(
 ) -> gpd.GeoDataFrame:
     """Overlay all four flood datasets using a tiled chunking method."""
     LOG.info("Combining all four flood datasets...")
-    _tile_polygon_flood_overlay(
-        config,
-        boundary,
-        [
-            config.paths.model_input / file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
-            config.paths.model_input
-            / file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-            config.paths.model_input / file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
-            config.paths.model_input
-            / file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-        ],
-        crs=data_cleaning.BNG_CRS,
-        tile_size_m=_FLOOD_TILE_SIZE_M,
-    )
 
+    # If the direct tiled overlay hasn't been done yet, do it.
+    if config.switches.compute_flood_overlay:
+        _tile_polygon_flood_overlay(
+            config,
+            boundary,
+            [
+                config.paths.model_input / file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
+                config.paths.model_input
+                / file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+                config.paths.model_input / file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
+                config.paths.model_input
+                / file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+            ],
+            crs=data_cleaning.BNG_CRS,
+            tile_size_m=_FLOOD_TILE_SIZE_M,
+        )
+
+    # Read the direct overlay result, and filter to region
     tfn_flood_risk = gpd.read_file(
         config.paths.model_interim_output
-        / file_paths.FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH
+        / file_paths.FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH,
+        mask=boundary,
+        layer="flood_overlay",
     )
 
+    # Map original risk categories to numeric scores
+    for col in ["rivers_sea_flood_risk_current", "rivers_sea_flood_risk_forecast",
+                "surface_water_flood_risk_current", "surface_water_flood_risk_forecast"]:
+        tfn_flood_risk[col] = tfn_flood_risk[col].map(_FLOOD_RISK_SCORE_MAP)
+
+    # Fill NA values with 0 (no risk) since no data means no risk in the underlying data
     tfn_flood_risk = tfn_flood_risk.fillna(0)
 
     tfn_flood_risk = min_max_scaling_pair(
@@ -1217,7 +1229,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
         tfn_ss[year] = gpd.read_file(
             config.paths.model_input
             / file_paths.GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH
-            / f"tfn_bgs_ss_{year}.gpkg"
+            / f"bgs_ss_{year}.gpkg"
         )
         tfn_ss[year]["shrink_swell_geoclimate_risk"] = tfn_ss[year][
             "shrink_swell_geoclimate_risk"
@@ -1294,8 +1306,28 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
         tfn_ncerm[year] = gpd.read_file(
             config.paths.model_input
             / file_paths.NCERM_MODEL_INPUT_PATH
-            / f"tfn_ncerm_smp_{year}_70CC.gpkg"
+            / f"ncerm_smp_{year}_70CC.gpkg"
         )
+        if tfn_ncerm_giz.empty and tfn_ncerm[year].empty:
+            LOG.warning(
+                "Both NCERM and GIZ layers are empty for scenario %s. " \
+                "Coastal erosion risk will be 0 everywhere.",
+                scenario,
+            )
+            if year == "2055":
+                continue
+            data_cleaning.write_to_file(
+                gpd.GeoDataFrame(
+                    columns=["coastal_erosion_risk_current", "coastal_erosion_risk_forecast",
+                             "geometry"],  # Empty GeoDataFrame
+                    geometry="geometry",
+                    crs=data_cleaning.BNG_CRS
+                ),
+                config.paths.model_interim_output
+                / file_paths.COASTAL_EROSION_MODEL_INTERIM_OUTPUT_PATH,
+            )
+            return
+
         tfn_ncerm[year]["erosion_risk"] = 100
 
         tfn_erosion_risk[scenario] = _overlay_and_clean(

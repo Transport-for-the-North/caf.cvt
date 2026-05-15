@@ -383,16 +383,18 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include the tram network in the analysis.
     rapid_transport_network : bool
         Whether to include the rapid transport network in the analysis.
-    flood_overlay_direct: bool
-        Whether to use a direct overlay of flood data.
     flood_zip_extract : bool
         Whether to extract flood zip files.
-    noham_zip_extract : bool
-        Whether to extract NoHAM zip files.
     create_flood_grid : bool
         Whether to create flood grid.
+    compute_flood_overlay: bool
+        Whether to compute the direct flood overlay.
+    flood_overlay_direct: bool
+        Whether to use a direct overlay of flood data.
     create_flood_tiles: bool
         Whether to create flood tiles.
+    noham_zip_extract : bool
+        Whether to extract NoHAM zip files.
     """
 
     run_data_cleaning: bool
@@ -416,12 +418,14 @@ class SwitchConfig(ctk.BaseConfig):
     tram_network: bool
     rapid_transport_network: bool
 
-
-    flood_overlay_direct: bool = False
     flood_zip_extract: bool = False
-    noham_zip_extract: bool = False
     create_flood_grid: bool = False
+
+    compute_flood_overlay: bool = False
+    flood_overlay_direct: bool = False
     create_flood_tiles: bool = False
+
+    noham_zip_extract: bool = False
 
 class ParameterConfig(ctk.BaseConfig):
     """Configuration for model parameters.

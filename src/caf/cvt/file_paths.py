@@ -115,7 +115,7 @@ GEOSURE_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Ground Stability/GeoSure/geosure.gpkg"
 )
 GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH = pathlib.Path(
-    "Hazards/Ground Stability/BGS Shrink Swell/bgs_shrink_swell.gpkg"
+    "Hazards/Ground Stability/BGS Shrink Swell"
 )
 GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Coastal Erosion/NCERM/ncerm_giz.gpkg"
