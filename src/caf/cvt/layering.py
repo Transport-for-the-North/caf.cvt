@@ -214,7 +214,8 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
             / file_paths.EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH
         ),
         "Flooding": gpd.read_file(
-            config.paths.model_interim_output / file_paths.FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH
+            config.paths.model_interim_output
+            / file_paths.FLOOD_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH
         ),
         "Ground Stability": gpd.read_file(
             config.paths.model_interim_output
@@ -265,19 +266,19 @@ def _os_open_road_risk(
 ) -> None:
     """Intersect OS Road infrastructure with hazards, clean output, and write to file."""
     LOG.info("Layering OS Open Roads with hazard risk...")
-    tfn_os_road = gpd.read_file(config.paths.model_input / file_paths.OS_ROAD_MODEL_INPUT_PATH)
+    os_road = gpd.read_file(config.paths.model_input / file_paths.OS_ROAD_MODEL_INPUT_PATH)
 
-    tfn_os_road_risk = _infrastructure_risk_intersect(tfn_os_road, hazard_layers)
+    os_road_risk = _infrastructure_risk_intersect(os_road, hazard_layers)
 
-    tfn_os_road_risk = _prepare_model_output(
-        risk_data=tfn_os_road_risk,
+    os_road_risk = _prepare_model_output(
+        risk_data=os_road_risk,
         drop_cols=[],
         rename_map={"identifier": "id"},
         risk_cols_order=_HAZARD_RISK_COLS,
     )
 
     _split_csv_shapefile(
-        config, tfn_os_road_risk, "id", pathlib.Path("Road") / "OS Roads" / "tfn_os_road_risk"
+        config, os_road_risk, "id", pathlib.Path("Road") / "OS Roads" / "os_road_risk"
     )
     LOG.info("Finished layering OS Open Roads with hazard risk.")
 
@@ -295,42 +296,42 @@ def _noham_road_risk(
     to file.
     """
     LOG.info("Layering NoHAM with hazard risk and calculating impact index...")
-    tfn_noham = {}
-    tfn_noham_risk_scenario = {}
+    noham = {}
+    noham_risk_scenario = {}
     for scenario in functional_rules.SCENARIO_NAMES:
-        tfn_noham[scenario] = gpd.read_file(
+        noham[scenario] = gpd.read_file(
             config.paths.model_input
             / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
-            / f"tfn_noham_net_flows_{scenario}.gpkg"
+            / f"noham_net_flows_{scenario}.gpkg"
         )
-        tfn_noham_risk_scenario[scenario] = _infrastructure_risk_intersect(
-            tfn_noham[scenario], hazard_layers
+        noham_risk_scenario[scenario] = _infrastructure_risk_intersect(
+            noham[scenario], hazard_layers
         )
         other_scenario = "forecast" if scenario == "current" else "current"
         drop_cols = [
             col
-            for col in tfn_noham_risk_scenario[scenario].columns
+            for col in noham_risk_scenario[scenario].columns
             if col.endswith(f"_{other_scenario}")
         ]
-        tfn_noham_risk_scenario[scenario] = tfn_noham_risk_scenario[scenario].drop(
+        noham_risk_scenario[scenario] = noham_risk_scenario[scenario].drop(
             columns=drop_cols
         )
-        tfn_noham_risk_scenario[scenario] = tfn_noham_risk_scenario[scenario].drop_duplicates(
+        noham_risk_scenario[scenario] = noham_risk_scenario[scenario].drop_duplicates(
             subset=["geometry"]
         )
-        tfn_noham_risk_scenario[scenario].columns = [
+        noham_risk_scenario[scenario].columns = [
             col.removesuffix(f"_{scenario}")
-            for col in tfn_noham_risk_scenario[scenario].columns
+            for col in noham_risk_scenario[scenario].columns
         ]
         if scenario == "current":
-            tfn_noham_risk_scenario[scenario]["current_or_forecast"] = "Current"
+            noham_risk_scenario[scenario]["current_or_forecast"] = "Current"
         else:
-            tfn_noham_risk_scenario[scenario]["current_or_forecast"] = "Forecast"
+            noham_risk_scenario[scenario]["current_or_forecast"] = "Forecast"
 
-    tfn_noham_risk_scenario["current"], tfn_noham_risk_scenario["forecast"] = (
+    noham_risk_scenario["current"], noham_risk_scenario["forecast"] = (
         _noham_impact_index(
-            tfn_noham_risk_scenario["current"],
-            tfn_noham_risk_scenario["forecast"],
+            noham_risk_scenario["current"],
+            noham_risk_scenario["forecast"],
         )
     )
 
@@ -338,12 +339,12 @@ def _noham_road_risk(
     non_risk_impact_cols = ["link_id", "current_or_forecast", "geometry"]
 
     # Remove suffixes from risk and impact columns
-    tfn_noham_risk_scenario["current"] = tfn_noham_risk_scenario["current"].rename(
+    noham_risk_scenario["current"] = noham_risk_scenario["current"].rename(
         columns=lambda c: (
             c.removesuffix("_current") if c.removesuffix("_current") in risk_impact_cols else c
         )
     )
-    tfn_noham_risk_scenario["forecast"] = tfn_noham_risk_scenario["forecast"].rename(
+    noham_risk_scenario["forecast"] = noham_risk_scenario["forecast"].rename(
         columns=lambda c: (
             c.removesuffix("_forecast")
             if c.removesuffix("_forecast") in risk_impact_cols
@@ -352,62 +353,62 @@ def _noham_road_risk(
     )
 
     # Concatenate
-    tfn_noham_risk = pd.concat(
-        [tfn_noham_risk_scenario["current"], tfn_noham_risk_scenario["forecast"]],
+    noham_risk = pd.concat(
+        [noham_risk_scenario["current"], noham_risk_scenario["forecast"]],
         ignore_index=True,
     )
 
-    tfn_noham_risk = tfn_noham_risk[
+    noham_risk = noham_risk[
         [*non_risk_impact_cols, *_HAZARD_RISK_COLS, *_NOHAM_IMPACT_COLS]
     ]
 
-    tfn_noham_risk[risk_impact_cols] = tfn_noham_risk[risk_impact_cols].round(1)
-    tfn_noham_risk = tfn_noham_risk.to_crs(data_cleaning.BNG_CRS)
-    tfn_noham_risk = tfn_noham_risk.rename(columns={"link_id": "id"})
-    tfn_noham_risk = tfn_noham_risk.rename(
+    noham_risk[risk_impact_cols] = noham_risk[risk_impact_cols].round(1)
+    noham_risk = noham_risk.to_crs(data_cleaning.BNG_CRS)
+    noham_risk = noham_risk.rename(columns={"link_id": "id"})
+    noham_risk = noham_risk.rename(
         columns={col: f"{col}_score" for col in risk_impact_cols}
     )
 
     _split_csv_shapefile(
-        config, tfn_noham_risk, "id", pathlib.Path("Road") / "NoHAM" / "tfn_noham_risk"
+        config, noham_risk, "id", pathlib.Path("Road") / "NoHAM" / "noham_risk"
     )
 
     LOG.info("Finished layering NoHAM with hazard risk and calculating impact index.")
 
 
 def _noham_impact_index(
-    tfn_noham_c: gpd.GeoDataFrame,
-    tfn_noham_f: gpd.GeoDataFrame,
+    noham_c: gpd.GeoDataFrame,
+    noham_f: gpd.GeoDataFrame,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """Normalise NoHAM demand, then calculate impact index."""
     user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
 
     # Normalise user class demand together
-    tfn_noham_c, tfn_noham_f = _normalise_uc_demand(tfn_noham_c, tfn_noham_f, user_classes)
+    noham_c, noham_f = _normalise_uc_demand(noham_c, noham_f, user_classes)
 
     # Normalise total demand separately
-    tfn_noham_c, tfn_noham_f = _normalise_total_col(
-        tfn_noham_c, tfn_noham_f, "all_vehs_total", "demand"
+    noham_c, noham_f = _normalise_total_col(
+        noham_c, noham_f, "all_vehs_total", "demand"
     )
 
     # Calculate impact scores
-    tfn_noham_c, tfn_noham_f = _calculate_noham_impact(tfn_noham_c, tfn_noham_f, user_classes)
+    noham_c, noham_f = _calculate_noham_impact(noham_c, noham_f, user_classes)
 
     impact_cols_c = [f"{uc}_impact_current" for uc in user_classes] + ["impact_current"]
     impact_cols_f = [f"{uc}_impact_forecast" for uc in user_classes] + ["impact_forecast"]
 
-    tfn_noham_c, tfn_noham_f = _normalise_total_cols(
-        tfn_noham_c, tfn_noham_f, impact_cols_c, impact_cols_f
+    noham_c, noham_f = _normalise_total_cols(
+        noham_c, noham_f, impact_cols_c, impact_cols_f
     )
 
-    tfn_noham_c = tfn_noham_c[
+    noham_c = noham_c[
         ["link_id", "current_or_forecast", "geometry", *_HAZARD_RISK_COLS, *impact_cols_c]
     ]
-    tfn_noham_f = tfn_noham_f[
+    noham_f = noham_f[
         ["link_id", "current_or_forecast", "geometry", *_HAZARD_RISK_COLS, *impact_cols_f]
     ]
 
-    return tfn_noham_c, tfn_noham_f
+    return noham_c, noham_f
 
 
 def _normalise_uc_demand(
@@ -512,14 +513,16 @@ def _passenger_rail_risk(
 ) -> None:
     """Intersect passenger rail network with hazard to assign risk, clean and write to file."""
     LOG.info("Layering passenger rail network with hazard risk...")
-    tfn_rail_network = gpd.read_file(
+    passenger_rail_network = gpd.read_file(
         config.paths.model_input / file_paths.PASSENGER_RAIL_MODEL_INPUT_PATH
     )
 
-    tfn_rail_network_risk = _infrastructure_risk_intersect(tfn_rail_network, hazard_layers)
+    passenger_rail_network_risk = _infrastructure_risk_intersect(
+        passenger_rail_network, hazard_layers
+    )
 
-    tfn_rail_network_risk = _prepare_model_output(
-        risk_data=tfn_rail_network_risk,
+    passenger_rail_network_risk = _prepare_model_output(
+        risk_data=passenger_rail_network_risk,
         drop_cols=[],
         rename_map={
             "osid": "id",
@@ -533,9 +536,9 @@ def _passenger_rail_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_rail_network_risk,
+        passenger_rail_network_risk,
         "id",
-        pathlib.Path("Rail") / "Passenger Rail" / "tfn_passenger_rail_network_risk",
+        pathlib.Path("Rail") / "Passenger Rail" / "passenger_rail_network_risk",
     )
 
     LOG.info("Finished layering passenger rail network with hazard risk.")
@@ -554,23 +557,23 @@ def _freight_rail_risk(
     file.
     """
     LOG.info("Layering freight rail network with hazard risk and calculating impact index...")
-    tfn_freight_network = gpd.read_file(
+    freight_rail_network = gpd.read_file(
         config.paths.model_input / file_paths.FREIGHT_DEMAND_MODEL_INPUT_PATH
     )
 
-    tfn_freight_network_risk = _infrastructure_risk_intersect(
-        tfn_freight_network, hazard_layers
+    freight_rail_network_risk = _infrastructure_risk_intersect(
+        freight_rail_network, hazard_layers
     )
 
-    tfn_freight_network_risk = _freight_impact_index(tfn_freight_network_risk)
+    freight_rail_network_risk = _freight_impact_index(freight_rail_network_risk)
 
     # Set the correct CRS
-    tfn_freight_network_risk = tfn_freight_network_risk.set_crs(
+    freight_rail_network_risk = freight_rail_network_risk.set_crs(
         data_cleaning.BNG_CRS, allow_override=True
     )
 
-    tfn_freight_network_risk = _prepare_model_output(
-        risk_data=tfn_freight_network_risk,
+    freight_rail_network_risk = _prepare_model_output(
+        risk_data=freight_rail_network_risk,
         drop_cols=["dij_id", "distance", "demand_current", "demand_forecast"],
         rename_map={
             "osid": "id",
@@ -584,28 +587,28 @@ def _freight_rail_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_freight_network_risk,
+        freight_rail_network_risk,
         "id",
-        pathlib.Path("Rail") / "Freight Rail" / "tfn_freight_rail_network_risk",
+        pathlib.Path("Rail") / "Freight Rail" / "freight_rail_network_risk",
     )
     LOG.info(
         "Finished layering freight rail network with hazard risk and calculating impact index."
     )
 
 
-def _freight_impact_index(tfn_freight_network_risk: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _freight_impact_index(freight_rail_network_risk: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Calculate impact index using freight demand data and hazard risk."""
-    tfn_freight_network_risk = functional_rules.min_max_scaling_pair(
-        tfn_freight_network_risk, [("demand_current", "demand_forecast")]
+    freight_rail_network_risk = functional_rules.min_max_scaling_pair(
+        freight_rail_network_risk, [("demand_current", "demand_forecast")]
     )
 
-    tfn_freight_network_risk = _calculate_freight_impact(tfn_freight_network_risk)
+    freight_rail_network_risk = _calculate_freight_impact(freight_rail_network_risk)
 
-    tfn_freight_network_risk = functional_rules.min_max_scaling_pair(
-        tfn_freight_network_risk, [("impact_current", "impact_forecast")]
+    freight_rail_network_risk = functional_rules.min_max_scaling_pair(
+        freight_rail_network_risk, [("impact_current", "impact_forecast")]
     )
 
-    return gpd.GeoDataFrame(tfn_freight_network_risk, geometry="geometry", crs="EPSG:4326")
+    return gpd.GeoDataFrame(freight_rail_network_risk, geometry="geometry", crs="EPSG:4326")
 
 
 def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
@@ -628,7 +631,7 @@ def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
 ### OTHER
 
 
-def _get_other_risk(
+def _get_other_risk(  # noqa: C901
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
 ) -> None:
@@ -636,8 +639,8 @@ def _get_other_risk(
     LOG.info("Calculating risk for other infrastructure...")
     if config.switches.train_stations:
         _train_stations_risk(config, hazard_layers)
-    if config.switches.ev_charging_sites:
-        _ev_charging_sites_risk(config, hazard_layers)
+    if config.switches.charging_sites:
+        _charging_sites_risk(config, hazard_layers)
     if config.switches.airports:
         _airports_risk(config, hazard_layers)
     if config.switches.bus_coach_stations:
@@ -652,7 +655,7 @@ def _get_other_risk(
         _ferry_terminals_risk(config, hazard_layers)
     if config.switches.petrol_stations:
         _petrol_stations_risk(config, hazard_layers)
-    if config.switches.ncn:
+    if config.switches.national_cycle_network:
         _ncn_risk(config, hazard_layers)
     if config.switches.tram_network:
         _tram_network_risk(config, hazard_layers)
@@ -680,16 +683,16 @@ def _train_stations_risk(
     Buffer train stations, then intersect with hazard risk, clean output, and write to file.
     """
     LOG.info("Layering train stations with hazard risk...")
-    tfn_train_stations = gpd.read_file(
+    train_stations = gpd.read_file(
         config.paths.model_input / file_paths.TRAIN_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_train_stations = _buffer_geometry(tfn_train_stations, _TRAIN_STATIONS_BUFFER_SIZE_M)
+    train_stations = _buffer_geometry(train_stations, _TRAIN_STATIONS_BUFFER_SIZE_M)
 
-    tfn_train_stations_risk = _infrastructure_risk_intersect(tfn_train_stations, hazard_layers)
+    train_stations_risk = _infrastructure_risk_intersect(train_stations, hazard_layers)
 
-    tfn_train_stations_risk = _prepare_model_output(
-        risk_data=tfn_train_stations_risk,
+    train_stations_risk = _prepare_model_output(
+        risk_data=train_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=_HAZARD_RISK_COLS,
@@ -697,17 +700,16 @@ def _train_stations_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_train_stations_risk,
+        train_stations_risk,
         "id",
-        pathlib.Path("Other") / "Train Stations" / "tfn_train_stations_risk",
+        pathlib.Path("Other") / "Train Stations" / "train_stations_risk",
     )
     LOG.info("Finished layering train stations with hazard risk.")
 
 
 #### EV Charging Sites
 
-
-def _ev_charging_sites_risk(
+def _charging_sites_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
 ) -> None:
@@ -716,16 +718,16 @@ def _ev_charging_sites_risk(
     Buffer charging sites, then intersect with hazard risk, clean output, and write to file.
     """
     LOG.info("Layering EV charging sites with hazard risk...")
-    tfn_chg_sites = gpd.read_file(
+    charging_sites = gpd.read_file(
         config.paths.model_input / file_paths.CHARGING_SITES_MODEL_INPUT_PATH
     )
 
-    tfn_chg_sites = _buffer_geometry(tfn_chg_sites, _CHARGING_SITES_BUFFER_SIZE_M)
+    charging_sites = _buffer_geometry(charging_sites, _CHARGING_SITES_BUFFER_SIZE_M)
 
-    tfn_chg_sites_risk = _infrastructure_risk_intersect(tfn_chg_sites, hazard_layers)
+    charging_sites_risk = _infrastructure_risk_intersect(charging_sites, hazard_layers)
 
-    tfn_chg_sites_risk = _prepare_model_output(
-        risk_data=tfn_chg_sites_risk,
+    charging_sites_risk = _prepare_model_output(
+        risk_data=charging_sites_risk,
         drop_cols=[],
         rename_map={"devices": "installed_devices"},
         risk_cols_order=_HAZARD_RISK_COLS,
@@ -733,9 +735,9 @@ def _ev_charging_sites_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_chg_sites_risk,
+        charging_sites_risk,
         "id",
-        pathlib.Path("Other") / "EV Charging Sites" / "tfn_chg_sites_risk",
+        pathlib.Path("Other") / "EV Charging Sites" / "charging_sites_risk",
     )
     LOG.info("Finished layering EV charging sites with hazard risk.")
 
@@ -752,14 +754,14 @@ def _airports_risk(
     Intersect airports with hazard risk, clean output, and write to file.
     """
     LOG.info("Layering airports with hazard risk...")
-    tfn_airports = gpd.read_file(
+    airports = gpd.read_file(
         config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH
     )
 
-    tfn_airports_risk = _infrastructure_risk_intersect(tfn_airports, hazard_layers)
+    airports_risk = _infrastructure_risk_intersect(airports, hazard_layers)
 
-    tfn_airports_risk = _prepare_model_output(
-        risk_data=tfn_airports_risk,
+    airports_risk = _prepare_model_output(
+        risk_data=airports_risk,
         drop_cols=[],
         rename_map={},
         risk_cols_order=_HAZARD_RISK_COLS,
@@ -767,9 +769,9 @@ def _airports_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_airports_risk,
+        airports_risk,
         "id",
-        pathlib.Path("Other") / "Airports" / "tfn_airports_risk",
+        pathlib.Path("Other") / "Airports" / "airports_risk",
     )
     LOG.info("Finished layering airports with hazard risk.")
 
@@ -787,20 +789,20 @@ def _bus_coach_stations_risk(
     file.
     """
     LOG.info("Layering bus and coach stations with hazard risk...")
-    tfn_bus_coach_stations = gpd.read_file(
+    bus_coach_stations = gpd.read_file(
         config.paths.model_input / file_paths.BUS_COACH_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_bus_coach_stations = _buffer_geometry(
-        tfn_bus_coach_stations, _BUS_COACH_STATIONS_BUFFER_SIZE_M
+    bus_coach_stations = _buffer_geometry(
+        bus_coach_stations, _BUS_COACH_STATIONS_BUFFER_SIZE_M
     )
 
-    tfn_bus_coach_stations_risk = _infrastructure_risk_intersect(
-        tfn_bus_coach_stations, hazard_layers
+    bus_coach_stations_risk = _infrastructure_risk_intersect(
+        bus_coach_stations, hazard_layers
     )
 
-    tfn_bus_coach_stations_risk = _prepare_model_output(
-        risk_data=tfn_bus_coach_stations_risk,
+    bus_coach_stations_risk = _prepare_model_output(
+        risk_data=bus_coach_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=_HAZARD_RISK_COLS,
@@ -808,9 +810,9 @@ def _bus_coach_stations_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_bus_coach_stations_risk,
+        bus_coach_stations_risk,
         "id",
-        pathlib.Path("Other") / "Bus and Coach Stations" / "tfn_bus_coach_stations_risk",
+        pathlib.Path("Other") / "Bus and Coach Stations" / "bus_coach_stations_risk",
     )
     LOG.info("Finished layering bus and coach stations with hazard risk.")
 
@@ -824,14 +826,14 @@ def _bus_stops_risk(
 ) -> None:
     """Intersect bus stops with hazard risk, clean output, and write to file."""
     LOG.info("Layering bus stops with hazard risk...")
-    tfn_bus_stops = gpd.read_file(
+    bus_stops = gpd.read_file(
         config.paths.model_input / file_paths.BUS_STOPS_MODEL_INPUT_PATH
     )
 
-    tfn_bus_stops_risk = _infrastructure_risk_intersect(tfn_bus_stops, hazard_layers)
+    bus_stops_risk = _infrastructure_risk_intersect(bus_stops, hazard_layers)
 
-    tfn_bus_stops_risk = _prepare_model_output(
-        risk_data=tfn_bus_stops_risk,
+    bus_stops_risk = _prepare_model_output(
+        risk_data=bus_stops_risk,
         drop_cols=[],
         rename_map={"stop_id": "id"},
         risk_cols_order=_HAZARD_RISK_COLS,
@@ -839,9 +841,9 @@ def _bus_stops_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_bus_stops_risk,
+        bus_stops_risk,
         "id",
-        pathlib.Path("Other") / "Bus Stops" / "tfn_bus_stops_risk",
+        pathlib.Path("Other") / "Bus Stops" / "bus_stops_risk",
     )
     LOG.info("Finished layering bus stops with hazard risk.")
 
@@ -858,16 +860,16 @@ def _tram_stations_risk(
     Buffer tram stations, then intersect with hazard risk, clean output, and write to file.
     """
     LOG.info("Layering tram stations with hazard risk...")
-    tfn_tram_stations = gpd.read_file(
+    tram_stations = gpd.read_file(
         config.paths.model_input / file_paths.TRAM_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_tram_stations = _buffer_geometry(tfn_tram_stations, _TRAM_STATIONS_BUFFER_SIZE_M)
+    tram_stations = _buffer_geometry(tram_stations, _TRAM_STATIONS_BUFFER_SIZE_M)
 
-    tfn_tram_stations_risk = _infrastructure_risk_intersect(tfn_tram_stations, hazard_layers)
+    tram_stations_risk = _infrastructure_risk_intersect(tram_stations, hazard_layers)
 
-    tfn_tram_stations_risk = _prepare_model_output(
-        risk_data=tfn_tram_stations_risk,
+    tram_stations_risk = _prepare_model_output(
+        risk_data=tram_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=_HAZARD_RISK_COLS,
@@ -875,9 +877,9 @@ def _tram_stations_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_tram_stations_risk,
+        tram_stations_risk,
         "id",
-        pathlib.Path("Other") / "Tram Stations" / "tfn_tram_stations_risk",
+        pathlib.Path("Other") / "Tram Stations" / "tram_stations_risk",
     )
     LOG.info("Finished layering tram stations with hazard risk.")
 
@@ -895,20 +897,20 @@ def _rapid_transport_stations_risk(
     to file.
     """
     LOG.info("Layering rapid transport stations with hazard risk...")
-    tfn_rapid_transport_stations = gpd.read_file(
+    rapid_transport_stations = gpd.read_file(
         config.paths.model_input / file_paths.RAPID_TRANSPORT_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_rapid_transport_stations = _buffer_geometry(
-        tfn_rapid_transport_stations, _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M
+    rapid_transport_stations = _buffer_geometry(
+        rapid_transport_stations, _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M
     )
 
-    tfn_rapid_transport_stations_risk = _infrastructure_risk_intersect(
-        tfn_rapid_transport_stations, hazard_layers
+    rapid_transport_stations_risk = _infrastructure_risk_intersect(
+        rapid_transport_stations, hazard_layers
     )
 
-    tfn_rapid_transport_stations_risk = _prepare_model_output(
-        risk_data=tfn_rapid_transport_stations_risk,
+    rapid_transport_stations_risk = _prepare_model_output(
+        risk_data=rapid_transport_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=_HAZARD_RISK_COLS,
@@ -916,11 +918,11 @@ def _rapid_transport_stations_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_rapid_transport_stations_risk,
+        rapid_transport_stations_risk,
         "id",
         pathlib.Path("Other")
         / "Rapid Transport Stations"
-        / "tfn_rapid_transport_stations_risk",
+        / "rapid_transport_stations_risk",
     )
     LOG.info("Finished layering rapid transport stations with hazard risk.")
 
@@ -937,18 +939,18 @@ def _ferry_terminals_risk(
     Buffer ferry terminals, then intersect with hazard risk, clean output, and write to file.
     """
     LOG.info("Layering ferry terminals with hazard risk...")
-    tfn_ferry_terminals = gpd.read_file(
+    ferry_terminals = gpd.read_file(
         config.paths.model_input / file_paths.FERRY_TERMINALS_MODEL_INPUT_PATH
     )
 
-    tfn_ferry_terminals = _buffer_geometry(tfn_ferry_terminals, _FERRY_TERMINALS_BUFFER_SIZE_M)
+    ferry_terminals = _buffer_geometry(ferry_terminals, _FERRY_TERMINALS_BUFFER_SIZE_M)
 
-    tfn_ferry_terminals_risk = _infrastructure_risk_intersect(
-        tfn_ferry_terminals, hazard_layers
+    ferry_terminals_risk = _infrastructure_risk_intersect(
+        ferry_terminals, hazard_layers
     )
 
-    tfn_ferry_terminals_risk = _prepare_model_output(
-        risk_data=tfn_ferry_terminals_risk,
+    ferry_terminals_risk = _prepare_model_output(
+        risk_data=ferry_terminals_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=_HAZARD_RISK_COLS,
@@ -956,9 +958,9 @@ def _ferry_terminals_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_ferry_terminals_risk,
+        ferry_terminals_risk,
         "id",
-        pathlib.Path("Other") / "Ferry Terminals" / "tfn_ferry_terminals_risk",
+        pathlib.Path("Other") / "Ferry Terminals" / "ferry_terminals_risk",
     )
     LOG.info("Finished layering ferry terminals with hazard risk.")
 
@@ -975,18 +977,18 @@ def _petrol_stations_risk(
     Buffer petrol stations, then intersect with hazard risk, clean output, and write to file.
     """
     LOG.info("Layering petrol stations with hazard risk...")
-    tfn_petrol_stations = gpd.read_file(
+    petrol_stations = gpd.read_file(
         config.paths.model_input / file_paths.PETROL_STATIONS_MODEL_INPUT_PATH
     )
 
-    tfn_petrol_stations = _buffer_geometry(tfn_petrol_stations, _PETROL_STATIONS_BUFFER_SIZE_M)
+    petrol_stations = _buffer_geometry(petrol_stations, _PETROL_STATIONS_BUFFER_SIZE_M)
 
-    tfn_petrol_stations_risk = _infrastructure_risk_intersect(
-        tfn_petrol_stations, hazard_layers
+    petrol_stations_risk = _infrastructure_risk_intersect(
+        petrol_stations, hazard_layers
     )
 
-    tfn_petrol_stations_risk = _prepare_model_output(
-        risk_data=tfn_petrol_stations_risk,
+    petrol_stations_risk = _prepare_model_output(
+        risk_data=petrol_stations_risk,
         drop_cols=[],
         rename_map={},
         risk_cols_order=_HAZARD_RISK_COLS,
@@ -994,9 +996,9 @@ def _petrol_stations_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_petrol_stations_risk,
+        petrol_stations_risk,
         "id",
-        pathlib.Path("Other") / "Petrol Stations" / "tfn_petrol_stations_risk",
+        pathlib.Path("Other") / "Petrol Stations" / "petrol_stations_risk",
     )
     LOG.info("Finished layering petrol stations with hazard risk.")
 
@@ -1013,14 +1015,14 @@ def _ncn_risk(
     Intersect National Cycle Network with hazard risk, clean output, then write to file.
     """
     LOG.info("Layering National Cycle Network with hazard risk...")
-    tfn_ncn = gpd.read_file(
+    ncn = gpd.read_file(
         config.paths.model_input / file_paths.NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH
     )
 
-    tfn_ncn_risk = _infrastructure_risk_intersect(tfn_ncn, hazard_layers)
+    ncn_risk = _infrastructure_risk_intersect(ncn, hazard_layers)
 
-    tfn_ncn_risk = _prepare_model_output(
-        risk_data=tfn_ncn_risk,
+    ncn_risk = _prepare_model_output(
+        risk_data=ncn_risk,
         drop_cols=[],
         rename_map={
             "Desc_": "description",
@@ -1039,9 +1041,9 @@ def _ncn_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_ncn_risk,
+        ncn_risk,
         "id",
-        pathlib.Path("Other") / "National Cycle Network" / "tfn_ncn_risk",
+        pathlib.Path("Other") / "National Cycle Network" / "ncn_risk",
     )
     LOG.info("Finished layering National Cycle Network with hazard risk.")
 
@@ -1058,14 +1060,14 @@ def _tram_network_risk(
     Intersect tram network with hazard risk, clean output, then write to file.
     """
     LOG.info("Layering tram network with hazard risk...")
-    tfn_tram_network = gpd.read_file(
+    tram_network = gpd.read_file(
         config.paths.model_input / file_paths.TRAM_NETWORK_MODEL_INPUT_PATH
     )
 
-    tfn_tram_risk = _infrastructure_risk_intersect(tfn_tram_network, hazard_layers)
+    tram_risk = _infrastructure_risk_intersect(tram_network, hazard_layers)
 
-    tfn_tram_risk = _prepare_model_output(
-        risk_data=tfn_tram_risk,
+    tram_risk = _prepare_model_output(
+        risk_data=tram_risk,
         drop_cols=[],
         rename_map={
             "osid": "id",
@@ -1079,9 +1081,9 @@ def _tram_network_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_tram_risk,
+        tram_risk,
         "id",
-        pathlib.Path("Other") / "Tram Network" / "tfn_tram_links_risk",
+        pathlib.Path("Other") / "Tram Network" / "tram_network_risk",
     )
     LOG.info("Finished layering tram network with hazard risk.")
 
@@ -1098,16 +1100,16 @@ def _rapid_transport_network_risk(
     Intersect rapid transport network with hazard risk, clean output, then write to file.
     """
     LOG.info("Layering rapid transport network with hazard risk...")
-    tfn_rapid_transport = gpd.read_file(
+    rapid_transport = gpd.read_file(
         config.paths.model_input / file_paths.RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH
     )
 
-    tfn_rapid_transport_risk = _infrastructure_risk_intersect(
-        tfn_rapid_transport, hazard_layers
+    rapid_transport_risk = _infrastructure_risk_intersect(
+        rapid_transport, hazard_layers
     )
 
-    tfn_rapid_transport_risk = _prepare_model_output(
-        risk_data=tfn_rapid_transport_risk,
+    rapid_transport_risk = _prepare_model_output(
+        risk_data=rapid_transport_risk,
         drop_cols=[],
         rename_map={
             "osid": "id",
@@ -1121,8 +1123,8 @@ def _rapid_transport_network_risk(
 
     _split_csv_shapefile(
         config,
-        tfn_rapid_transport_risk,
+        rapid_transport_risk,
         "id",
-        pathlib.Path("Other") / "Rapid Transport Network" / "tfn_rapid_transport_risk",
+        pathlib.Path("Other") / "Rapid Transport Network" / "rapid_transport_network_risk",
     )
     LOG.info("Finished layering rapid transport network with hazard risk.")
