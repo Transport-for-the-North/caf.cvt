@@ -309,7 +309,7 @@ def _calculate_risk_threshold(
 
         if invert:
             risk_data[out_name] = np.where(
-                risk_data[col_name] > threshold, 0, -risk_data[col_name]
+                risk_data[col_name] > threshold, 0, threshold - risk_data[col_name]
             )
         else:
             risk_data[out_name] = np.where(
@@ -430,7 +430,7 @@ def _extreme_weather_index(config: model_config.Config) -> None:
     storm = _storm_index(config, hazard_grid)
 
     LOG.info("Combining extreme heat, extreme cold, drought and storm indexes.")
-    extreme_weather_merge = extreme_heat[
+    extreme_heat_cold = extreme_heat[
         ["grid_id", "part", "heat_risk_current", "heat_risk_forecast"]
     ].merge(
         extreme_cold[
@@ -440,13 +440,13 @@ def _extreme_weather_index(config: model_config.Config) -> None:
         how="inner",
     )
 
-    extreme_weather_merge = gpd.GeoDataFrame(
-        extreme_weather_merge, geometry="geometry", crs="EPSG:3857"
+    extreme_heat_cold = gpd.GeoDataFrame(
+        extreme_heat_cold, geometry="geometry", crs="EPSG:3857"
     )
-    extreme_weather_merge = extreme_weather_merge.drop(columns=["grid_id", "part"])
+    extreme_heat_cold = extreme_heat_cold.drop(columns=["grid_id", "part"])
 
     extreme_weather_risk = _overlay_and_clean(
-        extreme_weather_merge,
+        extreme_heat_cold,
         drought[["drought_risk_current", "drought_risk_forecast", "geometry"]],
         storm[["storm_risk_current", "storm_risk_forecast", "geometry"]],
         target_crs=data_cleaning.BNG_CRS,
