@@ -19,7 +19,6 @@ from caf.cvt import data_cleaning, file_paths, model_config
 LOG = logging.getLogger(__name__)
 
 SCENARIO_NAMES = ["current", "forecast"]
-_SCENARIO_SUFFIXES = ["_current", "_forecast"]
 
 _EXTREME_HEAT_RISK_THRESHOLD = 30
 _EXTREME_HEAT_WEIGHTS = {
@@ -503,12 +502,12 @@ def apply_functional_rules(config: model_config.Config) -> None:
     audit_path = config.paths.audit_path / "Functional Rules"
 
     _extreme_weather_index(config, audit_path)
-    if config.switches.flood_overlay_direct:
-        _flooding_index_direct(config, boundary, audit_path)
-    else:
-        _flooding_index(config, boundary, audit_path)
-    _ground_stability_index(config, audit_path)
-    _coastal_erosion_index(config, audit_path)
+    #if config.switches.flood_overlay_direct:
+     #   _flooding_index_direct(config, boundary, audit_path)
+    #else:
+    #    _flooding_index(config, boundary, audit_path)
+    #_ground_stability_index(config, audit_path)
+    #_coastal_erosion_index(config, audit_path)
 
 
 ## HAZARDS
@@ -1463,9 +1462,9 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
     )
 
     risk_cols = [
-        f"{hazard}_risk{suffix}"
+        f"{hazard}_risk_{suffix}"
         for hazard in _GEOSURE_HAZARDS
-        for suffix in _SCENARIO_SUFFIXES
+        for suffix in SCENARIO_NAMES
     ]
 
     for col in risk_cols:
