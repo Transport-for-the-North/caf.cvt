@@ -388,7 +388,7 @@ def _overlay_and_clean(
     return hazard_overlay
 
 
-def _plot_choropleth_current_and_forecast(
+def plot_choropleth_current_and_forecast(
         risk_data: gpd.GeoDataFrame,
         column: str,
         title: str,
@@ -402,7 +402,15 @@ def _plot_choropleth_current_and_forecast(
 
     if basemap_source is not None:
         risk_data = risk_data.to_crs(epsg=3857)
-        ctx.add_basemap(ax, source=basemap_source)
+        ctx.add_basemap(ax[0], source=basemap_source)
+        ctx.add_basemap(ax[1], source=basemap_source)
+
+    vmin = min(
+        risk_data[f"{column}_current"].min(), risk_data[f"{column}_forecast"].min()
+    )
+    vmax = max(
+        risk_data[f"{column}_current"].max(), risk_data[f"{column}_forecast"].max()
+    )
 
     risk_data.plot(
         column=f"{column}_current",
@@ -410,7 +418,9 @@ def _plot_choropleth_current_and_forecast(
         linewidth=linewidth,
         ax=ax[0],
         edgecolor="black",
-        legend=True
+        legend=True,
+        vmin=vmin,
+        vmax=vmax
     )
 
     risk_data.plot(
@@ -419,7 +429,9 @@ def _plot_choropleth_current_and_forecast(
         linewidth=linewidth,
         ax=ax[1],
         edgecolor="black",
-        legend=True
+        legend=True,
+        vmin=vmin,
+        vmax=vmax
     )
 
     ax[0].set_title(f"{title} (Current)")
@@ -462,7 +474,7 @@ def _audit_index(
 
     for var in index_vars:
         # Plot Choropleth Maps for each variable
-        _plot_choropleth_current_and_forecast(
+        plot_choropleth_current_and_forecast(
             index,
             var,
             f"{var.replace('_', ' ').title()}",
