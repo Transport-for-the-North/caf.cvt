@@ -77,6 +77,13 @@ class PathConfig(ctk.BaseConfig):
         log_path.mkdir(parents=True, exist_ok=True)
         return log_path
 
+    @property
+    def audit_path(self) -> pathlib.Path:
+        """Create model audit directory and return path."""
+        audit_path = self.root / "audit"
+        audit_path.mkdir(parents=True, exist_ok=True)
+        return audit_path
+
 
 class OtherInput(ctk.BaseConfig):
     """Configuration for other raw input data.
