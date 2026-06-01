@@ -238,24 +238,28 @@ def layering(config: model_config.Config) -> None:
 
 def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFrame]:
     """Read and clean hazard layers, and return them in a dictionary."""
-    return {
-        "Extreme Weather": gpd.read_file(
+    hazard_layers = {}
+    if config.switches.extreme_weather:
+        hazard_layers["Extreme Weather"] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH
-        ),
-        "Flooding": gpd.read_file(
+        )
+    if config.switches.flooding:
+        hazard_layers["Flooding"] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.FLOOD_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH
-        ),
-        "Ground Stability": gpd.read_file(
+        )
+    if config.switches.ground_stability:
+        hazard_layers["Ground Stability"] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.GROUND_STABILITY_MODEL_INTERIM_OUTPUT_PATH
-        ),
-        "Coastal Erosion": gpd.read_file(
+        )
+    if config.switches.coastal_erosion:
+        hazard_layers["Coastal Erosion"] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.COASTAL_EROSION_MODEL_INTERIM_OUTPUT_PATH
-        ),
-    }
+        )
+    return hazard_layers
 
 
 ## INFRASTRUCTURE-HAZARD LAYERING

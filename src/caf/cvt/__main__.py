@@ -22,6 +22,12 @@ warnings.filterwarnings(
     module=r"pyogrio\.raw",
 )
 
+warnings.filterwarnings(
+    "ignore",
+    message="GeoSeries.notna",
+    category=UserWarning,
+)
+
 
 def _main() -> None:
     """Run Climate Vulnerability Tool."""

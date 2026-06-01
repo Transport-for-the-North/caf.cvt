@@ -7,7 +7,10 @@ from functools import reduce
 
 import contextily as ctx
 import geopandas as gpd
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+
+mpl.use("Agg")  # Use non-interactive backend for plotting
 import numpy as np
 import pandas as pd
 import sklearn
@@ -132,8 +135,12 @@ def min_max_scaling_pair(
         scaler.fit(combined_values)
 
         # Transform each column using the same scaler
-        risk_data[col_current] = scaler.transform(risk_data[[col_current]].values)
-        risk_data[col_forecast] = scaler.transform(risk_data[[col_forecast]].values)
+        risk_data[col_current] = scaler.transform(
+            risk_data[[col_current]].values
+        ).clip(*feature_range)
+        risk_data[col_forecast] = scaler.transform(
+            risk_data[[col_forecast]].values
+        ).clip(*feature_range)
 
     return risk_data
 
@@ -365,11 +372,13 @@ def _overlay_and_clean(
         # Drop non-area geometries
         geom_types = hazard_overlay.geometry.type
         num_points = (geom_types == "Point").sum() + (geom_types == "MultiPoint").sum()
-        num_lines = (geom_types == "LineString").sum() + (
-            geom_types == "MultiLineString"
-        ).sum()
+        num_lines = (
+            (geom_types == "LineString").sum() + (geom_types == "MultiLineString").sum()
+        )
         hazard_overlay = hazard_overlay[
-            geom_types.isin(["Polygon", "MultiPolygon", "GeometryCollection"])
+            (geom_types.isin(["Polygon", "MultiPolygon", "GeometryCollection"])) &
+            (~hazard_overlay.geometry.is_empty) &
+            (hazard_overlay.geometry.notna())
         ].reset_index(drop=True)
         LOG.info(
             "Overlay dropped %s points and %s lines, and kept %s area geometries",
@@ -401,8 +410,6 @@ def plot_choropleth_current_and_forecast(
 
     if basemap_source is not None:
         risk_data = risk_data.to_crs(epsg=3857)
-        ctx.add_basemap(ax[0], source=basemap_source)
-        ctx.add_basemap(ax[1], source=basemap_source)
 
     vmin = min(
         risk_data[f"{column}_current"].min(), risk_data[f"{column}_forecast"].min()
@@ -419,7 +426,8 @@ def plot_choropleth_current_and_forecast(
         edgecolor="black",
         legend=True,
         vmin=vmin,
-        vmax=vmax
+        vmax=vmax,
+        alpha=0.7 if basemap_source is not None else 1.0
     )
 
     risk_data.plot(
@@ -430,11 +438,16 @@ def plot_choropleth_current_and_forecast(
         edgecolor="black",
         legend=True,
         vmin=vmin,
-        vmax=vmax
+        vmax=vmax,
+        alpha=0.7 if basemap_source is not None else 1.0
     )
 
-    ax[0].set_title(f"{title} (Current)")
-    ax[1].set_title(f"{title} (Forecast)")
+    if basemap_source is not None:
+        ctx.add_basemap(ax[0], source=basemap_source)
+        ctx.add_basemap(ax[1], source=basemap_source)
+
+    ax[0].set_title(f"{title} - Current")
+    ax[1].set_title(f"{title} - Forecast")
     ax[0].set_axis_off()
     ax[1].set_axis_off()
     plt.tight_layout()
@@ -445,21 +458,21 @@ def plot_choropleth_current_and_forecast(
 def _validate_index(
         index: gpd.GeoDataFrame, index_vars: list[str]) -> None:
     """Validate a given index."""
+    if index.isna().any().any():
+        raise ValueError(
+            "Index contains NA values."
+    )
+
     for scenario in SCENARIO_NAMES:
         for var in index_vars:
             col = f"{var}_{scenario}"
             if col not in index.columns:
                 raise ValueError(f"Missing column: {col}")
-            if not index[f"{var}_{scenario}"].between(0, 100).all():
+            if not index[col].between(0, 100).all():
                 raise ValueError(
                     f"{var.replace('_', ' ').title()} for {scenario} "
                     f"contains values outside 0-100."
                 )
-
-    if index.isna().any().any():
-        raise ValueError(
-            "Index contains NA values."
-        )
 
 
 def _audit_index(
@@ -500,14 +513,17 @@ def apply_functional_rules(config: model_config.Config) -> None:
     """
     boundary = data_cleaning.get_boundary(config)
     audit_path = config.paths.audit_path / "Functional Rules"
-
-    _extreme_weather_index(config, audit_path)
-    #if config.switches.flood_overlay_direct:
-     #   _flooding_index_direct(config, boundary, audit_path)
-    #else:
-    #    _flooding_index(config, boundary, audit_path)
-    #_ground_stability_index(config, audit_path)
-    #_coastal_erosion_index(config, audit_path)
+    if config.switches.extreme_weather:
+        _extreme_weather_index(config, audit_path)
+    if config.switches.flooding:
+        if config.switches.flood_overlay_direct:
+            _flooding_index_direct(config, boundary, audit_path)
+        else:
+            _flooding_index(config, boundary, audit_path)
+    if config.switches.ground_stability:
+        _ground_stability_index(config, audit_path)
+    if config.switches.coastal_erosion:
+        _coastal_erosion_index(config, audit_path)
 
 
 ## HAZARDS
@@ -539,7 +555,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
     )
 
     extreme_heat_cold = gpd.GeoDataFrame(
-        extreme_heat_cold, geometry="geometry", crs="EPSG:3857"
+        extreme_heat_cold, geometry="geometry", crs=hazard_grid.crs
     )
     extreme_heat_cold = extreme_heat_cold.drop(columns=["grid_id", "part"])
 
@@ -576,7 +592,9 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
         [("extreme_weather_risk_current", "extreme_weather_risk_forecast")],
     )
 
-    extreme_weather_risk = gpd.GeoDataFrame(extreme_weather_risk, geometry="geometry")
+    extreme_weather_risk = gpd.GeoDataFrame(
+        extreme_weather_risk, geometry="geometry", crs=data_cleaning.BNG_CRS
+    )
 
     _validate_index(
         extreme_weather_risk,
@@ -643,7 +661,7 @@ def _extreme_heat_index(
     )
 
     LOG.info("Extreme heat index calculation complete.")
-    extreme_heat = gpd.GeoDataFrame(extreme_heat, geometry="geometry")
+    extreme_heat = gpd.GeoDataFrame(extreme_heat, geometry="geometry", crs=hazard_grid.crs)
 
     _validate_index(
         extreme_heat,
@@ -703,7 +721,7 @@ def _extreme_cold_index(
         extreme_cold, [("cold_risk_current", "cold_risk_forecast")]
     )
 
-    extreme_cold = gpd.GeoDataFrame(extreme_cold, geometry="geometry")
+    extreme_cold = gpd.GeoDataFrame(extreme_cold, geometry="geometry", crs=hazard_grid.crs)
 
     _validate_index(
         extreme_cold,
@@ -778,10 +796,8 @@ def _drought_index(
     )
 
     # Reverse the polarity for precipitation
-    drought_risk["precip_summer_current"] = 100 - drought_risk["precip_summer_current"]
-    drought_risk["precip_summer_forecast"] = (
-        100 - drought_risk["precip_summer_forecast"]
-    )
+    drought_risk["precip_summer_risk_current"] = 100 - drought_risk["precip_summer_current"]
+    drought_risk["precip_summer_risk_forecast"] = 100 - drought_risk["precip_summer_forecast"]
 
     drought_risk = _calculate_composite_score(
         drought_risk,
@@ -793,16 +809,18 @@ def _drought_index(
         drought_risk, [("drought_risk_current", "drought_risk_forecast")]
     )
 
-    drought_risk = gpd.GeoDataFrame(drought_risk, geometry="geometry")
+    drought_risk = gpd.GeoDataFrame(
+        drought_risk, geometry="geometry", crs=data_cleaning.BNG_CRS
+    )
 
     _validate_index(
         drought_risk,
-        ["drought_severity_index", "precip_summer", "drought_risk"],
+        ["drought_severity_index", "precip_summer_risk", "drought_risk"],
     )
 
     _audit_index(
         drought_risk,
-        ["drought_severity_index", "precip_summer", "drought_risk"],
+        ["drought_severity_index", "precip_summer_risk", "drought_risk"],
         audit_path / "Drought Risk Index",
         cmap="Oranges"
     )
@@ -915,7 +933,7 @@ def _storm_index(
         storm_risk, [("storm_risk_current", "storm_risk_forecast")]
     )
 
-    storm_risk = gpd.GeoDataFrame(storm_risk, geometry="geometry")
+    storm_risk = gpd.GeoDataFrame(storm_risk, geometry="geometry", crs=data_cleaning.BNG_CRS)
 
     _validate_index(
         storm_risk,
@@ -944,7 +962,7 @@ def _storm_index(
     )
 
     LOG.info("Storm index calculation complete.")
-    return gpd.GeoDataFrame(storm_risk, geometry="geometry")
+    return storm_risk
 
 
 def _wind_risk_scaled(speed_metres_per_second: float) -> float:

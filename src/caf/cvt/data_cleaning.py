@@ -945,10 +945,14 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
 def _clean_hazards(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean hazard data ready for analysis."""
     LOG.info("Cleaning hazard data...")
-    _clean_extreme_weather(config, boundary)
-    _clean_flooding(config, boundary)
-    _clean_ground_stability(config, boundary)
-    _clean_coastal_erosion(config, boundary)
+    if config.switches.extreme_weather:
+        _clean_extreme_weather(config, boundary)
+    if config.switches.flooding:
+        _clean_flooding(config, boundary)
+    if config.switches.ground_stability:
+        _clean_ground_stability(config, boundary)
+    if config.switches.coastal_erosion:
+        _clean_coastal_erosion(config, boundary)
     LOG.info("Finished cleaning hazard data.")
 
 
@@ -1949,8 +1953,10 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
 def _clean_impact(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean impact datasets ready for analysis."""
     LOG.info("Cleaning impact data...")
-    _clean_freight_demand(config, boundary)
-    _clean_noham_flows(config)
+    if config.switches.freight_rail:
+        _clean_freight_demand(config, boundary)
+    if config.switches.noham_roads:
+        _clean_noham_flows(config)
     LOG.info("Finished cleaning impact data.")
 
 

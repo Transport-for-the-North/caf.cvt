@@ -392,6 +392,14 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include the tram network in the analysis.
     rapid_transport_network : bool
         Whether to include the rapid transport network in the analysis.
+    extreme_weather : bool
+        Whether to include extreme weather hazards in the analysis.
+    flooding : bool
+        Whether to include flooding hazards in the analysis.
+    ground_stability : bool
+        Whether to include ground stability hazards in the analysis.
+    coastal_erosion : bool
+        Whether to include coastal erosion hazards in the analysis.
     flood_zip_extract : bool
         Whether to extract flood zip files.
     create_flood_grid : bool
@@ -427,6 +435,11 @@ class SwitchConfig(ctk.BaseConfig):
     tram_network: bool
     rapid_transport_network: bool
 
+    extreme_weather: bool
+    flooding: bool
+    ground_stability: bool
+    coastal_erosion: bool
+
     flood_zip_extract: bool = False
     create_flood_grid: bool = False
 
@@ -435,6 +448,52 @@ class SwitchConfig(ctk.BaseConfig):
     create_flood_tiles: bool = False
 
     noham_zip_extract: bool = False
+
+    @pydantic.model_validator(mode="after")
+    def _check(self) -> Self:
+        if (
+            not self.run_data_cleaning and
+            not self.run_functional_rules and
+            not self.run_layering
+            ):
+            raise ValueError(
+                "At least one of 'run_data_cleaning', 'run_functional_rules' "
+                "or 'run_layering' must be True."
+            )
+
+        if (
+            not self.all_roads and
+            not self.noham_roads and
+            not self.passenger_rail and
+            not self.freight_rail and
+            not self.airports and
+            not self.bus_stops and
+            not self.petrol_stations and
+            not self.charging_sites and
+            not self.national_cycle_network and
+            not self.train_stations and
+            not self.tram_stations and
+            not self.rapid_transport_stations and
+            not self.ferry_terminals and
+            not self.bus_coach_stations and
+            not self.tram_network and
+            not self.rapid_transport_network
+        ):
+            raise ValueError(
+                "At least one infrastructure switch must be True."
+            )
+
+        if (
+            not self.extreme_weather and
+            not self.flooding and
+            not self.ground_stability and
+            not self.coastal_erosion
+        ):
+            raise ValueError(
+                "At least one hazard switch must be True."
+        )
+
+        return self
 
 
 class ParameterConfig(ctk.BaseConfig):
