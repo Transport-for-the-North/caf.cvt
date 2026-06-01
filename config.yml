@@ -30,8 +30,8 @@ switches:
   # Hazard switches
   extreme_weather: true
   flooding: true
-  ground_stability: true
-  coastal_erosion: true
+  ground_stability: false
+  coastal_erosion: false
 
   
 
