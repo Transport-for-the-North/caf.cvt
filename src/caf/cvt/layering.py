@@ -9,34 +9,10 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
+from caf.cvt.definitions import MainHazardCols, Scenarios
 
 LOG = logging.getLogger(__name__)
 
-_MAIN_HAZARD_RISK_COLS = [
-    "extreme_weather_risk",
-    "flood_risk",
-    "ground_stability_risk",
-    "coastal_erosion_risk",
-]
-
-_HAZARD_RISK_COLS = [
-    # Extreme Weather risk columns
-    "heat_risk",
-    "cold_risk",
-    "drought_risk",
-    "storm_risk",
-    "extreme_weather_risk",
-    # Flooding risk columns
-    "rivers_sea_flood_risk",
-    "surface_water_flood_risk",
-    "flood_risk",
-    # Ground Stability risk columns
-    *data_cleaning.GEOSURE_RISK_COLS,
-    "shrink_swell_geoclimate_risk",
-    "ground_stability_risk",
-    # Coastal Erosion risk columns
-    "coastal_erosion_risk",
-]
 
 _NOHAM_IMPACT_COLS = [
     "uc1_impact",
@@ -99,12 +75,16 @@ def _infrastructure_risk_intersect(
     return infrastructure_with_risk.fillna(0)
 
 
-def _reshape_for_current_forecast(
+def _reshape_for_scenarios(
     risk_data: gpd.GeoDataFrame, id_col: str, risk_cols_order: list[str]
 ) -> gpd.GeoDataFrame:
     """Reshape dataframe by adding a current/forecast column to distinguish identical rows."""
     # Identify risk and descriptive columns
-    risk_cols = [col for col in risk_data.columns if col.endswith(("_current", "_forecast"))]
+    risk_cols = [
+        col for col in risk_data.columns if col.endswith(
+            (f"_{Scenarios.CURRENT}", f"_{Scenarios.FORECAST}")
+            )
+        ]
     descriptive_cols = [
         col
         for col in risk_data.columns
@@ -123,24 +103,26 @@ def _reshape_for_current_forecast(
     )
 
     # Extract scenario and clean variable names
-    melted["current_or_forecast"] = (
+    scenario_pattern =rf"_({'|'.join(Scenarios)})$"
+    scenario_col = Scenarios.scenario_or_column()
+    melted[scenario_col] = (
         melted["variable"]
-        .str.extract(r"_(current|forecast)$")[0]
-        .map({"current": "Current", "forecast": "Forecast"})
-    )
+        .str.extract(scenario_pattern)[0]
+        .map({s: s.title() for s in Scenarios.all()})
+        )
     melted["variable"] = melted["variable"].str.replace(
-        r"_(current|forecast)$", "", regex=True
+        scenario_pattern, "", regex=True
     )
 
     # Pivot back so each risk variable becomes a column
     reshaped = melted.pivot_table(
-        index=[id_col, "current_or_forecast", *descriptive_cols],
+        index=[id_col, scenario_col, *descriptive_cols],
         columns="variable",
         values="value",
     ).reset_index()
 
     # Reorder risk columns based on original order
-    reshaped = reshaped[[id_col, "current_or_forecast", *descriptive_cols, *risk_cols_order]]
+    reshaped = reshaped[[id_col, scenario_col, *descriptive_cols, *risk_cols_order]]
 
     # Merge geometry back
     reshaped_gdf = reshaped.merge(geometry, on=id_col)
@@ -158,7 +140,7 @@ def _prepare_model_output(
     risk_data = risk_data.drop_duplicates(subset=["geometry"])
     risk_data = risk_data.rename(columns=rename_map)
     risk_data = risk_data.to_crs(data_cleaning.BNG_CRS)
-    risk_data = _reshape_for_current_forecast(risk_data, "id", risk_cols_order)
+    risk_data = _reshape_for_scenarios(risk_data, "id", risk_cols_order)
     risk_data[risk_cols_order] = risk_data[risk_cols_order].round(1)
     return risk_data.rename(columns={col: f"{col}_score" for col in risk_cols_order})
 
@@ -202,13 +184,22 @@ def _audit_infrastructure_risk(
     for risk_col in cols:
         functional_rules.plot_choropleth_current_and_forecast(
             risk_data=infrastructure_risk,
-            column=f"{risk_col}_score",
+            column=risk_col,
             title=f"{risk_col.replace('_', ' ').title()}",
             out_path=audit_path / f"{risk_col}_choropleth.png",
             cmap=cmap,
             linewidth=0.5,
+            edgecolor=None,
         )
 
+
+def _get_all_risk_cols(hazard_layers: dict[str, gpd.GeoDataFrame]) -> list[str]:
+    """Identify risk columns based on column names from hazard layers."""
+    risk_cols = []
+    for layer in hazard_layers.values():
+        risk_cols.extend([col.removesuffix(f"_{Scenarios.CURRENT}").removesuffix(f"_{Scenarios.FORECAST}")
+                          for col in layer.columns if "_risk" in col])
+    return list(set(risk_cols))
 
 
 # LAYERING
@@ -228,9 +219,10 @@ def layering(config: model_config.Config) -> None:
         Main config for the model, containing paths and settings.
     """
     hazard_layers = _read_hazard_layers(config)
+    risk_cols = _get_all_risk_cols(hazard_layers)
     audit_path = config.paths.audit_path / "Layering"
 
-    _infrastructure_layering(config, hazard_layers, audit_path)
+    _infrastructure_layering(config, hazard_layers, risk_cols, audit_path)
 
 
 ## HAZARD LAYERS
@@ -240,21 +232,25 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
     """Read and clean hazard layers, and return them in a dictionary."""
     hazard_layers = {}
     if config.switches.extreme_weather:
+        LOG.info("Reading extreme weather layer.")
         hazard_layers["Extreme Weather"] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH
         )
     if config.switches.flooding:
+        LOG.info("Reading flooding layer.")
         hazard_layers["Flooding"] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.FLOOD_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH
         )
     if config.switches.ground_stability:
+        LOG.info("Reading ground stability layer.")
         hazard_layers["Ground Stability"] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.GROUND_STABILITY_MODEL_INTERIM_OUTPUT_PATH
         )
     if config.switches.coastal_erosion:
+        LOG.info("Reading coastal erosion layer.")
         hazard_layers["Coastal Erosion"] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.COASTAL_EROSION_MODEL_INTERIM_OUTPUT_PATH
@@ -268,12 +264,13 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
 def _infrastructure_layering(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Layer roads, rail, and other infrastructure with hazards."""
-    _get_road_risk(config, hazard_layers, audit_path)
-    _get_rail_risk(config, hazard_layers, audit_path)
-    _get_other_risk(config, hazard_layers, audit_path)
+    _get_road_risk(config, hazard_layers, risk_cols, audit_path)
+    _get_rail_risk(config, hazard_layers, risk_cols, audit_path)
+    _get_other_risk(config, hazard_layers, risk_cols, audit_path)
 
 
 ### ROAD
@@ -282,14 +279,15 @@ def _infrastructure_layering(
 def _get_road_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Layer OS Open Roads and NoHAM with hazards to assign risk."""
     LOG.info("Calculating road risk...")
     if config.switches.all_roads:
-        _os_open_road_risk(config, hazard_layers, audit_path)
+        _os_open_road_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.noham_roads:
-        _noham_road_risk(config, hazard_layers, audit_path)
+        _noham_road_risk(config, hazard_layers, risk_cols, audit_path)
     LOG.info("Road risk calculation complete.")
 
 
@@ -299,6 +297,7 @@ def _get_road_risk(
 def _os_open_road_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Intersect OS Road infrastructure with hazards, clean output, and write to file."""
@@ -307,17 +306,17 @@ def _os_open_road_risk(
 
     os_road_risk = _infrastructure_risk_intersect(os_road, hazard_layers)
 
+    _audit_infrastructure_risk(
+        os_road_risk,
+        risk_cols,
+        audit_path / "OS Roads",
+    )
+
     os_road_risk = _prepare_model_output(
         risk_data=os_road_risk,
         drop_cols=[],
         rename_map={"identifier": "id"},
-        risk_cols_order=_HAZARD_RISK_COLS,
-    )
-
-    _audit_infrastructure_risk(
-        os_road_risk,
-        _HAZARD_RISK_COLS,
-        audit_path / "OS Roads",
+        risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
@@ -332,6 +331,7 @@ def _os_open_road_risk(
 def _noham_road_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get NoHAM road risk and write to file.
@@ -341,83 +341,59 @@ def _noham_road_risk(
     """
     LOG.info("Layering NoHAM with hazard risk and calculating impact index...")
     noham = {}
-    noham_risk_scenario = {}
-    for scenario in functional_rules.SCENARIO_NAMES:
-        noham[scenario] = gpd.read_file(
+    for year in config.infrastructure.road.noham:
+        noham[year] = gpd.read_file(
             config.paths.model_input
             / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
-            / f"noham_net_flows_{scenario}.gpkg"
+            / f"noham_net_flows_{year}.gpkg"
         )
-        noham_risk_scenario[scenario] = _infrastructure_risk_intersect(
-            noham[scenario], hazard_layers
-        )
-        other_scenario = "forecast" if scenario == "current" else "current"
-        drop_cols = [
-            col
-            for col in noham_risk_scenario[scenario].columns
-            if col.endswith(f"_{other_scenario}")
-        ]
-        noham_risk_scenario[scenario] = noham_risk_scenario[scenario].drop(
-            columns=drop_cols
-        )
-        noham_risk_scenario[scenario] = noham_risk_scenario[scenario].drop_duplicates(
-            subset=["geometry"]
-        )
-        noham_risk_scenario[scenario].columns = [
-            col.removesuffix(f"_{scenario}")
-            for col in noham_risk_scenario[scenario].columns
-        ]
-        if scenario == "current":
-            noham_risk_scenario[scenario]["current_or_forecast"] = "Current"
-        else:
-            noham_risk_scenario[scenario]["current_or_forecast"] = "Forecast"
 
-    noham_risk_scenario["current"], noham_risk_scenario["forecast"] = (
-        _noham_impact_index(
-            noham_risk_scenario["current"],
-            noham_risk_scenario["forecast"],
+        noham[year] = _infrastructure_risk_intersect(
+            noham[year], hazard_layers
         )
+
+        other_scenario = Scenarios.FORECAST if scenario == Scenarios.CURRENT else Scenarios.CURRENT
+        noham[year] = noham[year].drop(
+            columns=[
+                col for col in noham[year].columns
+                     if col.endswith(f"_{other_scenario}")
+                ]
+            )
+        noham[year] = noham[year].rename(
+            columns={col: col.removesuffix(f"_{scenario}") for col in noham[scenario].columns
+                     if col.endswith(f"_{scenario}")}
+        )
+
+    noham[Scenarios.CURRENT], noham[Scenarios.FORECAST] = _noham_impact_index(
+        noham[Scenarios.CURRENT],
+        noham[Scenarios.FORECAST],
+        risk_cols,
     )
 
-    risk_impact_cols = [*_HAZARD_RISK_COLS, *_NOHAM_IMPACT_COLS]
-    non_risk_impact_cols = ["link_id", "current_or_forecast", "geometry"]
-
-    # Remove suffixes from risk and impact columns
-    noham_risk_scenario["current"] = noham_risk_scenario["current"].rename(
-        columns=lambda c: (
-            c.removesuffix("_current") if c.removesuffix("_current") in risk_impact_cols else c
-        )
-    )
-    noham_risk_scenario["forecast"] = noham_risk_scenario["forecast"].rename(
-        columns=lambda c: (
-            c.removesuffix("_forecast")
-            if c.removesuffix("_forecast") in risk_impact_cols
-            else c
-        )
-    )
-
-    # Concatenate
     noham_risk = pd.concat(
-        [noham_risk_scenario["current"], noham_risk_scenario["forecast"]],
-        ignore_index=True,
+        [noham[Scenarios.CURRENT], noham[Scenarios.FORECAST]],
+        ignore_index=True
     )
 
-    noham_risk = noham_risk[
-        [*non_risk_impact_cols, *_HAZARD_RISK_COLS, *_NOHAM_IMPACT_COLS]
-    ]
-
-    noham_risk[risk_impact_cols] = noham_risk[risk_impact_cols].round(1)
-    noham_risk = noham_risk.to_crs(data_cleaning.BNG_CRS)
-    noham_risk = noham_risk.rename(columns={"link_id": "id"})
-    noham_risk = noham_risk.rename(
-        columns={col: f"{col}_score" for col in risk_impact_cols}
-    )
+    risk_impact_cols = [*risk_cols, *_NOHAM_IMPACT_COLS]
 
     _audit_infrastructure_risk(
         noham_risk,
         risk_impact_cols,
         audit_path / "NoHAM",
     )
+
+    noham_risk = _prepare_model_output(
+        risk_data=noham_risk,
+        drop_cols=[],
+        rename_map={"link_id": "id"},
+        risk_cols_order=risk_impact_cols,
+    )
+
+    noham_risk = noham_risk[[
+        "id", Scenarios.scenario_column, "geometry", *risk_impact_cols
+        ]]
+
 
     _split_csv_shapefile(
         config, noham_risk, "id", pathlib.Path("Road") / "NoHAM" / "noham_risk"
@@ -429,12 +405,11 @@ def _noham_road_risk(
 def _noham_impact_index(
     noham_c: gpd.GeoDataFrame,
     noham_f: gpd.GeoDataFrame,
+    risk_cols: list[str],
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """Normalise NoHAM demand, then calculate impact index."""
-    user_classes = ["uc1", "uc2", "uc3", "uc4", "uc5"]
-
     # Normalise user class demand together
-    noham_c, noham_f = _normalise_uc_demand(noham_c, noham_f, user_classes)
+    noham_c, noham_f = _normalise_uc_demand(noham_c, noham_f)
 
     # Normalise total demand separately
     noham_c, noham_f = _normalise_total_col(
@@ -442,38 +417,38 @@ def _noham_impact_index(
     )
 
     # Calculate impact scores
-    noham_c, noham_f = _calculate_noham_impact(noham_c, noham_f, user_classes)
+    noham_c, noham_f = _calculate_noham_impact(noham_c, noham_f)
 
-    impact_cols_c = [f"{uc}_impact_current" for uc in user_classes] + ["impact_current"]
-    impact_cols_f = [f"{uc}_impact_forecast" for uc in user_classes] + ["impact_forecast"]
+    impact_cols_c = [f"{uc}_impact_{Scenarios.CURRENT}" for uc in data_cleaning.NOHAM_USER_CLASSES] + [f"impact_{Scenarios.CURRENT}"]
+    impact_cols_f = [f"{uc}_impact_{Scenarios.FORECAST}" for uc in data_cleaning.NOHAM_USER_CLASSES] + [f"impact_{Scenarios.FORECAST}"]
 
     noham_c, noham_f = _normalise_total_cols(
         noham_c, noham_f, impact_cols_c, impact_cols_f
     )
 
     noham_c = noham_c[
-        ["link_id", "current_or_forecast", "geometry", *_HAZARD_RISK_COLS, *impact_cols_c]
+        ["link_id", Scenarios.scenario_or_column(), "geometry", *risk_cols, *impact_cols_c]
     ]
     noham_f = noham_f[
-        ["link_id", "current_or_forecast", "geometry", *_HAZARD_RISK_COLS, *impact_cols_f]
+        ["link_id", Scenarios.scenario_or_column(), "geometry", *risk_cols, *impact_cols_f]
     ]
 
     return noham_c, noham_f
 
 
 def _normalise_uc_demand(
-    noham_c: pd.DataFrame, noham_f: pd.DataFrame, user_classes: list[str]
+    noham_c: pd.DataFrame, noham_f: pd.DataFrame
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Normalise NoHAM demand for each user class individually."""
-    uc_total_cols = [f"{uc}_total" for uc in user_classes]
+    uc_total_cols = [f"{uc}_total" for uc in data_cleaning.NOHAM_USER_CLASSES]
     combined_values = np.vstack(
         [noham_c[uc_total_cols].to_numpy(), noham_f[uc_total_cols].to_numpy()]
     )
     scaler = MinMaxScaler(feature_range=(0, 100))
     scaler.fit(combined_values)
-    for noham_data, scenario in [(noham_c, "current"), (noham_f, "forecast")]:
+    for noham_data, scenario in [(noham_c, Scenarios.CURRENT), (noham_f, Scenarios.FORECAST)]:
         scaled = scaler.transform(noham_data[uc_total_cols].values)
-        noham_data[[f"{uc}_demand_{scenario}" for uc in user_classes]] = scaled
+        noham_data[[f"{uc}_demand_{scenario}" for uc in data_cleaning.NOHAM_USER_CLASSES]] = scaled
     return noham_c, noham_f
 
 
@@ -490,7 +465,7 @@ def _normalise_total_col(
     )
     scaler = MinMaxScaler(feature_range=(0, 100))
     scaler.fit(combined_values)
-    for noham_data, scenario in [(noham_c, "current"), (noham_f, "forecast")]:
+    for noham_data, scenario in [(noham_c, Scenarios.CURRENT), (noham_f, Scenarios.FORECAST)]:
         scaled = scaler.transform(noham_data[old_column].to_numpy().reshape(-1, 1))
         noham_data[f"{new_column}_{scenario}"] = scaled
     return noham_c, noham_f
@@ -512,27 +487,23 @@ def _normalise_total_cols(
 def _calculate_noham_impact(
     noham_c: pd.DataFrame,
     noham_f: pd.DataFrame,
-    user_classes: list[str],
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Calculate NoHAM impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
-    for uc in user_classes:
-        for noham_data, scenario in [(noham_c, "current"), (noham_f, "forecast")]:
+    risk_cols = [col for col in MainHazardCols.all_risk_cols() if col in noham_c.columns]
+    for uc in data_cleaning.NOHAM_USER_CLASSES:
+        for noham_data, scenario in [(noham_c, Scenarios.CURRENT), (noham_f, Scenarios.FORECAST)]:
             noham_data[f"{uc}_impact_{scenario}"] = (
                 noham_data[f"{uc}_demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
-                + noham_data["flood_risk"] * _IMPACT_WEIGHTS["flood"]
-                + noham_data["extreme_weather_risk"] * _IMPACT_WEIGHTS["extreme_weather"]
-                + noham_data["ground_stability_risk"] * _IMPACT_WEIGHTS["ground_stability"]
-                + noham_data["coastal_erosion_risk"] * _IMPACT_WEIGHTS["coastal_erosion"]
+                + sum(noham_data[risk_col] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
+                      for risk_col in risk_cols)
             )
 
-    for noham_data, scenario in [(noham_c, "current"), (noham_f, "forecast")]:
+    for noham_data, scenario in [(noham_c, Scenarios.CURRENT), (noham_f, Scenarios.FORECAST)]:
         noham_data[f"impact_{scenario}"] = (
             noham_data[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
-            + noham_data["flood_risk"] * _IMPACT_WEIGHTS["flood"]
-            + noham_data["extreme_weather_risk"] * _IMPACT_WEIGHTS["extreme_weather"]
-            + noham_data["ground_stability_risk"] * _IMPACT_WEIGHTS["ground_stability"]
-            + noham_data["coastal_erosion_risk"] * _IMPACT_WEIGHTS["coastal_erosion"]
+            + sum(noham_data[risk_col] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
+                  for risk_col in risk_cols)
         )
 
     return noham_c, noham_f
@@ -544,14 +515,15 @@ def _calculate_noham_impact(
 def _get_rail_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Layer passenger rail and freight rail network with hazard to assign risk."""
     LOG.info("Calculating rail risk...")
     if config.switches.passenger_rail:
-        _passenger_rail_risk(config, hazard_layers, audit_path)
+        _passenger_rail_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.freight_rail:
-        _freight_rail_risk(config, hazard_layers, audit_path)
+        _freight_rail_risk(config, hazard_layers, risk_cols, audit_path)
     LOG.info("Rail risk calculation complete.")
 
 
@@ -561,6 +533,7 @@ def _get_rail_risk(
 def _passenger_rail_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Intersect passenger rail network with hazard to assign risk, clean and write to file."""
@@ -583,12 +556,12 @@ def _passenger_rail_risk(
             "rail_use": "railway_use",
             "track_rep": "track_representation",
         },
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         passenger_rail_network_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Passenger Rail",
     )
 
@@ -608,6 +581,7 @@ def _passenger_rail_risk(
 def _freight_rail_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Calculate freight rail risk and write to file.
@@ -633,7 +607,7 @@ def _freight_rail_risk(
 
     freight_rail_network_risk = _prepare_model_output(
         risk_data=freight_rail_network_risk,
-        drop_cols=["dij_id", "distance", "demand_current", "demand_forecast"],
+        drop_cols=["dij_id", "distance", f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}"],
         rename_map={
             "osid": "id",
             "desc": "description",
@@ -641,12 +615,12 @@ def _freight_rail_risk(
             "rail_use": "railway_use",
             "track_rep": "track_representation",
         },
-        risk_cols_order=[*_HAZARD_RISK_COLS, "impact"],
+        risk_cols_order=[*risk_cols, "impact"],
     )
 
     _audit_infrastructure_risk(
         freight_rail_network_risk,
-        [*_HAZARD_RISK_COLS, "impact"],
+        [*risk_cols, "impact"],
         audit_path / "Freight Rail",
     )
 
@@ -664,13 +638,13 @@ def _freight_rail_risk(
 def _freight_impact_index(freight_rail_network_risk: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Calculate impact index using freight demand data and hazard risk."""
     freight_rail_network_risk = functional_rules.min_max_scaling_pair(
-        freight_rail_network_risk, [("demand_current", "demand_forecast")]
+        freight_rail_network_risk, [(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")],
     )
 
     freight_rail_network_risk = _calculate_freight_impact(freight_rail_network_risk)
 
     freight_rail_network_risk = functional_rules.min_max_scaling_pair(
-        freight_rail_network_risk, [("impact_current", "impact_forecast")]
+        freight_rail_network_risk, [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")]
     )
 
     return gpd.GeoDataFrame(freight_rail_network_risk, geometry="geometry", crs="EPSG:4326")
@@ -699,34 +673,35 @@ def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
 def _get_other_risk(  # noqa: C901
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Layer other infrastructure with hazards to assign risk."""
     LOG.info("Calculating risk for other infrastructure...")
     if config.switches.train_stations:
-        _train_stations_risk(config, hazard_layers, audit_path)
+        _train_stations_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.charging_sites:
-        _charging_sites_risk(config, hazard_layers, audit_path)
+        _charging_sites_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.airports:
-        _airports_risk(config, hazard_layers, audit_path)
+        _airports_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.bus_coach_stations:
-        _bus_coach_stations_risk(config, hazard_layers, audit_path)
+        _bus_coach_stations_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.bus_stops:
-        _bus_stops_risk(config, hazard_layers, audit_path)
+        _bus_stops_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.tram_stations:
-        _tram_stations_risk(config, hazard_layers, audit_path)
+        _tram_stations_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.rapid_transport_stations:
-        _rapid_transport_stations_risk(config, hazard_layers, audit_path)
+        _rapid_transport_stations_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.ferry_terminals:
-        _ferry_terminals_risk(config, hazard_layers, audit_path)
+        _ferry_terminals_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.petrol_stations:
-        _petrol_stations_risk(config, hazard_layers, audit_path)
+        _petrol_stations_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.national_cycle_network:
-        _ncn_risk(config, hazard_layers, audit_path)
+        _ncn_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.tram_network:
-        _tram_network_risk(config, hazard_layers, audit_path)
+        _tram_network_risk(config, hazard_layers, risk_cols, audit_path)
     if config.switches.rapid_transport_network:
-        _rapid_transport_network_risk(config, hazard_layers, audit_path)
+        _rapid_transport_network_risk(config, hazard_layers, risk_cols, audit_path)
     LOG.info("Risk calculation for other infrastructure complete.")
 
 
@@ -743,6 +718,7 @@ def _buffer_geometry(infrastructure: gpd.GeoDataFrame, buffer_size_m: int) -> gp
 def _train_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get train station risk and write to file.
@@ -762,12 +738,12 @@ def _train_stations_risk(
         risk_data=train_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         train_stations_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Train Stations",
     )
 
@@ -785,6 +761,7 @@ def _train_stations_risk(
 def _charging_sites_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get EV charging site risk and write to file.
@@ -804,12 +781,12 @@ def _charging_sites_risk(
         risk_data=charging_sites_risk,
         drop_cols=[],
         rename_map={"devices": "installed_devices"},
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         charging_sites_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "EV Charging Sites",
     )
 
@@ -828,6 +805,7 @@ def _charging_sites_risk(
 def _airports_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get airport risk and write to file.
@@ -845,12 +823,12 @@ def _airports_risk(
         risk_data=airports_risk,
         drop_cols=[],
         rename_map={},
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         airports_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Airports",
     )
 
@@ -869,6 +847,7 @@ def _airports_risk(
 def _bus_coach_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get bus and coach station risk and write to file.
@@ -893,12 +872,12 @@ def _bus_coach_stations_risk(
         risk_data=bus_coach_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         bus_coach_stations_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Bus and Coach Stations",
     )
 
@@ -917,6 +896,7 @@ def _bus_coach_stations_risk(
 def _bus_stops_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Intersect bus stops with hazard risk, clean output, and write to file."""
@@ -931,12 +911,12 @@ def _bus_stops_risk(
         risk_data=bus_stops_risk,
         drop_cols=[],
         rename_map={"stop_id": "id"},
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         bus_stops_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Bus Stops",
     )
 
@@ -955,6 +935,7 @@ def _bus_stops_risk(
 def _tram_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get tram station risk and write to file.
@@ -974,12 +955,12 @@ def _tram_stations_risk(
         risk_data=tram_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         tram_stations_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Tram Stations",
     )
 
@@ -998,6 +979,7 @@ def _tram_stations_risk(
 def _rapid_transport_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get rapid transport station risk and write to file.
@@ -1022,12 +1004,12 @@ def _rapid_transport_stations_risk(
         risk_data=rapid_transport_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         rapid_transport_stations_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Rapid Transport Stations",
     )
 
@@ -1048,6 +1030,7 @@ def _rapid_transport_stations_risk(
 def _ferry_terminals_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get ferry terminal risk and write to file.
@@ -1069,12 +1052,12 @@ def _ferry_terminals_risk(
         risk_data=ferry_terminals_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         ferry_terminals_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Ferry Terminals",
     )
 
@@ -1093,6 +1076,7 @@ def _ferry_terminals_risk(
 def _petrol_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get petrol station risk and write to file.
@@ -1114,12 +1098,12 @@ def _petrol_stations_risk(
         risk_data=petrol_stations_risk,
         drop_cols=[],
         rename_map={},
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         petrol_stations_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Petrol Stations",
     )
 
@@ -1138,6 +1122,7 @@ def _petrol_stations_risk(
 def _ncn_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get NCN risk and write to file.
@@ -1166,12 +1151,12 @@ def _ncn_risk(
             "RoadClass": "road_class",
             "SegmentID": "id",
         },
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         ncn_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "National Cycle Network",
     )
 
@@ -1190,6 +1175,7 @@ def _ncn_risk(
 def _tram_network_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get tram network risk and write to file.
@@ -1213,12 +1199,12 @@ def _tram_network_risk(
             "rail_use": "railway_use",
             "track_rep": "track_representation",
         },
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         tram_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Tram Network",
     )
 
@@ -1237,6 +1223,7 @@ def _tram_network_risk(
 def _rapid_transport_network_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[str],
     audit_path: pathlib.Path,
 ) -> None:
     """Get rapid transport network risk and write to file.
@@ -1262,12 +1249,12 @@ def _rapid_transport_network_risk(
             "rail_use": "railway_use",
             "track_rep": "track_representation",
         },
-        risk_cols_order=_HAZARD_RISK_COLS,
+        risk_cols_order=risk_cols,
     )
 
     _audit_infrastructure_risk(
         rapid_transport_risk,
-        _HAZARD_RISK_COLS,
+        risk_cols,
         audit_path / "Rapid Transport Network",
     )
 

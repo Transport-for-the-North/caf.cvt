@@ -4,11 +4,11 @@
 switches:
   # If running from scratch using only the raw input files these switches should all be true
   run_data_cleaning: false
-  run_functional_rules: true
+  run_functional_rules: false
   run_layering: true
 
   # Infrastructure switches 
-  all_roads: true
+  all_roads: false
   noham_roads: true
 
   passenger_rail: true
@@ -85,12 +85,8 @@ infrastructure:
       file_path: Data/oproad_gb.gpkg
       output_path: 
     noham:
-      "current": 
-          year: 2023
-          file_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2023/NoHAM_Decarb_DM_Core_2023_carbon.shp
-      "forecast": 
-          year: 2048
-          file_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2048/NoHAM_Decarb_DM_Core_2048_carbon.shp
+      2023: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2023/NoHAM_Decarb_DM_Core_2023_carbon.shp
+      2048: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2048/NoHAM_Decarb_DM_Core_2048_carbon.shp
   rail:
     rail_links: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/OS Rail Network/TfN_Area_tfn_ntwk_railwaylink.gpkg
   other:

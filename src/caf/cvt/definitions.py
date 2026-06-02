@@ -1,0 +1,67 @@
+"""Definitions and constants for caf.cvt model."""
+
+from __future__ import annotations
+
+import enum
+
+
+class Columns(enum.StrEnum):
+    """Column definition base class."""
+
+    @classmethod
+    def __contains__(cls, item: object) -> bool:
+        """Return True if object is defined within the enum, False otherwise."""
+        try:
+            cls(str(item))
+        except ValueError:
+            return False
+        return True
+
+class MainHazardCols(Columns):
+    """Column definitions for main hazard layers."""
+
+    EXTREME_WEATHER = "extreme_weather"
+    FLOODING = "flood"
+    GROUND_STABILITY = "ground_stability"
+    COASTAL_EROSION = "coastal_erosion"
+
+    @classmethod
+    def all(cls) -> list[MainHazardCols]:
+        """Return a list of all main hazard columns."""
+        return [col for col in cls]
+
+    @classmethod
+    def all_risk_cols(cls) -> list[str]:
+        """Return a list of all main hazard risk columns."""
+        return [f"{col}_risk" for col in cls]
+
+    @classmethod
+    def add_risk_suffix(cls, col: str) -> str:
+        """Add _risk suffix to column if not already present."""
+        return f"{col}_risk"
+
+class ExtremeWeatherCols(Columns):
+    """Column definitions for extreme weather subhazard layers."""
+
+    EXTREME_HEAT = "extreme_heat"
+    EXTREME_COLD = "extreme_cold"
+    DROUGHT = "drought"
+    STORM = "storm"
+
+
+class Scenarios(Columns):
+    """Column definitions for scenarios."""
+
+    CURRENT = "current"
+    FORECAST = "forecast"
+
+    @classmethod
+    def all(cls) -> list[Scenarios]:
+        """Return a list of all scenarios."""
+        return [col for col in cls]
+
+    @classmethod
+    def scenario_or_column(cls) -> str:
+        """Return the name of the scenario column."""
+        return f"{cls.CURRENT}_or_{cls.FORECAST}"
+

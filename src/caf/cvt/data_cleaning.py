@@ -15,6 +15,7 @@ import xarray as xr
 from shapely import geometry
 
 from caf.cvt import file_paths, model_config
+from caf.cvt.definitions import Scenarios
 
 LOG = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ LOG = logging.getLogger(__name__)
 _NOHAM_ROAD_THRESHOLD = int(os.getenv("NOHAM_ROAD_THRESHOLD", "10000"))
 
 _NOHAM_TIME_PERIODS = ["TS1", "TS2", "TS3"]
-_NOHAM_USER_CLASSES = ["uc1", "uc2", "uc3", "uc4", "uc5"]
+NOHAM_USER_CLASSES = ["uc1", "uc2", "uc3", "uc4", "uc5"]
 
 # British National Grid CRS, for use in spatially merging datasets
 BNG_CRS = os.getenv("BNG_CRS", "EPSG:27700")
@@ -66,14 +67,6 @@ _FLOOD_CODE_NUMBER_MAP = {
 _WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
 _WIND_SPEED_PERCENTILE = 0.99
 
-GEOSURE_RISK_COLS = [
-    "collapsible_deposits_risk",
-    "compressible_ground_risk",
-    "landslides_risk",
-    "running_sand_risk",
-    "shrink_swell_risk",
-    "soluble_rocks_risk",
-]
 
 ### GENERAL FUNCTIONS
 
@@ -426,9 +419,9 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
 
 def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean 2023 and 2048 NoHAM network datasets, then write to file."""
-    for scenario, noham_entry in config.infrastructure.road.noham.items():
+    for year, file_path in config.infrastructure.road.noham.items():
         noham_network = gpd.read_file(
-            noham_entry.file_path, mask=boundary, columns=["link_id"]
+            file_path, mask=boundary, columns=["link_id"]
         )
         len_before_filter = len(noham_network)
         noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
@@ -447,7 +440,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         filter_removed = len_before_filter - len(noham_network)
         LOG.info(
             "NoHAM network %s filtered - %s of %s (%.1f percent) rows removed",
-            noham_entry.year,
+            year,
             filter_removed,
             len_before_filter,
             (filter_removed / len_before_filter) * 100,
@@ -456,7 +449,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
             noham_network,
             config.paths.model_input
             / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-            / f"noham_{scenario}.gpkg",
+            / f"noham_{year}.gpkg",
         )
 
 
@@ -1018,12 +1011,12 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     temp_max = temp_max.drop(columns=["geometry"])
     temp_max = temp_max.rename(
         columns={
-            "tasmax_s_4": "max_temp_summer_current",
-            "tasmax__22": "max_temp_summer_forecast",
+            "tasmax_s_4": f"max_temp_summer_{Scenarios.CURRENT}",
+            "tasmax__22": f"max_temp_summer_{Scenarios.FORECAST}",
         }
     )
-    temp_max["max_temp_summer_forecast"] = (
-        temp_max["max_temp_summer_current"] + temp_max["max_temp_summer_forecast"]
+    temp_max[f"max_temp_summer_{Scenarios.FORECAST}"] = (
+        temp_max[f"max_temp_summer_{Scenarios.CURRENT}"] + temp_max[f"max_temp_summer_{Scenarios.FORECAST}"]
     )
     len_before_filter = len(temp_max)
     temp_max = temp_max[temp_max["grid_id"].isin(grid["grid_id"])]
@@ -1051,12 +1044,12 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     temp_min = temp_min.drop(columns=["geometry"])
     temp_min = temp_min.rename(
         columns={
-            "tasmin_w_4": "min_temp_winter_current",
-            "tasmin__22": "min_temp_winter_forecast",
+            "tasmin_w_4": f"min_temp_winter_{Scenarios.CURRENT}",
+            "tasmin__22": f"min_temp_winter_{Scenarios.FORECAST}",
         }
     )
-    temp_min["min_temp_winter_forecast"] = (
-        temp_min["min_temp_winter_current"] + temp_min["min_temp_winter_forecast"]
+    temp_min[f"min_temp_winter_{Scenarios.FORECAST}"] = (
+        temp_min[f"min_temp_winter_{Scenarios.CURRENT}"] + temp_min[f"min_temp_winter_{Scenarios.FORECAST}"]
     )
     len_before_filter = len(temp_min)
     temp_min = temp_min[temp_min["grid_id"].isin(grid["grid_id"])]
@@ -1085,14 +1078,14 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     precip_sum = precip_sum.drop(columns=["geometry"])
     precip_sum = precip_sum.rename(
         columns={
-            "pr_summe_3": "precip_summer_current",
-            "pr_summ_21": "precip_summer_pct_chg_forecast",
+            "pr_summe_3": f"precip_summer_{Scenarios.CURRENT}",
+            "pr_summ_21": f"precip_summer_pct_chg_{Scenarios.FORECAST}",
         }
     )
-    precip_sum["precip_summer_forecast"] = precip_sum["precip_summer_current"] * (
-        1 + (precip_sum["precip_summer_pct_chg_forecast"] / 100)
+    precip_sum[f"precip_summer_{Scenarios.FORECAST}"] = precip_sum[f"precip_summer_{Scenarios.CURRENT}"] * (
+        1 + (precip_sum[f"precip_summer_pct_chg_{Scenarios.FORECAST}"] / 100)
     )
-    precip_sum = precip_sum.drop(columns=["precip_summer_pct_chg_forecast"])
+    precip_sum = precip_sum.drop(columns=[f"precip_summer_pct_chg_{Scenarios.FORECAST}"])
     len_before_filter = len(precip_sum)
     precip_sum = precip_sum[precip_sum["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(precip_sum)
@@ -1119,14 +1112,14 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     precip_win = precip_win.drop(columns=["geometry"])
     precip_win = precip_win.rename(
         columns={
-            "pr_winte_3": "precip_winter_current",
-            "pr_wint_21": "precip_winter_pct_chg_forecast",
+            "pr_winte_3": f"precip_winter_{Scenarios.CURRENT}",
+            "pr_wint_21": f"precip_winter_pct_chg_{Scenarios.FORECAST}",
         },
     )
-    precip_win["precip_winter_forecast"] = precip_win["precip_winter_current"] * (
-        1 + (precip_win["precip_winter_pct_chg_forecast"] / 100)
+    precip_win[f"precip_winter_{Scenarios.FORECAST}"] = precip_win[f"precip_winter_{Scenarios.CURRENT}"] * (
+        1 + (precip_win[f"precip_winter_pct_chg_{Scenarios.FORECAST}"] / 100)
     )
-    precip_win = precip_win.drop(columns=["precip_winter_pct_chg_forecast"])
+    precip_win = precip_win.drop(columns=[f"precip_winter_pct_chg_{Scenarios.FORECAST}"])
     len_before_filter = len(precip_win)
     precip_win = precip_win[precip_win["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(precip_win)
@@ -1152,7 +1145,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     len_before_filter = len(rain_days)
     rain_days = clip_to_boundary(rain_days, boundary)
     rain_days = rain_days.rename(
-        columns={"Rain10mmDa": "10mm_rain_days_current"}
+        columns={"Rain10mmDa": f"10mm_rain_days_{Scenarios.CURRENT}"}
     )
     filter_removed = len_before_filter - len(rain_days)
     LOG.info(
@@ -1177,8 +1170,8 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
     )
     drought_index = drought_index.rename(
         columns={
-            "DSI12_ba_4": "drought_severity_index_current",
-            "DSI12_40_m": "drought_severity_index_forecast",
+            "DSI12_ba_4": f"drought_severity_index_{Scenarios.CURRENT}",
+            "DSI12_40_m": f"drought_severity_index_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(drought_index)
@@ -1207,8 +1200,8 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
     hot_days = hot_days.drop(columns=["geometry"])
     hot_days = hot_days.rename(
         columns={
-            "HSD_base_4": "hot_summer_days_current",
-            "HSD_40_med": "hot_summer_days_forecast",
+            "HSD_base_4": f"hot_summer_days_{Scenarios.CURRENT}",
+            "HSD_40_med": f"hot_summer_days_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(hot_days)
@@ -1236,8 +1229,8 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
     extr_days = extr_days.drop(columns=["geometry"])
     extr_days = extr_days.rename(
         columns={
-            "ESD_base_4": "extreme_summer_days_current",
-            "ESD_40_med": "extreme_summer_days_forecast",
+            "ESD_base_4": f"extreme_summer_days_{Scenarios.CURRENT}",
+            "ESD_40_med": f"extreme_summer_days_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(extr_days)
@@ -1265,7 +1258,10 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     frost_days["grid_id"] = range(1, len(frost_days) + 1)
     frost_days = frost_days.drop(columns=["geometry"])
     frost_days = frost_days.rename(
-        columns={"FrostDay_3": "frost_days_current", "FrostDa_18": "frost_days_forecast"}
+        columns={
+            "FrostDay_3": f"frost_days_{Scenarios.CURRENT}",
+            "FrostDa_18": f"frost_days_{Scenarios.FORECAST}"
+        }
     )
     len_before_filter = len(frost_days)
     frost_days = frost_days[frost_days["grid_id"].isin(grid["grid_id"])]
@@ -1291,7 +1287,10 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     ice_days["grid_id"] = range(1, len(ice_days) + 1)
     ice_days = ice_days.drop(columns=["geometry"])
     ice_days = ice_days.rename(
-        columns={"IcingDay_3": "icing_days_current", "IcingDa_18": "icing_days_forecast"}
+        columns={
+            "IcingDay_3": f"icing_days_{Scenarios.CURRENT}",
+            "IcingDa_18": f"icing_days_{Scenarios.FORECAST}"
+        }
     )
     len_before_filter = len(ice_days)
     ice_days = ice_days[ice_days["grid_id"].isin(grid["grid_id"])]
@@ -1310,17 +1309,17 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
 def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read wind speed projections, calculate metrics, clean, then write to file."""
     windspd_current_agg, len_before_filter_current = _read_wind_speed_reduce(
-        config.hazards.extreme_weather.wind_spd_current, "current"
+        config.hazards.extreme_weather.wind_spd_current, Scenarios.CURRENT
     )
     windspd_forecast_agg, len_before_filter_forecast = _read_wind_speed_reduce(
-        config.hazards.extreme_weather.wind_spd_forecast, "forecast"
+        config.hazards.extreme_weather.wind_spd_forecast, Scenarios.FORECAST
     )
 
     metric_cols = [
-        "wind_speed_99th_percentile_current",
-        "avg_exceedance_days_current",
-        "wind_speed_99th_percentile_forecast",
-        "avg_exceedance_days_forecast",
+        f"wind_speed_99th_percentile_{Scenarios.CURRENT}",
+        f"avg_exceedance_days_{Scenarios.CURRENT}",
+        f"wind_speed_99th_percentile_{Scenarios.FORECAST}",
+        f"avg_exceedance_days_{Scenarios.FORECAST}",
     ]
 
     len_before_filter = len_before_filter_current + len_before_filter_forecast
@@ -1421,8 +1420,8 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
     wind_driven_rain = wind_driven_rain.drop(columns=["x_coord", "y_coord"])
     wind_driven_rain = wind_driven_rain.rename(
         columns={
-            "WDR_base_1": "wind_driven_rain_index_current",
-            "WDR_40_Med": "wind_driven_rain_index_forecast",
+            "WDR_base_1": f"wind_driven_rain_index_{Scenarios.CURRENT}",
+            "WDR_40_Med": f"wind_driven_rain_index_{Scenarios.FORECAST}",
         }
     )
     wind_driven_rain = gpd.GeoDataFrame(
@@ -1463,7 +1462,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         out_path=file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         climate_change_switch=True,
         code_number_map=_FLOOD_CODE_NUMBER_MAP,
-        rename_risk_col="rivers_sea_flood_risk_forecast",
+        rename_risk_col=f"rivers_sea_flood_risk_{Scenarios.FORECAST}",
     )
     LOG.info("Finished cleaning climate change river and sea flooding data.")
 
@@ -1477,7 +1476,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         out_path=file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
         climate_change_switch=False,
         code_number_map=_FLOOD_CODE_NUMBER_MAP,
-        rename_risk_col="rivers_sea_flood_risk_current",
+        rename_risk_col=f"rivers_sea_flood_risk_{Scenarios.CURRENT}",
     )
     LOG.info("Finished cleaning river and sea flooding data.")
 
@@ -1491,7 +1490,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         out_path=file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
         climate_change_switch=True,
         code_number_map=_FLOOD_CODE_NUMBER_MAP,
-        rename_risk_col="surface_water_flood_risk_forecast",
+        rename_risk_col=f"surface_water_flood_risk_{Scenarios.FORECAST}",
     )
     LOG.info("Finished cleaning climate change surface water flooding data.")
 
@@ -1505,7 +1504,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         out_path=file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
         climate_change_switch=False,
         code_number_map=_FLOOD_CODE_NUMBER_MAP,
-        rename_risk_col="surface_water_flood_risk_current",
+        rename_risk_col=f"surface_water_flood_risk_{Scenarios.CURRENT}",
     )
     LOG.info("Finished cleaning surface water flooding data.")
     LOG.info("Finished cleaning flooding data.")
@@ -1823,8 +1822,8 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-
-    geosure = geosure[[*GEOSURE_RISK_COLS, "geometry"]]
+    geosure_risk_cols = [col for col in geosure.columns if col.endswith("_risk")]
+    geosure = geosure[[*geosure_risk_cols, "geometry"]]
     write_to_file(
         geosure,
         config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH,
@@ -1986,7 +1985,7 @@ def _read_freight_demand(path: pathlib.Path, boundary: gpd.GeoDataFrame) -> gpd.
         path, mask=boundary, columns=["dij_id", "2022_23_total", "2050_51 sc2_total"]
     )
     freight_network_demand = freight_network_demand.rename(
-        columns={"2022_23_total": "demand_current", "2050_51 sc2_total": "demand_forecast"}
+        columns={"2022_23_total": f"demand_{Scenarios.CURRENT}", "2050_51 sc2_total": f"demand_{Scenarios.FORECAST}"}
     )
     len_before_filter = len(freight_network_demand)
     freight_network_demand = clip_to_boundary(freight_network_demand, boundary)
@@ -2022,8 +2021,8 @@ def _map_freight_networks(
         len_after_mapping,
     )
 
-    os_freight_network_demand[["demand_current", "demand_forecast"]] = (
-        os_freight_network_demand[["demand_current", "demand_forecast"]].fillna(0)
+    os_freight_network_demand[[f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}"]] = (
+        os_freight_network_demand[[f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}"]].fillna(0)
     )
     return os_freight_network_demand.drop(columns=["index_right"])
 
@@ -2033,19 +2032,19 @@ def _map_freight_networks(
 
 def _clean_noham_flows(config: model_config.Config) -> None:
     """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
-    for scenario, _ in config.infrastructure.road.noham.items():
-        noham_flows = _aggregate_link_flows_year(config, scenario)
+    for year, _ in config.infrastructure.road.noham.items():
+        noham_flows = _aggregate_link_flows_year(config, year)
         noham_net_flows = _merge_noham_flow_network(
             noham_flows,
             config.paths.model_input
             / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-            / f"noham_{scenario}.gpkg",
+            / f"noham_{year}.gpkg",
         )
         write_to_file(
             noham_net_flows,
             config.paths.model_input
             / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
-            / f"noham_net_flows_{scenario}.gpkg",
+            / f"noham_net_flows_{year}.gpkg",
         )
 
 
@@ -2154,17 +2153,15 @@ def _process_single_noham_layer(
 
 
 def _aggregate_link_flows_year(
-    config: model_config.Config, scenario: str
+    config: model_config.Config, year: str
 ) -> dict[str, pd.DataFrame]:
     """Aggregate link flows for each year, time period, and user class."""
-    year = config.infrastructure.road.noham[scenario].year
-
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}
 
     ts_dfs = []
     for time_period in _NOHAM_TIME_PERIODS:
         uc_dfs = []
-        for user_class in _NOHAM_USER_CLASSES:
+        for user_class in NOHAM_USER_CLASSES:
             uc_dfs.append(
                 _process_single_noham_layer(
                     config,
@@ -2182,7 +2179,7 @@ def _aggregate_link_flows_year(
 
         # Compute total demand for all vehicles for each time period
         combined_uc_df[f"all_vehs_{time_period}"] = combined_uc_df[
-            [f"{uc}_{time_period}" for uc in _NOHAM_USER_CLASSES]
+            [f"{uc}_{time_period}" for uc in NOHAM_USER_CLASSES]
         ].sum(axis=1)
 
         # Store result
@@ -2194,7 +2191,7 @@ def _aggregate_link_flows_year(
         combined_ts_df = combined_ts_df.merge(df_ts, on="link_id", how="outer")
 
     # Compute totals for each user class across all time periods
-    for uc in _NOHAM_USER_CLASSES:
+    for uc in NOHAM_USER_CLASSES:
         combined_ts_df[f"{uc}_total"] = combined_ts_df[
             [f"{uc}_{tp}" for tp in _NOHAM_TIME_PERIODS]
         ].sum(axis=1)
