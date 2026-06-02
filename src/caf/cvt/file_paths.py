@@ -118,7 +118,7 @@ NCERM_MODEL_INPUT_PATH = pathlib.Path("Hazards/Coastal Erosion/NCERM")
 FREIGHT_DEMAND_MODEL_INPUT_PATH = pathlib.Path(
     "Impact/Freight Flows/freight_network_demand.gpkg"
 )
-NOHAM_FLOWS_MODEL_INPUT_PATH = pathlib.Path("Impact/NoHAM Flows")
+NOHAM_FLOWS_MODEL_INPUT_PATH = pathlib.Path("Impact/NoHAM Flows/noham_net_flows.gpkg")
 
 # Model Interim Output Paths
 EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(

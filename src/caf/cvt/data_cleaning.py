@@ -15,7 +15,7 @@ import xarray as xr
 from shapely import geometry
 
 from caf.cvt import file_paths, model_config
-from caf.cvt.definitions import Scenarios
+from caf.cvt.definitions import NoHAMYears, Scenarios
 
 LOG = logging.getLogger(__name__)
 
@@ -418,41 +418,38 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
 
 
 def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Read and clean 2023 and 2048 NoHAM network datasets, then write to file."""
-    for year, file_path in config.infrastructure.road.noham.items():
-        noham_network = gpd.read_file(
-            file_path, mask=boundary, columns=["link_id"]
-        )
-        len_before_filter = len(noham_network)
-        noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
-        noham_network_clean[["a", "b"]] = (
-            noham_network_clean["link_id"].str.split("_", expand=True).astype(int)
-        )
-        # Filter out links with a or b less than 10,000 (zone connectors)
-        noham_network_clean = noham_network_clean[
-            (noham_network_clean["a"] >= _NOHAM_ROAD_THRESHOLD)
-            & (noham_network_clean["b"] >= _NOHAM_ROAD_THRESHOLD)
-        ]
-        noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
-        noham_network_clean = noham_network_clean[~noham_network_clean.geometry.is_empty]
-        noham_network_clean = noham_network_clean[noham_network_clean.geometry.notna()]
-        noham_network = clip_to_boundary(noham_network_clean, boundary)
-        filter_removed = len_before_filter - len(noham_network)
-        LOG.info(
-            "NoHAM network %s filtered - %s of %s (%.1f percent) rows removed",
-            year,
-            filter_removed,
-            len_before_filter,
-            (filter_removed / len_before_filter) * 100,
-        )
-        write_to_file(
-            noham_network,
-            config.paths.model_input
-            / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-            / f"noham_{year}.gpkg",
-        )
-
-
+    """Read and clean NoHAM network dataset, then write to file."""
+    year = config.infrastructure.road.noham.year
+    noham_network = gpd.read_file(
+        config.infrastructure.road.noham.file_path, mask=boundary, columns=["link_id"]
+    )
+    len_before_filter = len(noham_network)
+    noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
+    noham_network_clean[["a", "b"]] = (
+        noham_network_clean["link_id"].str.split("_", expand=True).astype(int)
+    )
+    # Filter out links with a or b less than 10,000 (zone connectors)
+    noham_network_clean = noham_network_clean[
+        (noham_network_clean["a"] >= _NOHAM_ROAD_THRESHOLD)
+        & (noham_network_clean["b"] >= _NOHAM_ROAD_THRESHOLD)
+    ]
+    noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
+    noham_network_clean = noham_network_clean[~noham_network_clean.geometry.is_empty]
+    noham_network_clean = noham_network_clean[noham_network_clean.geometry.notna()]
+    noham_network = clip_to_boundary(noham_network_clean, boundary)
+    filter_removed = len_before_filter - len(noham_network)
+    LOG.info(
+        "NoHAM network filtered - %s of %s (%.1f percent) rows removed",
+        filter_removed,
+        len_before_filter,
+        (filter_removed / len_before_filter) * 100,
+    )
+    write_to_file(
+        noham_network,
+        config.paths.model_input
+        / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
+        / f"noham_{year}.gpkg",
+    )
 ### RAIL
 
 
@@ -1016,7 +1013,8 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         }
     )
     temp_max[f"max_temp_summer_{Scenarios.FORECAST}"] = (
-        temp_max[f"max_temp_summer_{Scenarios.CURRENT}"] + temp_max[f"max_temp_summer_{Scenarios.FORECAST}"]
+        temp_max[f"max_temp_summer_{Scenarios.CURRENT}"] +
+        temp_max[f"max_temp_summer_{Scenarios.FORECAST}"]
     )
     len_before_filter = len(temp_max)
     temp_max = temp_max[temp_max["grid_id"].isin(grid["grid_id"])]
@@ -2032,20 +2030,50 @@ def _map_freight_networks(
 
 def _clean_noham_flows(config: model_config.Config) -> None:
     """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
-    for year, _ in config.infrastructure.road.noham.items():
-        noham_flows = _aggregate_link_flows_year(config, year)
-        noham_net_flows = _merge_noham_flow_network(
-            noham_flows,
-            config.paths.model_input
-            / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-            / f"noham_{year}.gpkg",
-        )
-        write_to_file(
-            noham_net_flows,
-            config.paths.model_input
-            / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
-            / f"noham_net_flows_{year}.gpkg",
-        )
+    scenario_flows = {}
+    network_year = config.infrastructure.road.noham.year
+    for year in config.impact.noham_years:
+        scenario = NoHAMYears.get_scenario(year)
+        flows = _aggregate_link_flows_year(config, year)
+
+        flows = flows.rename(columns={
+            col: f"{col}_{scenario}" for col in flows.columns if col != "link_id"
+        })
+
+        scenario_flows[scenario] = flows
+
+    current_ids = set(scenario_flows[Scenarios.CURRENT]["link_id"])
+    forecast_ids = set(scenario_flows[Scenarios.FORECAST]["link_id"])
+    common_ids = current_ids & forecast_ids
+    current_only_ids = current_ids - forecast_ids
+    forecast_only_ids = forecast_ids - current_ids
+
+    noham_flows = scenario_flows[Scenarios.CURRENT].merge(
+        scenario_flows[Scenarios.FORECAST], on="link_id", how="inner"
+    )
+
+    LOG.info(
+        "NoHAM flows merged: \n"
+        "Current links: %s, Forecast links: %s \n"
+        "Common links: %s, Current only links: %s, Forecast only links: %s",
+        len(current_ids),
+        len(forecast_ids),
+        len(common_ids),
+        len(current_only_ids),
+        len(forecast_only_ids),
+    )
+
+    noham_net_flows = _merge_noham_flow_network(
+        noham_flows,
+        config.paths.model_input
+        / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
+        / f"noham_{network_year}.gpkg",
+    )
+    write_to_file(
+        noham_net_flows,
+        config.paths.model_input
+        / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
+    )
 
 
 def _read_noham_h5(

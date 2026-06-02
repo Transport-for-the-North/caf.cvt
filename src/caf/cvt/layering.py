@@ -336,44 +336,18 @@ def _noham_road_risk(
 ) -> None:
     """Get NoHAM road risk and write to file.
 
-    Intersect NoHAM 2023 and 2048 with hazards, calculate impact index, clean output, and write
+    Intersect NoHAM with hazards, calculate impact index, clean output, and write
     to file.
     """
     LOG.info("Layering NoHAM with hazard risk and calculating impact index...")
-    noham = {}
-    for year in config.infrastructure.road.noham:
-        noham[year] = gpd.read_file(
-            config.paths.model_input
-            / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
-            / f"noham_net_flows_{year}.gpkg"
-        )
-
-        noham[year] = _infrastructure_risk_intersect(
-            noham[year], hazard_layers
-        )
-
-        other_scenario = Scenarios.FORECAST if scenario == Scenarios.CURRENT else Scenarios.CURRENT
-        noham[year] = noham[year].drop(
-            columns=[
-                col for col in noham[year].columns
-                     if col.endswith(f"_{other_scenario}")
-                ]
-            )
-        noham[year] = noham[year].rename(
-            columns={col: col.removesuffix(f"_{scenario}") for col in noham[scenario].columns
-                     if col.endswith(f"_{scenario}")}
-        )
-
-    noham[Scenarios.CURRENT], noham[Scenarios.FORECAST] = _noham_impact_index(
-        noham[Scenarios.CURRENT],
-        noham[Scenarios.FORECAST],
-        risk_cols,
+    noham_net_flows = gpd.read_file(
+        config.paths.model_input
+        / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
     )
 
-    noham_risk = pd.concat(
-        [noham[Scenarios.CURRENT], noham[Scenarios.FORECAST]],
-        ignore_index=True
-    )
+    noham_risk = _infrastructure_risk_intersect(noham_net_flows, hazard_layers)
+
+    noham_risk = _noham_impact_index(noham_risk)
 
     risk_impact_cols = [*risk_cols, *_NOHAM_IMPACT_COLS]
 
@@ -403,72 +377,60 @@ def _noham_road_risk(
 
 
 def _noham_impact_index(
-    noham_c: gpd.GeoDataFrame,
-    noham_f: gpd.GeoDataFrame,
-    risk_cols: list[str],
-) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    noham: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
     """Normalise NoHAM demand, then calculate impact index."""
-    # Normalise user class demand together
-    noham_c, noham_f = _normalise_uc_demand(noham_c, noham_f)
+    noham_normalised = _normalise_uc_demand(noham)
+    noham_normalised = _normalise_total_col(noham_normalised, "all_vehs_total", "demand")
+    noham_impact = _calculate_noham_impact(noham_normalised)
 
-    # Normalise total demand separately
-    noham_c, noham_f = _normalise_total_col(
-        noham_c, noham_f, "all_vehs_total", "demand"
-    )
+    impact_cols = [
+        f"{uc}_impact_{scenario}"
+        for uc in data_cleaning.NOHAM_USER_CLASSES
+        for scenario in Scenarios.all()
+    ] + [f"impact_{scenario}" for scenario in Scenarios.all()]
 
-    # Calculate impact scores
-    noham_c, noham_f = _calculate_noham_impact(noham_c, noham_f)
 
-    impact_cols_c = [f"{uc}_impact_{Scenarios.CURRENT}" for uc in data_cleaning.NOHAM_USER_CLASSES] + [f"impact_{Scenarios.CURRENT}"]
-    impact_cols_f = [f"{uc}_impact_{Scenarios.FORECAST}" for uc in data_cleaning.NOHAM_USER_CLASSES] + [f"impact_{Scenarios.FORECAST}"]
+    noham_impact = _normalise_total_cols(noham_impact, impact_cols)
 
-    noham_c, noham_f = _normalise_total_cols(
-        noham_c, noham_f, impact_cols_c, impact_cols_f
-    )
-
-    noham_c = noham_c[
-        ["link_id", Scenarios.scenario_or_column(), "geometry", *risk_cols, *impact_cols_c]
-    ]
-    noham_f = noham_f[
-        ["link_id", Scenarios.scenario_or_column(), "geometry", *risk_cols, *impact_cols_f]
+    return noham_impact[
+        ["link_id",
+         "geometry",
+         *[col for col in noham_impact.columns if "risk" in col or "impact" in col]]
     ]
 
-    return noham_c, noham_f
 
-
-def _normalise_uc_demand(
-    noham_c: pd.DataFrame, noham_f: pd.DataFrame
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _normalise_uc_demand(noham: pd.DataFrame) -> pd.DataFrame:
     """Normalise NoHAM demand for each user class individually."""
     uc_total_cols = [f"{uc}_total" for uc in data_cleaning.NOHAM_USER_CLASSES]
     combined_values = np.vstack(
-        [noham_c[uc_total_cols].to_numpy(), noham_f[uc_total_cols].to_numpy()]
+        [noham[uc_total_cols].to_numpy(), noham[uc_total_cols].to_numpy()]
     )
     scaler = MinMaxScaler(feature_range=(0, 100))
     scaler.fit(combined_values)
-    for noham_data, scenario in [(noham_c, Scenarios.CURRENT), (noham_f, Scenarios.FORECAST)]:
-        scaled = scaler.transform(noham_data[uc_total_cols].values)
-        noham_data[[f"{uc}_demand_{scenario}" for uc in data_cleaning.NOHAM_USER_CLASSES]] = scaled
-    return noham_c, noham_f
+    for scenario in Scenarios.all():
+        scaled = scaler.transform(noham[uc_total_cols].values)
+        noham[[f"{uc}_demand_{scenario}" for uc in data_cleaning.NOHAM_USER_CLASSES]] = scaled
+    return noham
 
 
 def _normalise_total_col(
-    noham_c: pd.DataFrame, noham_f: pd.DataFrame, old_column: str, new_column: str
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+    noham: pd.DataFrame, old_column: str, new_column: str
+) -> pd.DataFrame:
     """Normalise total demand for one column."""
     # Normalise all vehicles total separately
     combined_values = np.vstack(
         [
-            noham_c[old_column].to_numpy().reshape(-1, 1),
-            noham_f[old_column].to_numpy().reshape(-1, 1),
+            noham[f"{old_column}_{Scenarios.CURRENT}"].to_numpy().reshape(-1, 1),
+            noham[f"{old_column}_{Scenarios.FORECAST}"].to_numpy().reshape(-1, 1),
         ]
     )
     scaler = MinMaxScaler(feature_range=(0, 100))
     scaler.fit(combined_values)
-    for noham_data, scenario in [(noham_c, Scenarios.CURRENT), (noham_f, Scenarios.FORECAST)]:
-        scaled = scaler.transform(noham_data[old_column].to_numpy().reshape(-1, 1))
-        noham_data[f"{new_column}_{scenario}"] = scaled
-    return noham_c, noham_f
+    for scenario in Scenarios.all():
+        scaled = scaler.transform(noham[f"{old_column}_{scenario}"].to_numpy().reshape(-1, 1))
+        noham[f"{new_column}_{scenario}"] = scaled
+    return noham
 
 
 def _normalise_total_cols(
@@ -484,29 +446,25 @@ def _normalise_total_cols(
     return noham_c, noham_f
 
 
-def _calculate_noham_impact(
-    noham_c: pd.DataFrame,
-    noham_f: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
     """Calculate NoHAM impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
-    risk_cols = [col for col in MainHazardCols.all_risk_cols() if col in noham_c.columns]
-    for uc in data_cleaning.NOHAM_USER_CLASSES:
-        for noham_data, scenario in [(noham_c, Scenarios.CURRENT), (noham_f, Scenarios.FORECAST)]:
-            noham_data[f"{uc}_impact_{scenario}"] = (
-                noham_data[f"{uc}_demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
-                + sum(noham_data[risk_col] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
-                      for risk_col in risk_cols)
+    risk_cols = [col for col in MainHazardCols.all_risk_cols() if col in noham.columns]
+    for scenario in Scenarios.all():
+        for uc in data_cleaning.NOHAM_USER_CLASSES:
+            noham[f"{uc}_impact_{scenario}"] = (
+                noham[f"{uc}_demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+                + sum(noham[risk_col] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
+                        for risk_col in risk_cols)
             )
 
-    for noham_data, scenario in [(noham_c, Scenarios.CURRENT), (noham_f, Scenarios.FORECAST)]:
-        noham_data[f"impact_{scenario}"] = (
-            noham_data[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
-            + sum(noham_data[risk_col] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
-                  for risk_col in risk_cols)
+        noham[f"impact_{scenario}"] = (
+            noham[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+            + sum(noham[risk_col] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
+                    for risk_col in risk_cols)
         )
 
-    return noham_c, noham_f
+    return noham
 
 
 ### RAIL

@@ -102,21 +102,18 @@ class OtherInput(ctk.BaseConfig):
     stb_path: pathlib.Path
     ca_path: pathlib.Path
 
-
 class NoHAMEntry(ctk.BaseConfig):
-    """Configuration for a NoHAM data entry.
+    """Configuration for NoHAM road network data.
 
     Attributes
     ----------
-    year: str
-        The year which the NoHAM entry comes from.
+    year: int
+        Year of the NoHAM network.
     file_path: pathlib.Path
-        Path to the NoHAM data.
     """
 
-    year: str
+    year: int
     file_path: pathlib.Path
-
 
 class Road(ctk.BaseConfig):
     """Configuration for road infrastructure data.
@@ -125,12 +122,14 @@ class Road(ctk.BaseConfig):
     ----------
     os_road : ZipFileEntry
         Configuration for the OS road zip file entry.
-    noham: dict[str, NoHAMEntry]
-        Dictionary containing scenario linked to year and file path in a NoHAM entry class.
+    noham: NoHAMEntry
+        Configuration for the NoHAM road network data.
     """
 
     os_road: ZipFileEntry
-    noham: dict[str, NoHAMEntry]
+    noham: NoHAMEntry
+
+
 
 
 class Rail(ctk.BaseConfig):
@@ -343,10 +342,13 @@ class ImpactConfig(ctk.BaseConfig):
         Path to the freight demand data.
     noham_demand : ZipFileEntry
         Configuration for NoHAM demand zip file entry.
+    noham_years: list[int]
+        List of years for NoHAM demand scenarios.
     """
 
     freight_demand: pathlib.Path
     noham_demand: ZipFileEntry
+    noham_years: list[int]
 
 
 class SwitchConfig(ctk.BaseConfig):

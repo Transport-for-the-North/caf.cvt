@@ -3,7 +3,7 @@
 # Model Section Switches
 switches:
   # If running from scratch using only the raw input files these switches should all be true
-  run_data_cleaning: false
+  run_data_cleaning: true
   run_functional_rules: false
   run_layering: true
 
@@ -11,8 +11,8 @@ switches:
   all_roads: false
   noham_roads: true
 
-  passenger_rail: true
-  freight_rail: true
+  passenger_rail: false
+  freight_rail: false
 
   airports: false
   bus_stops: false
@@ -24,7 +24,7 @@ switches:
   rapid_transport_stations: false
   ferry_terminals: false
   bus_coach_stations: false
-  tram_network: true
+  tram_network: false
   rapid_transport_network: false
 
   # Hazard switches
@@ -85,8 +85,8 @@ infrastructure:
       file_path: Data/oproad_gb.gpkg
       output_path: 
     noham:
-      2023: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2023/NoHAM_Decarb_DM_Core_2023_carbon.shp
-      2048: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2048/NoHAM_Decarb_DM_Core_2048_carbon.shp
+      year: 2023
+      file_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2023/NoHAM_Decarb_DM_Core_2023_carbon.shp
   rail:
     rail_links: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/OS Rail Network/TfN_Area_tfn_ntwk_railwaylink.gpkg
   other:
@@ -178,6 +178,9 @@ impact:
     zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Impact/NoHAM Link Flows/input h5s.7z
     file_path: 
     output_path: D:/Climate Vulnerability Tool/Data/raw inputs/Impact/NoHAM Link Flows/h5 files
+  noham_years:
+    - 2023
+    - 2048
 
 
 

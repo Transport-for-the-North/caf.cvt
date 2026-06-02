@@ -65,3 +65,16 @@ class Scenarios(Columns):
         """Return the name of the scenario column."""
         return f"{cls.CURRENT}_or_{cls.FORECAST}"
 
+
+class NoHAMYears:
+    """Mapping between NoHAM years and scenario definitions."""
+
+    YEAR_TO_SCENARIO: dict[int, Scenarios] = {
+        2023: Scenarios.CURRENT,
+        2048: Scenarios.FORECAST,
+    }
+
+    @classmethod
+    def get_scenario(cls, year: int) -> str:
+        """Return the scenario corresponding to a given year."""
+        return cls.YEAR_TO_SCENARIO[int(year)]
