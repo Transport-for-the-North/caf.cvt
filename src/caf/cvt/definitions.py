@@ -17,6 +17,7 @@ class Columns(enum.StrEnum):
             return False
         return True
 
+
 class MainHazardCols(Columns):
     """Column definitions for main hazard layers."""
 
@@ -39,6 +40,7 @@ class MainHazardCols(Columns):
     def add_risk_suffix(cls, col: str) -> str:
         """Add _risk suffix to column if not already present."""
         return f"{col}_risk"
+
 
 class ExtremeWeatherCols(Columns):
     """Column definitions for extreme weather subhazard layers."""
@@ -78,3 +80,33 @@ class NoHAMYears:
     def get_scenario(cls, year: int) -> str:
         """Return the scenario corresponding to a given year."""
         return cls.YEAR_TO_SCENARIO[int(year)]
+
+
+class NoHAM:
+    """Definitions for NoHAM data."""
+
+    USER_CLASS_1 = "uc1"
+    USER_CLASS_2 = "uc2"
+    USER_CLASS_3 = "uc3"
+    USER_CLASS_4 = "uc4"
+    USER_CLASS_5 = "uc5"
+
+    TIME_PERIOD_1 = "TS1"
+    TIME_PERIOD_2 = "TS2"
+    TIME_PERIOD_3 = "TS3"
+
+    @classmethod
+    def all_user_classes(cls) -> list[str]:
+        """Return a list of all NoHAM user classes."""
+        return [
+            cls.USER_CLASS_1,
+            cls.USER_CLASS_2,
+            cls.USER_CLASS_3,
+            cls.USER_CLASS_4,
+            cls.USER_CLASS_5,
+        ]
+
+    @classmethod
+    def all_time_periods(cls) -> list[str]:
+        """Return a list of all NoHAM time periods."""
+        return [cls.TIME_PERIOD_1, cls.TIME_PERIOD_2, cls.TIME_PERIOD_3]

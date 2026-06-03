@@ -15,7 +15,7 @@ import xarray as xr
 from shapely import geometry
 
 from caf.cvt import file_paths, model_config
-from caf.cvt.definitions import NoHAMYears, Scenarios
+from caf.cvt.definitions import NoHAM, NoHAMYears, Scenarios
 
 LOG = logging.getLogger(__name__)
 
@@ -24,8 +24,6 @@ LOG = logging.getLogger(__name__)
 # Minimum a and b values for NoHAM road links to keep
 _NOHAM_ROAD_THRESHOLD = int(os.getenv("NOHAM_ROAD_THRESHOLD", "10000"))
 
-_NOHAM_TIME_PERIODS = ["TS1", "TS2", "TS3"]
-NOHAM_USER_CLASSES = ["uc1", "uc2", "uc3", "uc4", "uc5"]
 
 # British National Grid CRS, for use in spatially merging datasets
 BNG_CRS = os.getenv("BNG_CRS", "EPSG:27700")
@@ -436,8 +434,9 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
     noham_network_clean = noham_network_clean[~noham_network_clean.geometry.is_empty]
     noham_network_clean = noham_network_clean[noham_network_clean.geometry.notna()]
-    noham_network = clip_to_boundary(noham_network_clean, boundary)
-    filter_removed = len_before_filter - len(noham_network)
+    noham_network_clipped = clip_to_boundary(noham_network_clean, boundary)
+    noham_network_clipped = noham_network_clipped.reset_index(drop=True)
+    filter_removed = len_before_filter - len(noham_network_clipped)
     LOG.info(
         "NoHAM network filtered - %s of %s (%.1f percent) rows removed",
         filter_removed,
@@ -445,7 +444,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
-        noham_network,
+        noham_network_clipped,
         config.paths.model_input
         / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
         / f"noham_{year}.gpkg",
@@ -1047,7 +1046,10 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         }
     )
     temp_min[f"min_temp_winter_{Scenarios.FORECAST}"] = (
-        temp_min[f"min_temp_winter_{Scenarios.CURRENT}"] + temp_min[f"min_temp_winter_{Scenarios.FORECAST}"]
+        temp_min[
+            f"min_temp_winter_{Scenarios.CURRENT}"]
+              + temp_min[f"min_temp_winter_{Scenarios.FORECAST}"
+        ]
     )
     len_before_filter = len(temp_min)
     temp_min = temp_min[temp_min["grid_id"].isin(grid["grid_id"])]
@@ -1080,8 +1082,9 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
             "pr_summ_21": f"precip_summer_pct_chg_{Scenarios.FORECAST}",
         }
     )
-    precip_sum[f"precip_summer_{Scenarios.FORECAST}"] = precip_sum[f"precip_summer_{Scenarios.CURRENT}"] * (
-        1 + (precip_sum[f"precip_summer_pct_chg_{Scenarios.FORECAST}"] / 100)
+    precip_sum[f"precip_summer_{Scenarios.FORECAST}"] = (
+        precip_sum[f"precip_summer_{Scenarios.CURRENT}"] *
+            (1 + (precip_sum[f"precip_summer_pct_chg_{Scenarios.FORECAST}"] / 100))
     )
     precip_sum = precip_sum.drop(columns=[f"precip_summer_pct_chg_{Scenarios.FORECAST}"])
     len_before_filter = len(precip_sum)
@@ -1114,8 +1117,9 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
             "pr_wint_21": f"precip_winter_pct_chg_{Scenarios.FORECAST}",
         },
     )
-    precip_win[f"precip_winter_{Scenarios.FORECAST}"] = precip_win[f"precip_winter_{Scenarios.CURRENT}"] * (
-        1 + (precip_win[f"precip_winter_pct_chg_{Scenarios.FORECAST}"] / 100)
+    precip_win[f"precip_winter_{Scenarios.FORECAST}"] = (
+        precip_win[f"precip_winter_{Scenarios.CURRENT}"] *
+        (1 + (precip_win[f"precip_winter_pct_chg_{Scenarios.FORECAST}"] / 100))
     )
     precip_win = precip_win.drop(columns=[f"precip_winter_pct_chg_{Scenarios.FORECAST}"])
     len_before_filter = len(precip_win)
@@ -1983,7 +1987,10 @@ def _read_freight_demand(path: pathlib.Path, boundary: gpd.GeoDataFrame) -> gpd.
         path, mask=boundary, columns=["dij_id", "2022_23_total", "2050_51 sc2_total"]
     )
     freight_network_demand = freight_network_demand.rename(
-        columns={"2022_23_total": f"demand_{Scenarios.CURRENT}", "2050_51 sc2_total": f"demand_{Scenarios.FORECAST}"}
+        columns={
+            "2022_23_total": f"demand_{Scenarios.CURRENT}",
+            "2050_51 sc2_total": f"demand_{Scenarios.FORECAST}"
+        }
     )
     len_before_filter = len(freight_network_demand)
     freight_network_demand = clip_to_boundary(freight_network_demand, boundary)
@@ -2019,8 +2026,12 @@ def _map_freight_networks(
         len_after_mapping,
     )
 
-    os_freight_network_demand[[f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}"]] = (
-        os_freight_network_demand[[f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}"]].fillna(0)
+    os_freight_network_demand[
+        [f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}"]
+    ] = (
+        os_freight_network_demand[
+            [f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}"]
+        ].fillna(0)
     )
     return os_freight_network_demand.drop(columns=["index_right"])
 
@@ -2030,11 +2041,18 @@ def _map_freight_networks(
 
 def _clean_noham_flows(config: model_config.Config) -> None:
     """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
-    scenario_flows = {}
     network_year = config.infrastructure.road.noham.year
+    noham_network = gpd.read_file(
+        config.paths.model_input
+        / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
+        / f"noham_{network_year}.gpkg"
+    )
+    network_link_ids = set(noham_network["link_id"])
+
+    scenario_flows = {}
     for year in config.impact.noham_years:
         scenario = NoHAMYears.get_scenario(year)
-        flows = _aggregate_link_flows_year(config, year)
+        flows = _aggregate_link_flows_year(config, year, network_link_ids)
 
         flows = flows.rename(columns={
             col: f"{col}_{scenario}" for col in flows.columns if col != "link_id"
@@ -2063,12 +2081,14 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         len(forecast_only_ids),
     )
 
-    noham_net_flows = _merge_noham_flow_network(
-        noham_flows,
-        config.paths.model_input
-        / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-        / f"noham_{network_year}.gpkg",
+    noham_net_flows = noham_network.merge(
+        noham_flows, on="link_id", how="left"
     )
+
+    noham_net_flows = gpd.GeoDataFrame(
+        noham_net_flows, geometry="geometry", crs=noham_network.crs
+    )
+
     write_to_file(
         noham_net_flows,
         config.paths.model_input
@@ -2103,8 +2123,8 @@ def _read_noham_h5(
     noham_demand_path = (
         output_path
         / "input h5s"
-        / year
-        / f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
+        / str(year)
+        / f"NoHAM_Decarb_DM_Core_{year!s}_{time_period}_v107_SatPig_{user_class}.h5"
     )
 
     if (year, time_period) not in route_links_store:
@@ -2127,9 +2147,12 @@ def _aggregate_link_flows(
 ) -> pd.DataFrame:
     """Take NoHAM od's, routes, and link to create aggregated link flows DataFrame."""
     # Merge OD demand onto routes
-    od_routes = routes.merge(ods[["route", "abs_demand"]], on="route", how="inner")
+    od_routes = routes.merge(
+        ods[["route", "abs_demand"]],
+        on="route",
+        how="inner"
+    )
 
-    # Aggregate demand per link_id
     link_demand = od_routes.groupby("link_id")["abs_demand"].sum().reset_index()
 
     return link_demand.merge(links[["a", "b"]], left_on="link_id", right_index=True)
@@ -2142,6 +2165,7 @@ def _process_single_noham_layer(
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
     time_period: str,
     user_class: str,
+    link_ids: set[str],
 ) -> pd.DataFrame:
     LOG.info("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
 
@@ -2157,18 +2181,25 @@ def _process_single_noham_layer(
         output_path=config.impact.noham_demand.output_path,
         extract=config.switches.noham_zip_extract,
     )
+    noham_links["noham_link_id"] = (
+        noham_links["a"].astype(str) + "_" + noham_links["b"].astype(str)
+    )
+    noham_links = noham_links[noham_links["noham_link_id"].isin(link_ids)]
+    noham_routes = noham_routes[noham_routes["link_id"].isin(noham_links.index)]
+
     link_demand = _aggregate_link_flows(
-        noham_ods, noham_routes, noham_links
-    )  # Get link based demand
+        noham_ods, noham_routes, noham_links,
+    )
+
+    link_demand["link_id"] = (
+        link_demand["a"].astype(str) + "_" + link_demand["b"].astype(str)
+    )
+
+    link_demand = link_demand[["link_id", "abs_demand"]]
     link_demand = link_demand.rename(
         columns={"abs_demand": f"{user_class}_{time_period}"}
     )  # Rename demand column
-    link_demand["link_id"] = (
-        link_demand["a"].astype(str) + "_" + link_demand["b"].astype(str)
-    )  # Create unique noham link id
-    link_demand = link_demand[
-        ["link_id", f"{user_class}_{time_period}"]
-    ]  # Keep relevant columns
+
     LOG.info(
         "%s ODs, %s Routes and %s Links aggregated to %s link flows",
         len(noham_ods),
@@ -2181,15 +2212,15 @@ def _process_single_noham_layer(
 
 
 def _aggregate_link_flows_year(
-    config: model_config.Config, year: str
+    config: model_config.Config, year: str, network_link_ids: set[str]
 ) -> dict[str, pd.DataFrame]:
     """Aggregate link flows for each year, time period, and user class."""
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}
 
     ts_dfs = []
-    for time_period in _NOHAM_TIME_PERIODS:
+    for time_period in NoHAM.all_time_periods():
         uc_dfs = []
-        for user_class in NOHAM_USER_CLASSES:
+        for user_class in NoHAM.all_user_classes():
             uc_dfs.append(
                 _process_single_noham_layer(
                     config,
@@ -2197,6 +2228,7 @@ def _aggregate_link_flows_year(
                     route_links_store=route_links_store,
                     time_period=time_period,
                     user_class=user_class,
+                    link_ids=network_link_ids,
                 )
             )
 
@@ -2207,7 +2239,7 @@ def _aggregate_link_flows_year(
 
         # Compute total demand for all vehicles for each time period
         combined_uc_df[f"all_vehs_{time_period}"] = combined_uc_df[
-            [f"{uc}_{time_period}" for uc in NOHAM_USER_CLASSES]
+            [f"{uc}_{time_period}" for uc in NoHAM.all_user_classes()]
         ].sum(axis=1)
 
         # Store result
@@ -2219,29 +2251,17 @@ def _aggregate_link_flows_year(
         combined_ts_df = combined_ts_df.merge(df_ts, on="link_id", how="outer")
 
     # Compute totals for each user class across all time periods
-    for uc in NOHAM_USER_CLASSES:
+    for uc in NoHAM.all_user_classes():
         combined_ts_df[f"{uc}_total"] = combined_ts_df[
-            [f"{uc}_{tp}" for tp in _NOHAM_TIME_PERIODS]
+            [f"{uc}_{tp}" for tp in NoHAM.all_time_periods()]
         ].sum(axis=1)
 
     # Compute total of each user class across all time periods
     combined_ts_df["all_vehs_total"] = combined_ts_df[
-        [f"all_vehs_{tp}" for tp in _NOHAM_TIME_PERIODS]
+        [f"all_vehs_{tp}" for tp in NoHAM.all_time_periods()]
     ].sum(axis=1)
 
-    return combined_ts_df
+    return combined_ts_df[
+        ["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in NoHAM.all_user_classes()]
+    ]
 
-
-def _merge_noham_flow_network(
-    noham_flows: pd.DataFrame, noham_path: pathlib.Path
-) -> gpd.GeoDataFrame:
-    """Merge NoHAM flows onto road network, then return as GeoDataFrame."""
-    noham_link = gpd.read_file(noham_path)
-    noham_net_flows = noham_link.merge(
-        noham_flows,
-        on="link_id",
-        how="left",  # Keep all network, adding flows where available
-    )
-    return gpd.GeoDataFrame(
-        noham_net_flows, geometry="geometry", crs=noham_link.crs
-    )
