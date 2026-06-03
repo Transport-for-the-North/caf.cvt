@@ -98,7 +98,7 @@ _FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
 
 
 def min_max_scaling_pair(
-    risk_data: pd.DataFrame,
+    data: pd.DataFrame,
     pairs: list[tuple[str, str]],
     feature_range: tuple[int, int] = (0, 100),
 ) -> pd.DataFrame:
@@ -112,7 +112,7 @@ def min_max_scaling_pair(
 
     Parameters
     ----------
-        risk_data: pd.DataFrame
+        data: pd.DataFrame
             DataFrame containing the columns to be scaled.
         pairs: list[Tuple[str, str]])
             List of 2-tuples of column names. Each tuple specifies a pair of
@@ -125,24 +125,20 @@ def min_max_scaling_pair(
     pd.DataFrame:
         The original DataFrame with the specified columns scaled in-place.
     """
+    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=feature_range)
     for col_current, col_forecast in pairs:
         # Combine both columns into one array for global min/max
         combined_values = (
-            risk_data[[col_current, col_forecast]].to_numpy().flatten().reshape(-1, 1)
+            data[[col_current, col_forecast]].to_numpy().flatten().reshape(-1, 1)
         )
 
-        scaler = sklearn.preprocessing.MinMaxScaler(feature_range=feature_range)
         scaler.fit(combined_values)
 
         # Transform each column using the same scaler
-        risk_data[col_current] = scaler.transform(risk_data[[col_current]].values).clip(
-            *feature_range
-        )
-        risk_data[col_forecast] = scaler.transform(risk_data[[col_forecast]].values).clip(
-            *feature_range
-        )
+        data[col_current] = scaler.transform(data[[col_current]].values).clip(*feature_range)
+        data[col_forecast] = scaler.transform(data[[col_forecast]].values).clip(*feature_range)
 
-    return risk_data
+    return data
 
 
 def _spatial_infill_na_grids(

@@ -6,7 +6,7 @@ import pathlib
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
+import sklearn
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 from caf.cvt.definitions import MainHazardCols, NoHAM, Scenarios
@@ -207,6 +207,30 @@ def _get_all_risk_cols(hazard_layers: dict[str, gpd.GeoDataFrame]) -> list[str]:
     return list(set(risk_cols))
 
 
+def _min_max_scaling_combined(
+        data: pd.DataFrame,
+        cols_current: list[str],
+        cols_forecast: list[str],
+        out_current: list[str],
+        out_forecast: list[str],
+        feature_range: tuple[float, float] = (0, 100)
+) -> pd.DataFrame:
+    """Jointly scale current and forecast columns."""
+    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=feature_range)
+
+    combined = np.vstack([
+        data[cols_current].to_numpy(),
+        data[cols_forecast].to_numpy()
+    ])
+
+    scaler.fit(combined)
+
+    data[out_current] = scaler.transform(data[cols_current].to_numpy()).clip(*feature_range)
+    data[out_forecast] = scaler.transform(data[cols_forecast].to_numpy()).clip(*feature_range)
+
+    return data
+
+
 # LAYERING
 
 
@@ -379,91 +403,74 @@ def _noham_road_risk(
 
 def _noham_impact_index(noham: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Normalise NoHAM demand, then calculate impact index."""
-    noham_normalised = _normalise_uc_demand(noham)
-    noham_normalised = _normalise_total_col(noham_normalised, "all_vehs_total", "demand")
-    noham_impact = _calculate_noham_impact(noham_normalised)
+    noham = _normalise_uc_demand(noham)
 
-    impact_cols = [
-        f"{uc}_impact_{scenario}"
-        for uc in NoHAM.all_user_classes()
-        for scenario in Scenarios.all()
-    ] + [f"impact_{scenario}" for scenario in Scenarios.all()]
+    noham = functional_rules.min_max_scaling_pair(
+        noham,
+        [(f"all_vehs_total_{Scenarios.CURRENT}", f"all_vehs_total_{Scenarios.FORECAST}")]
+    )
 
-    noham_impact = _normalise_total_cols(noham_impact, impact_cols)
+    noham = _calculate_noham_impact(noham)
 
-    return noham_impact[
+    impact_cols = (
+        [f"{uc}_impact_{scenario}"
+        for uc in NoHAM.all_user_classes() for scenario in Scenarios.all()]
+        + [f"impact_{scenario}" for scenario in Scenarios.all()]
+    )
+
+    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=(0, 100))
+    noham[impact_cols] = scaler.fit_transform(noham[impact_cols].to_numpy())
+
+    return noham[
         [
             "link_id",
             "geometry",
-            *[col for col in noham_impact.columns if "risk" in col or "impact" in col],
+            *[col for col in noham.columns if "risk" in col or "impact" in col],
         ]
     ]
 
 
 def _normalise_uc_demand(noham: pd.DataFrame) -> pd.DataFrame:
     """Normalise NoHAM demand for each user class individually."""
-    uc_total_cols = [f"{uc}_total" for uc in NoHAM.all_user_classes()]
-    combined_values = np.vstack(
-        [noham[uc_total_cols].to_numpy(), noham[uc_total_cols].to_numpy()]
+    user_classes = NoHAM.all_user_classes()
+
+    cols_current = [f"{uc}_total_{Scenarios.CURRENT}" for uc in user_classes]
+    cols_forecast = [f"{uc}_total_{Scenarios.FORECAST}" for uc in user_classes]
+
+    out_current = [f"{uc}_demand_{Scenarios.CURRENT}" for uc in user_classes]
+    out_forecast = [f"{uc}_demand_{Scenarios.FORECAST}" for uc in user_classes]
+
+    return _min_max_scaling_combined(
+        noham,
+        cols_current,
+        cols_forecast,
+        out_current,
+        out_forecast,
     )
-    scaler = MinMaxScaler(feature_range=(0, 100))
-    scaler.fit(combined_values)
-    for scenario in Scenarios.all():
-        scaled = scaler.transform(noham[uc_total_cols].values)
-        noham[[f"{uc}_demand_{scenario}" for uc in NoHAM.all_user_classes()]] = scaled
-    return noham
 
 
-def _normalise_total_col(
-    noham: pd.DataFrame, old_column: str, new_column: str
-) -> pd.DataFrame:
-    """Normalise total demand for one column."""
-    # Normalise all vehicles total separately
-    combined_values = np.vstack(
-        [
-            noham[f"{old_column}_{Scenarios.CURRENT}"].to_numpy().reshape(-1, 1),
-            noham[f"{old_column}_{Scenarios.FORECAST}"].to_numpy().reshape(-1, 1),
-        ]
-    )
-    scaler = MinMaxScaler(feature_range=(0, 100))
-    scaler.fit(combined_values)
-    for scenario in Scenarios.all():
-        scaled = scaler.transform(noham[f"{old_column}_{scenario}"].to_numpy().reshape(-1, 1))
-        noham[f"{new_column}_{scenario}"] = scaled
-    return noham
-
-
-def _normalise_total_cols(
-    noham_c: pd.DataFrame, noham_f: pd.DataFrame, cols_c: list[str], cols_f: list[str]
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Normalise total demand for several columns."""
-    combined_values = np.vstack([noham_c[cols_c].to_numpy(), noham_f[cols_f].to_numpy()])
-    scaler = MinMaxScaler(feature_range=(0, 100))
-    scaler.fit(combined_values)
-    for noham_data, cols in [(noham_c, cols_c), (noham_f, cols_f)]:
-        scaled = scaler.transform(noham_data[cols].to_numpy())
-        noham_data[cols] = scaled
-    return noham_c, noham_f
 
 
 def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
     """Calculate NoHAM impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
     risk_cols = [col for col in MainHazardCols.all_risk_cols() if col in noham.columns]
+
+    hazard_component = sum(
+        noham[risk_col] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
+        for risk_col in risk_cols
+    )
+
     for scenario in Scenarios.all():
         for uc in NoHAM.all_user_classes():
-            noham[f"{uc}_impact_{scenario}"] = noham[
-                f"{uc}_demand_{scenario}"
-            ] * _IMPACT_WEIGHTS["demand"] + sum(
-                noham[risk_col] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
-                for risk_col in risk_cols
+            noham[f"{uc}_impact_{scenario}"] = (
+                noham[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+                + hazard_component
             )
 
-        noham[f"impact_{scenario}"] = noham[f"demand_{scenario}"] * _IMPACT_WEIGHTS[
-            "demand"
-        ] + sum(
-            noham[risk_col] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
-            for risk_col in risk_cols
+        noham[f"impact_{scenario}"] = (
+            noham[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+            + hazard_component
         )
 
     return noham
