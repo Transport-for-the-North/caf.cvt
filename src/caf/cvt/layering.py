@@ -4,9 +4,7 @@ import logging
 import pathlib
 
 import geopandas as gpd
-import numpy as np
 import pandas as pd
-import sklearn
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 from caf.cvt.definitions import MainHazardCols, NoHAM, Scenarios
@@ -174,7 +172,7 @@ def _audit_infrastructure_risk(
     infrastructure_risk: gpd.GeoDataFrame,
     cols: list[str],
     audit_path: pathlib.Path,
-    cmap: str = "Reds",
+    linewidth: float = 0.5,
 ) -> None:
     """Plot choropleth maps for infrastructure risk."""
     audit_path.mkdir(parents=True, exist_ok=True)
@@ -185,8 +183,7 @@ def _audit_infrastructure_risk(
             column=risk_col,
             title=f"{risk_col.replace('_', ' ').title()}",
             out_path=audit_path / f"{risk_col}_choropleth.png",
-            cmap=cmap,
-            linewidth=0.5,
+            linewidth=linewidth,
             edgecolor=None,
         )
 
@@ -205,30 +202,6 @@ def _get_all_risk_cols(hazard_layers: dict[str, gpd.GeoDataFrame]) -> list[str]:
             ]
         )
     return list(set(risk_cols))
-
-
-def _min_max_scaling_combined(
-        data: pd.DataFrame,
-        cols_current: list[str],
-        cols_forecast: list[str],
-        out_current: list[str],
-        out_forecast: list[str],
-        feature_range: tuple[float, float] = (0, 100)
-) -> pd.DataFrame:
-    """Jointly scale current and forecast columns."""
-    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=feature_range)
-
-    combined = np.vstack([
-        data[cols_current].to_numpy(),
-        data[cols_forecast].to_numpy()
-    ])
-
-    scaler.fit(combined)
-
-    data[out_current] = scaler.transform(data[cols_current].to_numpy()).clip(*feature_range)
-    data[out_forecast] = scaler.transform(data[cols_forecast].to_numpy()).clip(*feature_range)
-
-    return data
 
 
 # LAYERING
@@ -407,34 +380,27 @@ def _noham_impact_index(noham: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return _normalise_noham_impact(noham)
 
 
-
 def _normalise_uc_demand(noham: pd.DataFrame) -> pd.DataFrame:
     """Normalise NoHAM demand for each user class individually."""
-    user_classes = NoHAM.all_user_classes()
+    pairs = [
+        (f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}")
+        for uc in NoHAM.all_user_classes()
+    ]
 
-    cols_current = [f"{uc}_total_{Scenarios.CURRENT}" for uc in user_classes]
-    cols_forecast = [f"{uc}_total_{Scenarios.FORECAST}" for uc in user_classes]
+    noham = functional_rules.min_max_scaling_pair(noham, pairs)
 
-    out_current = [f"{uc}_demand_{Scenarios.CURRENT}" for uc in user_classes]
-    out_forecast = [f"{uc}_demand_{Scenarios.FORECAST}" for uc in user_classes]
-
-    noham_normalised = _min_max_scaling_combined(
-        noham,
-        cols_current,
-        cols_forecast,
-        out_current,
-        out_forecast,
-    )
-
-    return noham_normalised.drop(columns=cols_current + cols_forecast)
+    rename_map = {
+        col: col.replace("total", "demand")
+        for uc in NoHAM.all_user_classes()
+        for col in [f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}"]
+    }
+    return noham.rename(columns=rename_map)
 
 
 def _normalise_total_demand(noham: pd.DataFrame) -> pd.DataFrame:
     """Normalise NoHAM demand across all user classes combined."""
-    noham = functional_rules.min_max_scaling_pair(
-        noham,
-        [(f"all_vehs_total_{Scenarios.CURRENT}", f"all_vehs_total_{Scenarios.FORECAST}")]
-    )
+    pairs = [(f"all_vehs_total_{Scenarios.CURRENT}", f"all_vehs_total_{Scenarios.FORECAST}")]
+    noham = functional_rules.min_max_scaling_pair(noham, pairs)
     return noham.rename(columns={
         f"all_vehs_total_{Scenarios.CURRENT}": f"demand_{Scenarios.CURRENT}",
         f"all_vehs_total_{Scenarios.FORECAST}": f"demand_{Scenarios.FORECAST}",
@@ -444,49 +410,37 @@ def _normalise_total_demand(noham: pd.DataFrame) -> pd.DataFrame:
 def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
     """Calculate NoHAM impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
-    risk_cols = [col for col in MainHazardCols.all_risk_cols() if col in noham.columns]
-
-    hazard_component = sum(
-        noham[risk_col] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
-        for risk_col in risk_cols
-    )
+    risk_cols = [col for col in MainHazardCols.all_risk_cols()
+                 if f"{col}_{Scenarios.CURRENT}" in noham.columns]
 
     for scenario in Scenarios.all():
-        for uc in NoHAM.all_user_classes():
-            noham[f"{uc}_impact_{scenario}"] = (
-                noham[f"{uc}_demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
-                + hazard_component
-            )
-
-        noham[f"impact_{scenario}"] = (
-            noham[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
-            + hazard_component
+        hazard_component = sum(
+            noham[f"{risk_col}_{scenario}"] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
+            for risk_col in risk_cols
         )
+        for uc in NoHAM.all_user_classes():
+            impact_component = noham[f"{uc}_demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+            noham[f"{uc}_impact_{scenario}"] = impact_component + hazard_component
+
+        impact_component = noham[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+        noham[f"impact_{scenario}"] = impact_component + hazard_component
 
     demand_cols = [col for col in noham.columns if "demand" in col]
-
     return noham.drop(columns=demand_cols)
 
 
 def _normalise_noham_impact(
         noham: pd.DataFrame,
-        feature_range: tuple[int, int]=(0, 100)
 ) -> pd.DataFrame:
     """Normalise NoHAM impact scores across all user classes combined."""
-    impact_cols = (
-        [f"{uc}_impact_{scenario}"
-        for uc in NoHAM.all_user_classes() for scenario in Scenarios.all()]
-        + [f"impact_{scenario}" for scenario in Scenarios.all()]
-    )
+    pairs = [
+        (f"{uc}_impact_{Scenarios.CURRENT}", f"{uc}_impact_{Scenarios.FORECAST}")
+        for uc in NoHAM.all_user_classes()
+    ] + [
+        (f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")
+    ]
 
-    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=feature_range)
-    combined = noham[impact_cols].to_numpy().flatten().reshape(-1, 1)
-    scaler.fit(combined)
-
-    noham[impact_cols] = scaler.transform(
-        noham[impact_cols].to_numpy().reshape(-1, 1)
-    ).clip(*feature_range).reshape(noham[impact_cols].shape)
-    return noham
+    return functional_rules.min_max_scaling_pair(noham, pairs)
 
 
 ### RAIL
@@ -526,6 +480,13 @@ def _passenger_rail_risk(
         passenger_rail_network, hazard_layers
     )
 
+    _audit_infrastructure_risk(
+        passenger_rail_network_risk,
+        risk_cols,
+        audit_path / "Passenger Rail",
+        linewidth=1.0,
+    )
+
     passenger_rail_network_risk = _prepare_model_output(
         risk_data=passenger_rail_network_risk,
         drop_cols=[],
@@ -539,11 +500,6 @@ def _passenger_rail_risk(
         risk_cols_order=risk_cols,
     )
 
-    _audit_infrastructure_risk(
-        passenger_rail_network_risk,
-        risk_cols,
-        audit_path / "Passenger Rail",
-    )
 
     _split_csv_shapefile(
         config,
@@ -585,13 +541,18 @@ def _freight_rail_risk(
         data_cleaning.BNG_CRS, allow_override=True
     )
 
+    _audit_infrastructure_risk(
+        freight_rail_network_risk,
+        [*risk_cols, "impact"],
+        audit_path / "Freight Rail",
+        linewidth=1.0,
+    )
+
     freight_rail_network_risk = _prepare_model_output(
         risk_data=freight_rail_network_risk,
         drop_cols=[
             "dij_id",
             "distance",
-            f"demand_{Scenarios.CURRENT}",
-            f"demand_{Scenarios.FORECAST}",
         ],
         rename_map={
             "osid": "id",
@@ -603,11 +564,6 @@ def _freight_rail_risk(
         risk_cols_order=[*risk_cols, "impact"],
     )
 
-    _audit_infrastructure_risk(
-        freight_rail_network_risk,
-        [*risk_cols, "impact"],
-        audit_path / "Freight Rail",
-    )
 
     _split_csv_shapefile(
         config,
@@ -639,19 +595,21 @@ def _freight_impact_index(freight_rail_network_risk: gpd.GeoDataFrame) -> gpd.Ge
 
 def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
     """Calculate composite impact score for current and forecast years."""
-    for scenario in functional_rules.SCENARIO_NAMES:
-        freight_data[f"impact_{scenario}"] = (
-            freight_data[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
-            + freight_data[f"flood_risk_{scenario}"] * _IMPACT_WEIGHTS["flood"]
-            + freight_data[f"extreme_weather_risk_{scenario}"]
-            * _IMPACT_WEIGHTS["extreme_weather"]
-            + freight_data[f"ground_stability_risk_{scenario}"]
-            * _IMPACT_WEIGHTS["ground_stability"]
-            + freight_data[f"coastal_erosion_risk_{scenario}"]
-            * _IMPACT_WEIGHTS["coastal_erosion"]
+    risk_cols = [col for col in MainHazardCols.all_risk_cols()
+                 if f"{col}_{Scenarios.CURRENT}" in freight_data.columns]
+
+    for scenario in Scenarios.all():
+        impact_component = freight_data[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+        hazard_component = sum(
+            freight_data[f"{risk_col}_{scenario}"]
+            * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
+            for risk_col in risk_cols
         )
 
-    return freight_data
+        freight_data[f"impact_{scenario}"] = impact_component + hazard_component
+
+    demand_cols = [col for col in freight_data.columns if "demand" in col]
+    return freight_data.drop(columns=demand_cols)
 
 
 ### OTHER
@@ -721,17 +679,17 @@ def _train_stations_risk(
 
     train_stations_risk = _infrastructure_risk_intersect(train_stations, hazard_layers)
 
+    _audit_infrastructure_risk(
+        train_stations_risk,
+        risk_cols,
+        audit_path / "Train Stations",
+    )
+
     train_stations_risk = _prepare_model_output(
         risk_data=train_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        train_stations_risk,
-        risk_cols,
-        audit_path / "Train Stations",
     )
 
     _split_csv_shapefile(
@@ -765,17 +723,17 @@ def _charging_sites_risk(
 
     charging_sites_risk = _infrastructure_risk_intersect(charging_sites, hazard_layers)
 
+    _audit_infrastructure_risk(
+        charging_sites_risk,
+        risk_cols,
+        audit_path / "EV Charging Sites",
+    )
+
     charging_sites_risk = _prepare_model_output(
         risk_data=charging_sites_risk,
         drop_cols=[],
         rename_map={"devices": "installed_devices"},
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        charging_sites_risk,
-        risk_cols,
-        audit_path / "EV Charging Sites",
     )
 
     _split_csv_shapefile(
@@ -805,17 +763,17 @@ def _airports_risk(
 
     airports_risk = _infrastructure_risk_intersect(airports, hazard_layers)
 
+    _audit_infrastructure_risk(
+        airports_risk,
+        risk_cols,
+        audit_path / "Airports",
+    )
+
     airports_risk = _prepare_model_output(
         risk_data=airports_risk,
         drop_cols=[],
         rename_map={},
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        airports_risk,
-        risk_cols,
-        audit_path / "Airports",
     )
 
     _split_csv_shapefile(
@@ -852,17 +810,17 @@ def _bus_coach_stations_risk(
 
     bus_coach_stations_risk = _infrastructure_risk_intersect(bus_coach_stations, hazard_layers)
 
+    _audit_infrastructure_risk(
+        bus_coach_stations_risk,
+        risk_cols,
+        audit_path / "Bus and Coach Stations",
+    )
+
     bus_coach_stations_risk = _prepare_model_output(
         risk_data=bus_coach_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        bus_coach_stations_risk,
-        risk_cols,
-        audit_path / "Bus and Coach Stations",
     )
 
     _split_csv_shapefile(
@@ -889,17 +847,17 @@ def _bus_stops_risk(
 
     bus_stops_risk = _infrastructure_risk_intersect(bus_stops, hazard_layers)
 
+    _audit_infrastructure_risk(
+        bus_stops_risk,
+        risk_cols,
+        audit_path / "Bus Stops",
+    )
+
     bus_stops_risk = _prepare_model_output(
         risk_data=bus_stops_risk,
         drop_cols=[],
         rename_map={"stop_id": "id"},
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        bus_stops_risk,
-        risk_cols,
-        audit_path / "Bus Stops",
     )
 
     _split_csv_shapefile(
@@ -933,17 +891,17 @@ def _tram_stations_risk(
 
     tram_stations_risk = _infrastructure_risk_intersect(tram_stations, hazard_layers)
 
+    _audit_infrastructure_risk(
+        tram_stations_risk,
+        risk_cols,
+        audit_path / "Tram Stations",
+    )
+
     tram_stations_risk = _prepare_model_output(
         risk_data=tram_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        tram_stations_risk,
-        risk_cols,
-        audit_path / "Tram Stations",
     )
 
     _split_csv_shapefile(
@@ -982,17 +940,17 @@ def _rapid_transport_stations_risk(
         rapid_transport_stations, hazard_layers
     )
 
+    _audit_infrastructure_risk(
+        rapid_transport_stations_risk,
+        risk_cols,
+        audit_path / "Rapid Transport Stations",
+    )
+
     rapid_transport_stations_risk = _prepare_model_output(
         risk_data=rapid_transport_stations_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        rapid_transport_stations_risk,
-        risk_cols,
-        audit_path / "Rapid Transport Stations",
     )
 
     _split_csv_shapefile(
@@ -1026,17 +984,17 @@ def _ferry_terminals_risk(
 
     ferry_terminals_risk = _infrastructure_risk_intersect(ferry_terminals, hazard_layers)
 
+    _audit_infrastructure_risk(
+        ferry_terminals_risk,
+        risk_cols,
+        audit_path / "Ferry Terminals",
+    )
+
     ferry_terminals_risk = _prepare_model_output(
         risk_data=ferry_terminals_risk,
         drop_cols=[],
         rename_map={"nodeid": "id"},
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        ferry_terminals_risk,
-        risk_cols,
-        audit_path / "Ferry Terminals",
     )
 
     _split_csv_shapefile(
@@ -1070,17 +1028,17 @@ def _petrol_stations_risk(
 
     petrol_stations_risk = _infrastructure_risk_intersect(petrol_stations, hazard_layers)
 
+    _audit_infrastructure_risk(
+        petrol_stations_risk,
+        risk_cols,
+        audit_path / "Petrol Stations",
+    )
+
     petrol_stations_risk = _prepare_model_output(
         risk_data=petrol_stations_risk,
         drop_cols=[],
         rename_map={},
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        petrol_stations_risk,
-        risk_cols,
-        audit_path / "Petrol Stations",
     )
 
     _split_csv_shapefile(
@@ -1112,6 +1070,12 @@ def _ncn_risk(
 
     ncn_risk = _infrastructure_risk_intersect(ncn, hazard_layers)
 
+    _audit_infrastructure_risk(
+        ncn_risk,
+        risk_cols,
+        audit_path / "National Cycle Network",
+    )
+
     ncn_risk = _prepare_model_output(
         risk_data=ncn_risk,
         drop_cols=[],
@@ -1128,12 +1092,6 @@ def _ncn_risk(
             "SegmentID": "id",
         },
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        ncn_risk,
-        risk_cols,
-        audit_path / "National Cycle Network",
     )
 
     _split_csv_shapefile(
@@ -1165,6 +1123,13 @@ def _tram_network_risk(
 
     tram_risk = _infrastructure_risk_intersect(tram_network, hazard_layers)
 
+    _audit_infrastructure_risk(
+        tram_risk,
+        risk_cols,
+        audit_path / "Tram Network",
+        linewidth=1.0,
+    )
+
     tram_risk = _prepare_model_output(
         risk_data=tram_risk,
         drop_cols=[],
@@ -1176,12 +1141,6 @@ def _tram_network_risk(
             "track_rep": "track_representation",
         },
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        tram_risk,
-        risk_cols,
-        audit_path / "Tram Network",
     )
 
     _split_csv_shapefile(
@@ -1213,6 +1172,12 @@ def _rapid_transport_network_risk(
 
     rapid_transport_risk = _infrastructure_risk_intersect(rapid_transport, hazard_layers)
 
+    _audit_infrastructure_risk(
+        rapid_transport_risk,
+        risk_cols,
+        audit_path / "Rapid Transport Network",
+    )
+
     rapid_transport_risk = _prepare_model_output(
         risk_data=rapid_transport_risk,
         drop_cols=[],
@@ -1224,12 +1189,6 @@ def _rapid_transport_network_risk(
             "track_rep": "track_representation",
         },
         risk_cols_order=risk_cols,
-    )
-
-    _audit_infrastructure_risk(
-        rapid_transport_risk,
-        risk_cols,
-        audit_path / "Rapid Transport Network",
     )
 
     _split_csv_shapefile(

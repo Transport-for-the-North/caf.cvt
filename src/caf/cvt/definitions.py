@@ -41,6 +41,17 @@ class MainHazardCols(Columns):
         """Add _risk suffix to column if not already present."""
         return f"{col}_risk"
 
+    @classmethod
+    def get_cmap(cls, col: MainHazardCols) -> str:
+        """Return the appropriate colormap for a given hazard column."""
+        cmap_mapping = {
+            cls.EXTREME_WEATHER: "Reds",
+            cls.FLOODING: "Blues",
+            cls.GROUND_STABILITY: "Oranges",
+            cls.COASTAL_EROSION: "Purples",
+        }
+        return cmap_mapping[col]
+
 
 class ExtremeWeatherCols(Columns):
     """Column definitions for extreme weather subhazard layers."""
@@ -49,6 +60,122 @@ class ExtremeWeatherCols(Columns):
     EXTREME_COLD = "extreme_cold"
     DROUGHT = "drought"
     STORM = "storm"
+
+    @classmethod
+    def all(cls) -> list[ExtremeWeatherCols]:
+        """Return a list of all extreme weather subhazard columns."""
+        return [col for col in cls]
+
+    @classmethod
+    def get_cmap(cls, col: ExtremeWeatherCols) -> str:
+        """Return the appropriate colormap for a given extreme weather subhazard column."""
+        cmap_mapping = {
+            cls.EXTREME_HEAT: "Reds",
+            cls.EXTREME_COLD: "Blues",
+            cls.DROUGHT: "Oranges",
+            cls.STORM: "Blues",
+        }
+        return cmap_mapping[col]
+
+class FloodingCols(Columns):
+    """Column definitions for flooding subhazard layers."""
+
+    RIVERS_SEA = "rivers_sea"
+    SURFACE_WATER = "surface_water"
+
+    @classmethod
+    def all(cls) -> list[FloodingCols]:
+        """Return a list of all flooding subhazard columns."""
+        return [col for col in cls]
+
+    @classmethod
+    def get_cmap(cls, col: FloodingCols) -> str:
+        """Return the appropriate colormap for a given flooding subhazard column."""
+        cmap_mapping = {
+            cls.RIVERS_SEA: "Blues",
+            cls.SURFACE_WATER: "Blues",
+        }
+        return cmap_mapping[col]
+
+class GroundStabilityCols(Columns):
+    """Column definitions for ground stability subhazard layers."""
+
+    COLLAPSIBLE_DEPOSITS = "collapsible_deposits"
+    COMPRESSIBLE_GROUND = "compressible_ground"
+    LANDSLIDES = "landslides"
+    RUNNING_SAND = "running_sand"
+    SHRINK_SWELL = "shrink_swell"
+    SOLUBLE_ROCKS = "soluble_rocks"
+    SHRINK_SWELL_GEOCLIMATE = "shrink_swell_geoclimate"
+
+    @classmethod
+    def all(cls) -> list[GroundStabilityCols]:
+        """Return a list of all ground stability subhazard columns."""
+        return [col for col in cls]
+
+    @classmethod
+    def get_cmap(cls, col: GroundStabilityCols) -> str:
+        """Return the appropriate colormap for a given ground stability subhazard column."""
+        cmap_mapping = {
+            cls.COLLAPSIBLE_DEPOSITS: "Oranges",
+            cls.COMPRESSIBLE_GROUND: "Oranges",
+            cls.LANDSLIDES: "Oranges",
+            cls.RUNNING_SAND: "Oranges",
+            cls.SHRINK_SWELL: "Oranges",
+            cls.SOLUBLE_ROCKS: "Oranges",
+            cls.SHRINK_SWELL_GEOCLIMATE: "Oranges",
+        }
+        return cmap_mapping[col]
+
+
+class ExtremeHeatCols(Columns):
+    """Column definitions for extreme heat subhazard layers."""
+
+    MAX_TEMP_SUMMER = "max_temp_summer"
+    HOT_SUMMER_DAYS = "hot_summer_days"
+    EXTREME_SUMMER_DAYS = "extreme_summer_days"
+
+    @classmethod
+    def all(cls) -> list[ExtremeHeatCols]:
+        """Return a list of all extreme heat subhazard columns."""
+        return [col for col in cls]
+
+class ExtremeColdCols(Columns):
+    """Column definitions for extreme cold subhazard layers."""
+
+    MIN_TEMP_WINTER = "min_temp_winter"
+    FROST_DAYS = "frost_days"
+    ICING_DAYS = "icing_days"
+
+    @classmethod
+    def all(cls) -> list[ExtremeColdCols]:
+        """Return a list of all extreme cold subhazard columns."""
+        return [col for col in cls]
+
+class DroughtCols(Columns):
+    """Column definitions for drought subhazard layers."""
+
+    DROUGHT_SEVERITY_INDEX = "drought_severity_index"
+    PRECIP_SUMMER_RISK = "precip_summer_risk"
+
+    @classmethod
+    def all(cls) -> list[DroughtCols]:
+        """Return a list of all drought subhazard columns."""
+        return [col for col in cls]
+
+class StormCols(Columns):
+    """Column definitions for storm subhazard layers."""
+
+    RAIN_DAYS = "10mm_rain_days"
+    PRECIP_WINTER = "precip_winter"
+    EXCEEDANCE_DAYS = "avg_exceedance_days"
+    WIND_SPEED_RISK = "wind_speed_risk"
+    WIND_DRIVEN_RAIN_INDEX = "wind_driven_rain_index"
+
+    @classmethod
+    def all(cls) -> list[StormCols]:
+        """Return a list of all storm subhazard columns."""
+        return [col for col in cls]
 
 
 class Scenarios(Columns):

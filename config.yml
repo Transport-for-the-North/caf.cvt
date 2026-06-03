@@ -8,11 +8,11 @@ switches:
   run_layering: true
 
   # Infrastructure switches 
-  all_roads: false
+  all_roads: true
   noham_roads: true
 
-  passenger_rail: false
-  freight_rail: false
+  passenger_rail: true
+  freight_rail: true
 
   airports: false
   bus_stops: false
@@ -24,7 +24,7 @@ switches:
   rapid_transport_stations: false
   ferry_terminals: false
   bus_coach_stations: false
-  tram_network: false
+  tram_network: true
   rapid_transport_network: false
 
   # Hazard switches

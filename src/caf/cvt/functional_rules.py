@@ -18,7 +18,17 @@ import xyzservices
 from shapely.geometry import Polygon, box
 
 from caf.cvt import data_cleaning, file_paths, model_config
-from caf.cvt.definitions import Scenarios
+from caf.cvt.definitions import (
+    DroughtCols,
+    ExtremeColdCols,
+    ExtremeHeatCols,
+    ExtremeWeatherCols,
+    FloodingCols,
+    GroundStabilityCols,
+    MainHazardCols,
+    Scenarios,
+    StormCols,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -64,15 +74,7 @@ _GROUND_STABILITY_RISK_SCORE_MAP = {  # Map risk scores to normalised values (0-
     "Improbable": 33,
     "Unavailable": 50,  # Assign neutral value
 }
-_GEOSURE_HAZARDS = [
-    "collapsible_deposits",
-    "compressible_ground",
-    "landslides",
-    "running_sand",
-    "shrink_swell",
-    "soluble_rocks",
-    "shrink_swell_geoclimate",
-]
+
 _GEOCLIMATE_YEAR_SCENARIO_MAP = {"2030": Scenarios.CURRENT, "2070": Scenarios.FORECAST}
 _GROUND_STABILITY_WEIGHTS = {
     "shrink_swell_geoclimate_risk": 0.40,
@@ -392,12 +394,36 @@ def _overlay_and_clean(
     return hazard_overlay
 
 
+def _get_cmap_for_column(col: str) -> str:
+    """Return the appropriate colormap for a given hazard column."""
+    base_col = col.replace("_risk", "")
+    if base_col in MainHazardCols.all():
+        return MainHazardCols.get_cmap(base_col)
+
+    if base_col in ExtremeWeatherCols.all():
+        return ExtremeWeatherCols.get_cmap(base_col)
+    if base_col in FloodingCols.all():
+        return FloodingCols.get_cmap(base_col)
+    if base_col in GroundStabilityCols.all():
+        return GroundStabilityCols.get_cmap(base_col)
+
+    if base_col in ExtremeHeatCols.all():
+        return ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.EXTREME_HEAT)
+    if base_col in ExtremeColdCols.all():
+        return ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.EXTREME_COLD)
+    if base_col in DroughtCols.all():
+        return ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.DROUGHT)
+    if base_col in StormCols.all():
+        return ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.STORM)
+
+    return "Reds"  # Default colormap
+
+
 def plot_choropleth_current_and_forecast(
     risk_data: gpd.GeoDataFrame,
     column: str,
     title: str,
     out_path: pathlib.Path,
-    cmap: str = "Reds",
     linewidth: float = 0.1,
     edgecolor: str | None = "black",
     basemap_source: xyzservices.TileProvider | None = ctx.providers.CartoDB.Positron,
@@ -416,6 +442,8 @@ def plot_choropleth_current_and_forecast(
         risk_data[f"{column}_{Scenarios.CURRENT}"].max(),
         risk_data[f"{column}_{Scenarios.FORECAST}"].max(),
     )
+
+    cmap = _get_cmap_for_column(column)
 
     risk_data.plot(
         column=f"{column}_{Scenarios.CURRENT}",
@@ -472,7 +500,7 @@ def _validate_index(index: gpd.GeoDataFrame, index_vars: list[str]) -> None:
 
 
 def _audit_index(
-    index: gpd.GeoDataFrame, index_vars: list[str], out_path: pathlib.Path, cmap: str = "Reds"
+    index: gpd.GeoDataFrame, index_vars: list[str], out_path: pathlib.Path
 ) -> None:
     """Audit a given index."""
     out_path.mkdir(parents=True, exist_ok=True)
@@ -484,7 +512,6 @@ def _audit_index(
             var,
             f"{var.replace('_', ' ').title()}",
             out_path / f"{var}_choropleth.png",
-            cmap=cmap,
         )
 
 
@@ -693,7 +720,6 @@ def _extreme_heat_index(
         extreme_heat,
         ["max_temp_summer_risk", "hot_summer_days", "extreme_summer_days", "heat_risk"],
         audit_path / "Extreme Heat Index",
-        cmap="Reds",
     )
 
     return extreme_heat
@@ -754,7 +780,6 @@ def _extreme_cold_index(
         extreme_cold,
         ["min_temp_winter_risk", "frost_days", "icing_days", "cold_risk"],
         audit_path / "Extreme Cold Index",
-        cmap="Blues",
     )
 
     LOG.info("Extreme cold index calculation complete.")
@@ -856,7 +881,6 @@ def _drought_index(
         drought_risk,
         ["drought_severity_index", "precip_summer_risk", "drought_risk"],
         audit_path / "Drought Risk Index",
-        cmap="Oranges",
     )
 
     LOG.info("Drought index calculation complete.")
@@ -1001,7 +1025,6 @@ def _storm_index(
             "storm_risk",
         ],
         audit_path / "Storm Risk Index",
-        cmap="Blues",
     )
 
     LOG.info("Storm index calculation complete.")
@@ -1116,7 +1139,6 @@ def _flooding_index(
         flood_risk,
         ["rivers_sea_flood_risk", "surface_water_flood_risk", "flood_risk"],
         audit_path / "Flood Risk Index",
-        cmap="Blues",
     )
 
     data_cleaning.write_to_file(
@@ -1398,7 +1420,6 @@ def _flooding_index_direct(
         flood_risk,
         ["rivers_sea_flood_risk", "surface_water_flood_risk", "flood_risk"],
         audit_path / "Flood Risk Index (Direct Overlay)",
-        cmap="Blues",
     )
 
     data_cleaning.write_to_file(
@@ -1542,7 +1563,9 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
     )
 
     risk_cols = [
-        f"{hazard}_risk_{suffix}" for hazard in _GEOSURE_HAZARDS for suffix in Scenarios.all()
+        f"{hazard}_risk_{suffix}"
+        for hazard in GroundStabilityCols.all()
+        for suffix in Scenarios.all()
     ]
 
     for col in risk_cols:
@@ -1554,7 +1577,7 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
 
     gs_pairs = [
         (f"{col}_risk_{Scenarios.CURRENT}", f"{col}_risk_{Scenarios.FORECAST}")
-        for col in _GEOSURE_HAZARDS
+        for col in GroundStabilityCols.all()
     ]
 
     ground_stability = min_max_scaling_pair(ground_stability, gs_pairs)
@@ -1577,14 +1600,13 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
 
     _validate_index(
         ground_stability,
-        [f"{col}_risk" for col in _GEOSURE_HAZARDS] + ["ground_stability_risk"],
+        [f"{col}_risk" for col in GroundStabilityCols.all()] + ["ground_stability_risk"],
     )
 
     _audit_index(
         ground_stability,
-        [f"{col}_risk" for col in _GEOSURE_HAZARDS] + ["ground_stability_risk"],
+        [f"{col}_risk" for col in GroundStabilityCols.all()] + ["ground_stability_risk"],
         audit_path / "Ground Stability Risk Index",
-        cmap="Oranges",
     )
 
     data_cleaning.write_to_file(
@@ -1686,7 +1708,6 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
         coastal_erosion_risk,
         ["coastal_erosion_risk"],
         audit_path / "Coastal Erosion Risk Index",
-        cmap="Purples",
     )
 
     data_cleaning.write_to_file(
