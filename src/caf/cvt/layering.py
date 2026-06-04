@@ -308,6 +308,10 @@ def _os_open_road_risk(
         audit_path / "OS Roads",
     )
 
+    os_road_risk.to_file(
+        config.paths.model_output / "Road" / "OS Roads" / "os_road_risk.gpkg",
+        driver="GPKG")
+
     os_road_risk = _prepare_model_output(
         risk_data=os_road_risk,
         drop_cols=[],
@@ -350,6 +354,11 @@ def _noham_road_risk(
         noham_risk,
         risk_impact_cols,
         audit_path / "NoHAM",
+    )
+
+    noham_risk.to_file(
+        config.paths.model_output / "Road" / "NoHAM" / "noham_risk.gpkg",
+        driver="GPKG"
     )
 
     noham_risk = _prepare_model_output(
@@ -484,6 +493,11 @@ def _passenger_rail_risk(
         linewidth=1.0,
     )
 
+    passenger_rail_network_risk.to_file(
+        config.paths.model_output / "Rail" / "Passenger Rail" / "passenger_rail_risk.gpkg",
+        driver="GPKG"
+    )
+
     passenger_rail_network_risk = _prepare_model_output(
         risk_data=passenger_rail_network_risk,
         drop_cols=[],
@@ -543,6 +557,11 @@ def _freight_rail_risk(
         [*risk_cols, "impact"],
         audit_path / "Freight Rail",
         linewidth=1.0,
+    )
+
+    freight_rail_network_risk.to_file(
+        config.paths.model_output / "Rail" / "Freight Rail" / "freight_rail_network_risk.gpkg",
+        driver="GPKG"
     )
 
     freight_rail_network_risk = _prepare_model_output(
@@ -685,6 +704,11 @@ def _train_stations_risk(
         audit_path / "Train Stations",
     )
 
+    train_stations_risk.to_file(
+        config.paths.model_output / "Other" / "Train Stations" / "train_stations_risk.gpkg",
+        driver="GPKG"
+    )
+
     train_stations_risk = _prepare_model_output(
         risk_data=train_stations_risk,
         drop_cols=[],
@@ -729,6 +753,11 @@ def _charging_sites_risk(
         audit_path / "EV Charging Sites",
     )
 
+    charging_sites_risk.to_file(
+        config.paths.model_output / "Other" / "EV Charging Sites" / "charging_sites_risk.gpkg",
+        driver="GPKG"
+    )
+
     charging_sites_risk = _prepare_model_output(
         risk_data=charging_sites_risk,
         drop_cols=[],
@@ -767,6 +796,11 @@ def _airports_risk(
         airports_risk,
         risk_cols,
         audit_path / "Airports",
+    )
+
+    airports_risk.to_file(
+        config.paths.model_output / "Other" / "Airports" / "airports_risk.gpkg",
+        driver="GPKG"
     )
 
     airports_risk = _prepare_model_output(
@@ -816,6 +850,12 @@ def _bus_coach_stations_risk(
         audit_path / "Bus and Coach Stations",
     )
 
+    bus_coach_stations_risk.to_file(
+        config.paths.model_output / "Other" / "Bus and Coach Stations"
+        / "bus_coach_stations_risk.gpkg",
+        driver="GPKG"
+    )
+
     bus_coach_stations_risk = _prepare_model_output(
         risk_data=bus_coach_stations_risk,
         drop_cols=[],
@@ -851,6 +891,11 @@ def _bus_stops_risk(
         bus_stops_risk,
         risk_cols,
         audit_path / "Bus Stops",
+    )
+
+    bus_stops_risk.to_file(
+        config.paths.model_output / "Other" / "Bus Stops" / "bus_stops_risk.gpkg",
+        driver="GPKG"
     )
 
     bus_stops_risk = _prepare_model_output(
@@ -895,6 +940,11 @@ def _tram_stations_risk(
         tram_stations_risk,
         risk_cols,
         audit_path / "Tram Stations",
+    )
+
+    tram_stations_risk.to_file(
+        config.paths.model_output / "Other" / "Tram Stations" / "tram_stations_risk.gpkg",
+        driver="GPKG"
     )
 
     tram_stations_risk = _prepare_model_output(
@@ -946,6 +996,12 @@ def _rapid_transport_stations_risk(
         audit_path / "Rapid Transport Stations",
     )
 
+    rapid_transport_stations_risk.to_file(
+        config.paths.model_output / "Other" / "Rapid Transport Stations"
+        / "rapid_transport_stations_risk.gpkg",
+        driver="GPKG"
+    )
+
     rapid_transport_stations_risk = _prepare_model_output(
         risk_data=rapid_transport_stations_risk,
         drop_cols=[],
@@ -988,6 +1044,11 @@ def _ferry_terminals_risk(
         ferry_terminals_risk,
         risk_cols,
         audit_path / "Ferry Terminals",
+    )
+
+    ferry_terminals_risk.to_file(
+        config.paths.model_output / "Other" / "Ferry Terminals" / "ferry_terminals_risk.gpkg",
+        driver="GPKG"
     )
 
     ferry_terminals_risk = _prepare_model_output(
@@ -1034,6 +1095,11 @@ def _petrol_stations_risk(
         audit_path / "Petrol Stations",
     )
 
+    petrol_stations_risk.to_file(
+        config.paths.model_output / "Other" / "Petrol Stations" / "petrol_stations_risk.gpkg",
+        driver="GPKG"
+    )
+
     petrol_stations_risk = _prepare_model_output(
         risk_data=petrol_stations_risk,
         drop_cols=[],
@@ -1074,6 +1140,11 @@ def _ncn_risk(
         ncn_risk,
         risk_cols,
         audit_path / "National Cycle Network",
+    )
+
+    ncn_risk.to_file(
+        config.paths.model_output / "Other" / "National Cycle Network" / "ncn_risk.gpkg",
+        driver="GPKG"
     )
 
     ncn_risk = _prepare_model_output(
@@ -1130,6 +1201,11 @@ def _tram_network_risk(
         linewidth=1.0,
     )
 
+    tram_risk.to_file(
+        config.paths.model_output / "Other" / "Tram Network" / "tram_network_risk.gpkg",
+        driver="GPKG"
+    )
+
     tram_risk = _prepare_model_output(
         risk_data=tram_risk,
         drop_cols=[],
@@ -1176,6 +1252,12 @@ def _rapid_transport_network_risk(
         rapid_transport_risk,
         risk_cols,
         audit_path / "Rapid Transport Network",
+    )
+
+    rapid_transport_risk.to_file(
+        config.paths.model_output / "Other" / "Rapid Transport Network"
+        / "rapid_transport_network_risk.gpkg",
+        driver="GPKG"
     )
 
     rapid_transport_risk = _prepare_model_output(
