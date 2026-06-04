@@ -8,10 +8,10 @@ switches:
   run_layering: true
 
   # Infrastructure switches 
-  all_roads: true
+  all_roads: false
   noham_roads: true
 
-  passenger_rail: true
+  passenger_rail: false
   freight_rail: true
 
   airports: false

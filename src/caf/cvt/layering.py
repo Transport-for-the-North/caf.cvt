@@ -7,28 +7,11 @@ import geopandas as gpd
 import pandas as pd
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
-from caf.cvt.definitions import MainHazardCols, NoHAM, Scenarios
+from caf.cvt.definitions import MainHazardCols, NoHAM, NoHAMImpactCols, Scenarios
 
 LOG = logging.getLogger(__name__)
 
-
-_NOHAM_IMPACT_COLS = [
-    "uc1_impact",
-    "uc2_impact",
-    "uc3_impact",
-    "uc4_impact",
-    "uc5_impact",
-    "impact",
-]
-
-
-_IMPACT_WEIGHTS = {
-    "demand": 0.5,  # Weight demand as half of impact score
-    "flood": 0.125,  # Weight hazards as 0.125 each to make up half
-    "extreme_weather": 0.125,
-    "ground_stability": 0.125,
-    "coastal_erosion": 0.125,
-}
+_DEMAND_WEIGHT = 0.5
 
 _TRAIN_STATIONS_BUFFER_SIZE_M = 100
 _CHARGING_SITES_BUFFER_SIZE_M = 25
@@ -204,6 +187,17 @@ def _get_all_risk_cols(hazard_layers: dict[str, gpd.GeoDataFrame]) -> list[str]:
     return list(set(risk_cols))
 
 
+def _get_impact_weights(hazards: list[str]) -> dict[str, float]:
+    """Generate impact weights."""
+    impact_weights = {"demand": _DEMAND_WEIGHT}
+
+    # Divide remaining weight equally amongst hazards
+    hazard_weight = (1 - _DEMAND_WEIGHT) / len(hazards)
+    for hazard in hazards:
+        impact_weights[hazard] = hazard_weight
+    return impact_weights
+
+
 # LAYERING
 
 
@@ -350,7 +344,7 @@ def _noham_road_risk(
 
     noham_risk = _noham_impact_index(noham_risk)
 
-    risk_impact_cols = [*risk_cols, *_NOHAM_IMPACT_COLS]
+    risk_impact_cols = [*risk_cols, *NoHAMImpactCols.all()]
 
     _audit_infrastructure_risk(
         noham_risk,
@@ -413,16 +407,19 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
     risk_cols = [col for col in MainHazardCols.all_risk_cols()
                  if f"{col}_{Scenarios.CURRENT}" in noham.columns]
 
+    hazards = [col.removesuffix("_risk") for col in risk_cols]
+    impact_weights = _get_impact_weights(hazards)
+
     for scenario in Scenarios.all():
         hazard_component = sum(
-            noham[f"{risk_col}_{scenario}"] * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
+            noham[f"{risk_col}_{scenario}"] * impact_weights[risk_col.removesuffix("_risk")]
             for risk_col in risk_cols
         )
         for uc in NoHAM.all_user_classes():
-            impact_component = noham[f"{uc}_demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+            impact_component = noham[f"{uc}_demand_{scenario}"] * impact_weights["demand"]
             noham[f"{uc}_impact_{scenario}"] = impact_component + hazard_component
 
-        impact_component = noham[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+        impact_component = noham[f"demand_{scenario}"] * impact_weights["demand"]
         noham[f"impact_{scenario}"] = impact_component + hazard_component
 
     demand_cols = [col for col in noham.columns if "demand" in col]
@@ -598,11 +595,14 @@ def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
     risk_cols = [col for col in MainHazardCols.all_risk_cols()
                  if f"{col}_{Scenarios.CURRENT}" in freight_data.columns]
 
+    hazards = [col.removesuffix("_risk") for col in risk_cols]
+    impact_weights = _get_impact_weights(hazards)
+
     for scenario in Scenarios.all():
-        impact_component = freight_data[f"demand_{scenario}"] * _IMPACT_WEIGHTS["demand"]
+        impact_component = freight_data[f"demand_{scenario}"] * impact_weights["demand"]
         hazard_component = sum(
             freight_data[f"{risk_col}_{scenario}"]
-            * _IMPACT_WEIGHTS[risk_col.removesuffix("_risk")]
+            * impact_weights[risk_col.removesuffix("_risk")]
             for risk_col in risk_cols
         )
 

@@ -177,6 +177,20 @@ class StormCols(Columns):
         """Return a list of all storm subhazard columns."""
         return [col for col in cls]
 
+class NoHAMImpactCols(Columns):
+    """Column definitions for NoHAM impact layers."""
+
+    UC1_IMPACT = "uc1_impact"
+    UC2_IMPACT = "uc2_impact"
+    UC3_IMPACT = "uc3_impact"
+    UC4_IMPACT = "uc4_impact"
+    UC5_IMPACT = "uc5_impact"
+    IMPACT = "impact"
+
+    @classmethod
+    def all(cls) -> list[NoHAMImpactCols]:
+        """Return a list of all NoHAM impact columns."""
+        return [col for col in cls]
 
 class Scenarios(Columns):
     """Column definitions for scenarios."""
