@@ -15,7 +15,6 @@ def _check_none(value: str) -> str | None:
         return None
     return value
 
-
 ### CONFIG SET UP
 
 
@@ -189,24 +188,6 @@ class InfrastructureConfig(ctk.BaseConfig):
     other: Other
 
 
-class CoastalErosion(ctk.BaseConfig):
-    """Configuration for coastal erosion data.
-
-    Attributes
-    ----------
-    zip_path : pathlib.Path
-        Path to the zip file.
-    giz : str
-        Internal path to the GIZ file.
-    smp : dict
-        Dictionary of SMP files.
-    """
-
-    zip_path: pathlib.Path
-    giz: str
-    smp: dict
-
-
 class ExtremeWeather(ctk.BaseConfig):
     """Configuration for extreme weather data.
 
@@ -240,19 +221,18 @@ class ExtremeWeather(ctk.BaseConfig):
         Configuration for precipitation winter zip file entry.
     """
 
-    wind_spd_current: pathlib.Path
-    wind_spd_forecast: pathlib.Path
-    rain_days: ZipFileEntry
-    extreme_summer_days: ZipFileEntry
-    frost_days: ZipFileEntry
-    hot_days: ZipFileEntry
-    icing_days: ZipFileEntry
-    wdr_index: ZipFileEntry
-    drought_index: ZipFileEntry
-    max_temp_summer: ZipFileEntry
-    precip_summer: ZipFileEntry
-    min_temp_winter: ZipFileEntry
-    precip_winter: ZipFileEntry
+    wind_speed: dict[str, pathlib.Path]
+    rain_days: pathlib.Path
+    extreme_summer_days: pathlib.Path
+    frost_days: pathlib.Path
+    hot_days: pathlib.Path
+    icing_days: pathlib.Path
+    wdr_index: pathlib.Path
+    drought_index: pathlib.Path
+    max_temp_summer: pathlib.Path
+    precip_summer: pathlib.Path
+    min_temp_winter: pathlib.Path
+    precip_winter: pathlib.Path
 
 
 class Flooding(ctk.BaseConfig):
@@ -267,35 +247,6 @@ class Flooding(ctk.BaseConfig):
     flood_path: pathlib.Path
 
 
-class GeoSure(ctk.BaseConfig):
-    """Configuration for GeoSure data.
-
-    Attributes
-    ----------
-    zip_path : pathlib.Path
-        Path to the GeoSure zip file.
-    collapsible_deposits : str
-        Internal path to the collapsible deposits file.
-    compressible_ground : str
-        Internal path to the compressible ground file.
-    landslides : str
-        Internal path to the landslides file.
-    running_sand : str
-        Internal path to the running sand file.
-    shrink_swell : str
-        Internal path to the shrink swell file.
-    soluble_rocks : str
-        Internal path to the soluble rocks file.
-    """
-
-    zip_path: pathlib.Path
-    collapsible_deposits: str
-    compressible_ground: str
-    landslides: str
-    running_sand: str
-    shrink_swell: str
-    soluble_rocks: str
-
 
 class GroundStability(ctk.BaseConfig):
     """Configuration for ground stability data.
@@ -308,8 +259,8 @@ class GroundStability(ctk.BaseConfig):
         Configuration for GeoSure data.
     """
 
-    geo_shrink_swell: dict
-    geosure: GeoSure
+    geo_shrink_swell: dict[str, pathlib.Path]
+    geosure: ZipFileEntry
 
 
 class HazardsConfig(ctk.BaseConfig):
@@ -327,7 +278,7 @@ class HazardsConfig(ctk.BaseConfig):
         Configuration for ground stability data.
     """
 
-    coastal_erosion: CoastalErosion
+    coastal_erosion: ZipFileEntry
     extreme_weather: ExtremeWeather
     flooding: Flooding
     ground_stability: GroundStability
@@ -548,3 +499,4 @@ class Config(ctk.BaseConfig):
     infrastructure: InfrastructureConfig
     hazards: HazardsConfig
     impact: ImpactConfig
+

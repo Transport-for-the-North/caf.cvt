@@ -494,7 +494,8 @@ def _passenger_rail_risk(
     )
 
     passenger_rail_network_risk.to_file(
-        config.paths.model_output / "Rail" / "Passenger Rail" / "passenger_rail_risk.gpkg",
+        config.paths.model_output / "Rail" / "Passenger Rail"
+        / "passenger_rail_network_risk.gpkg",
         driver="GPKG"
     )
 

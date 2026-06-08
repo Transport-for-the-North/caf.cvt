@@ -3,9 +3,9 @@
 # Model Section Switches
 switches:
   # If running from scratch using only the raw input files these switches should all be true
-  run_data_cleaning: false
+  run_data_cleaning: true
   run_functional_rules: false
-  run_layering: true
+  run_layering: false
 
   # Infrastructure switches 
   all_roads: true
@@ -30,8 +30,8 @@ switches:
   # Hazard switches
   extreme_weather: true
   flooding: true
-  ground_stability: false
-  coastal_erosion: false
+  ground_stability: true
+  coastal_erosion: true
 
   
 
@@ -70,13 +70,13 @@ parameters:
 
 paths:
   root: D:/Climate Vulnerability Tool/Localisation/v1/Data # This is the root of any outputs of the model
-  raw_input: D:/Climate Vulnerability Tool/Data/raw inputs
+  raw_input: D:/Climate Vulnerability Tool/Localisation/v1/Data/raw input
 
 other_input:
   # If using a specific boundary file rather than from OpenGeographyPortal, provide the path here, otherwise leave empty
   boundary_path:
-  stb_path: D:/Climate Vulnerability Tool/Data/raw inputs/Other/STB_2023/STB_Boundary_2023.shp
-  ca_path: D:/Climate Vulnerability Tool/Data/raw inputs/Other/Combined_Authorities_December_2025_Boundaries_EN_BFC.gpkg
+  stb_path: Other/STB_2023/STB_Boundary_2023.shp
+  ca_path: Other/Combined_Authorities_December_2025_Boundaries_EN_BFC.gpkg
 
 infrastructure:
   road:
@@ -105,79 +105,41 @@ infrastructure:
 
 hazards:
   coastal_erosion:
-    zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Coastal Erosion/National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.shp.zip
-    giz: NCERM_Ground_Instability_Zone.shp
-    smp:
-      '2055': NCERM_SMP_2055_70CC.shp
-      '2105': NCERM_SMP_2105_70CC.shp
+    zip_path: Hazards/Coastal Erosion/National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.gpkg.zip
+    file_path: National_Coastal_Erosion_Risk_Mapping_NCERM_National_2024.gpkg
+    output_path: 
   extreme_weather:
-    wind_spd_current: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/CEDA_Max_Wind_Speed/wsgmax10m_rcp85_land-cpm_uk_5km_01_day_19901201-20001130.nc
-    wind_spd_forecast: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/CEDA_Max_Wind_Speed/wsgmax10m_rcp85_land-cpm_uk_5km_01_day_20701201-20801130.nc
-    rain_days:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_10mm_Rain_Days_1991_2020.zip
-      file_path: Annual_Count_of_10mm_Rain_Days_1991-2020.shp
-      output_path: 
-    extreme_summer_days:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Extreme_Summer_Days_Projections_12km_Grid.zip
-      file_path: annual_count_of_extreme_summer_days_projections_12km.shp
-      output_path: 
-    frost_days:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Frost_Days_Projections_12km_Grid.zip
-      file_path: annual_count_of_frost_days_projections_12km.shp
-      output_path: 
-    hot_days:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Hot_Days___Projections__12km_grid.zip
-      file_path: annual_count_of_hot_summer_days_projections_12km.shp
-      output_path: 
-    icing_days:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Count_of_Icing_Days___Projections__12km_grid.zip
-      file_path: annual_count_of_icing_days_projections_12km.shp
-      output_path: 
-    wdr_index:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Annual_Index_of_Wind_Driven_Rain_Projections_5km.zip
-      file_path: Annual_Index_of_Wind_Driven_Rain_-_Projections_(5km).shp
-      output_path: 
-    drought_index:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Drought_Severity_Index_12_Month_Accumulations.zip
-      file_path: Drought_Severity_Index_12_Month_Accumulations_-_Projections.shp
-      output_path: 
-    max_temp_summer:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Summer_Maximum_Temperature_Change___Projections_12km_grid.zip
-      file_path: summer_maximum_temperature_change_projections_12km.shp
-      output_path: 
-    precip_summer:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Summer_Precipitation_Change___Projections_12km_grid.zip
-      file_path: summer_precipitation_change_projections_12km.shp
-      output_path: 
-    min_temp_winter:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Winter_Minimum_Temperature_Change___Projections_12km_grid.zip
-      file_path: winter_minimum_temperature_change_projections_12km.shp
-      output_path: 
-    precip_winter:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Extreme Weather/Winter_Precipitation_Change___Projections_12km_grid.zip
-      file_path: winter_precipitation_change_projections_12km.shp
-      output_path: 
+    max_temp_summer: Hazards/Extreme Weather/Extreme Heat/Summer_Maximum_Temperature_Change_Projections_12km.gpkg
+    extreme_summer_days: Hazards/Extreme Weather/Extreme Heat/Annual_Count_of_Extreme_Summer_Days_Projections_12km.gpkg
+    hot_days: Hazards/Extreme Weather/Extreme Heat/Annual_Count_of_Hot_Days_Projections_12km.gpkg
+    min_temp_winter: Hazards/Extreme Weather/Extreme Cold/Winter_Minimum_Temperature_Change_Projections_12km.gpkg
+    frost_days: Hazards/Extreme Weather/Extreme Cold/Annual_Count_of_Frost_Days_Projections_12km.gpkg
+    icing_days: Hazards/Extreme Weather/Extreme Cold/Annual_Count_of_Icing_Days_Projections_12km.gpkg
+    drought_index: Hazards/Extreme Weather/Drought/Drought_Severity_Index_12_Month_Accumulations.gpkg
+    precip_summer: Hazards/Extreme Weather/Drought/Summer_Precipitation_Change_Projections_12km.gpkg
+    wind_speed:
+      1990_2000: Hazards/Extreme Weather/Storm/wsgmax10m_rcp85_land-cpm_uk_5km_01_day_19901201-20001130.nc
+      2070_2080: Hazards/Extreme Weather/Storm/wsgmax10m_rcp85_land-cpm_uk_5km_01_day_20701201-20801130.nc
+    rain_days: Hazards/Extreme Weather/Storm/Annual_Count_of_10mm_Rain_Days_1991_2020.gpkg
+    wdr_index: Hazards/Extreme Weather/Storm/Annual_Index_of_Wind_Driven_Rain_Projections_5km.gpkg
+    precip_winter: Hazards/Extreme Weather/Storm/Winter_Precipitation_Change_Projections_12km.gpkg
   flooding:
-    flood_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Flooding
+    flood_path: Hazards/Flooding
   ground_stability:
     geo_shrink_swell:
-      "2030": D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Ground Stability/GeoClimateUKCP18OpenData/GeoclimateUKCP18_Open/GeoClimateUKCP18_ShrinkSwell_2030_Average_Open.shp
-      "2070": D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Ground Stability/GeoClimateUKCP18OpenData/GeoclimateUKCP18_Open/GeoClimateUKCP18_ShrinkSwell_2070_Average_Open.shp
+      "2030": Hazards/Ground Stability/GeoClimateUKCP18OpenData/GeoclimateUKCP18_Open/GeoClimateUKCP18_ShrinkSwell_2030_Average_Open.shp
+      "2070": Hazards/Ground Stability/GeoClimateUKCP18OpenData/GeoclimateUKCP18_Open/GeoClimateUKCP18_ShrinkSwell_2070_Average_Open.shp
     geosure:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Hazards/Ground Stability/GeoSureHexGrids.zip
-      collapsible_deposits: GeoSureHexGrids/Data/GB_Hex_5km_GS_CollapsibleDeposits_v8.shp
-      compressible_ground: GeoSureHexGrids/Data/GB_Hex_5km_GS_CompressibleGround_v8.shp
-      landslides: GeoSureHexGrids/Data/GB_Hex_5km_GS_Landslides_v8.shp
-      running_sand: GeoSureHexGrids/Data/GB_Hex_5km_GS_RunningSand_v8.shp
-      shrink_swell: GeoSureHexGrids/Data/GB_Hex_5km_GS_ShrinkSwell_v8.shp
-      soluble_rocks: GeoSureHexGrids/Data/GB_Hex_5km_GS_SolubleRocks_v8.shp
+      zip_path: Hazards/Ground Stability/GB_Hex_5km_GeoSure_All.zip
+      file_path: GB_Hex_5km_GeoSure_All_V8.gpkg
+      output_path: 
 
 impact:
-  freight_demand: D:/Climate Vulnerability Tool/Data/raw inputs/Impact/Freight/rail_freight_network_demand.gpkg
+  freight_demand: Impact/Freight/rail_freight_network_demand.gpkg
   noham_demand:
-    zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Impact/NoHAM Link Flows/input h5s.7z
+    zip_path: Impact/NoHAM Link Flows/input h5s.7z
     file_path: 
-    output_path: D:/Climate Vulnerability Tool/Data/raw inputs/Impact/NoHAM Link Flows/h5 files
+    output_path: Impact/NoHAM Link Flows/h5 files
   noham_years:
     - 2023
     - 2048

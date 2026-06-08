@@ -214,11 +214,11 @@ def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
     """Get the boundary to use for clipping and filtering datasets based on the config."""
     if config.other_input.boundary_path is not None:
         LOG.info("Using specific boundary file: %s", config.other_input.boundary_path)
-        return gpd.read_file(config.other_input.boundary_path)
+        return gpd.read_file(config.paths.raw_input / config.other_input.boundary_path)
 
     if config.parameters.stb is not None:
         LOG.info("Using boundary for STB: %s", config.parameters.stb)
-        stb_boundaries = gpd.read_file(config.other_input.stb_path)
+        stb_boundaries = gpd.read_file(config.paths.raw_input / config.other_input.stb_path)
         stb_boundary = stb_boundaries[stb_boundaries["stb_name"] == config.parameters.stb]
         stb_boundary = stb_boundary[["stb_name", "geometry"]]
         if stb_boundary.empty:
@@ -227,7 +227,7 @@ def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
 
     if config.parameters.ca is not None:
         LOG.info("Using boundary for CA: %s", config.parameters.ca)
-        ca_boundaries = gpd.read_file(config.other_input.ca_path)
+        ca_boundaries = gpd.read_file(config.paths.raw_input / config.other_input.ca_path)
         ca_boundary = ca_boundaries[ca_boundaries["CAUTH25NM"] == config.parameters.ca]
         ca_boundary = ca_boundary[["CAUTH25NM", "geometry"]]
         if ca_boundary.empty:
@@ -341,9 +341,9 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = get_boundary(config)
 
-    _clean_infrastructure(config, boundary)
+    #_clean_infrastructure(config, boundary)
     _clean_hazards(config, boundary)
-    _clean_impact(config, boundary)
+    #_clean_impact(config, boundary)
 
 
 ## INFRASTRUCTURE
@@ -973,8 +973,7 @@ def _clean_hazard_grid(
 ) -> gpd.GeoDataFrame:
     """Create and prepare common hazard grid DataFrame for variables on same 12km BNG."""
     hazard_grid = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.max_temp_summer.zip_path}!"
-        f"{config.hazards.extreme_weather.max_temp_summer.file_path}",
+        config.paths.raw_input / config.hazards.extreme_weather.max_temp_summer,
         mask=boundary,
         columns=[],
     )
@@ -999,16 +998,15 @@ def _clean_hazard_grid(
 def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean max summer temperature change projections, then write to file."""
     temp_max = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.max_temp_summer.zip_path}!"
-        f"{config.hazards.extreme_weather.max_temp_summer.file_path}",
-        columns=["tasmax_s_4", "tasmax__22"],
+        config.paths.raw_input / config.hazards.extreme_weather.max_temp_summer,
+        columns=["tasmax_summer_01_20_median", "tasmax_summer_change_40_median"],
     )
     temp_max["grid_id"] = range(1, len(temp_max) + 1)
     temp_max = temp_max.drop(columns=["geometry"])
     temp_max = temp_max.rename(
         columns={
-            "tasmax_s_4": f"max_temp_summer_{Scenarios.CURRENT}",
-            "tasmax__22": f"max_temp_summer_{Scenarios.FORECAST}",
+            "tasmax_summer_01_20_median": f"max_temp_summer_{Scenarios.CURRENT}",
+            "tasmax_summer_change_40_median": f"max_temp_summer_{Scenarios.FORECAST}",
         }
     )
     temp_max[f"max_temp_summer_{Scenarios.FORECAST}"] = (
@@ -1033,16 +1031,15 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
 def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean min winter temperature change projections, then write to file."""
     temp_min = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.min_temp_winter.zip_path}!"
-        f"{config.hazards.extreme_weather.min_temp_winter.file_path}",
-        columns=["tasmin_w_4", "tasmin__22"],
+        config.paths.raw_input / config.hazards.extreme_weather.min_temp_winter,
+        columns=["tasmin_winter_01_20_median", "tasmin_winter_change_40_median"],
     )
     temp_min["grid_id"] = range(1, len(temp_min) + 1)
     temp_min = temp_min.drop(columns=["geometry"])
     temp_min = temp_min.rename(
         columns={
-            "tasmin_w_4": f"min_temp_winter_{Scenarios.CURRENT}",
-            "tasmin__22": f"min_temp_winter_{Scenarios.FORECAST}",
+            "tasmin_winter_01_20_median": f"min_temp_winter_{Scenarios.CURRENT}",
+            "tasmin_winter_change_40_median": f"min_temp_winter_{Scenarios.FORECAST}",
         }
     )
     temp_min[f"min_temp_winter_{Scenarios.FORECAST}"] = (
@@ -1070,16 +1067,15 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
 def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean summer precipitation change projections, then write to file."""
     precip_sum = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.precip_summer.zip_path}!"
-        f"{config.hazards.extreme_weather.precip_summer.file_path}",
-        columns=["pr_summe_3", "pr_summ_21"],
+        config.paths.raw_input / config.hazards.extreme_weather.precip_summer,
+        columns=["pr_summer_01_20_median", "pr_summer_change_40_median"],
     )
     precip_sum["grid_id"] = range(1, len(precip_sum) + 1)
     precip_sum = precip_sum.drop(columns=["geometry"])
     precip_sum = precip_sum.rename(
         columns={
-            "pr_summe_3": f"precip_summer_{Scenarios.CURRENT}",
-            "pr_summ_21": f"precip_summer_pct_chg_{Scenarios.FORECAST}",
+            "pr_summer_01_20_median": f"precip_summer_{Scenarios.CURRENT}",
+            "pr_summer_change_40_median": f"precip_summer_pct_chg_{Scenarios.FORECAST}",
         }
     )
     precip_sum[f"precip_summer_{Scenarios.FORECAST}"] = (
@@ -1105,16 +1101,15 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
 def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean winter precipitation change projections, then write to file."""
     precip_win = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.precip_winter.zip_path}!"
-        f"{config.hazards.extreme_weather.precip_winter.file_path}",
-        columns=["pr_winte_3", "pr_wint_21"],
+        config.paths.raw_input / config.hazards.extreme_weather.precip_winter,
+        columns=["pr_winter_01_20_median", "pr_winter_change_40_median"],
     )
     precip_win["grid_id"] = range(1, len(precip_win) + 1)
     precip_win = precip_win.drop(columns=["geometry"])
     precip_win = precip_win.rename(
         columns={
-            "pr_winte_3": f"precip_winter_{Scenarios.CURRENT}",
-            "pr_wint_21": f"precip_winter_pct_chg_{Scenarios.FORECAST}",
+            "pr_winter_01_20_median": f"precip_winter_{Scenarios.CURRENT}",
+            "pr_winter_change_40_median": f"precip_winter_pct_chg_{Scenarios.FORECAST}",
         },
     )
     precip_win[f"precip_winter_{Scenarios.FORECAST}"] = (
@@ -1140,14 +1135,13 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
 def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean 10mm rain days observations, then write to file."""
     rain_days = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.rain_days.zip_path}!"
-        f"{config.hazards.extreme_weather.rain_days.file_path}",
+        config.paths.raw_input / config.hazards.extreme_weather.rain_days,
         mask=boundary,
     )
     len_before_filter = len(rain_days)
     rain_days = clip_to_boundary(rain_days, boundary)
     rain_days = rain_days.rename(
-        columns={"Rain10mmDa": f"10mm_rain_days_{Scenarios.CURRENT}"}
+        columns={"Rain10mmDays": f"10mm_rain_days_{Scenarios.CURRENT}"}
     )
     filter_removed = len_before_filter - len(rain_days)
     LOG.info(
@@ -1165,15 +1159,14 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
 def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean drought severity index data, then write to file."""
     drought_index = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.drought_index.zip_path}!"
-        f"{config.hazards.extreme_weather.drought_index.file_path}",
+        config.paths.raw_input / config.hazards.extreme_weather.drought_index,
         mask=boundary,
-        columns=["DSI12_ba_4", "DSI12_40_m"],
+        columns=["DSI12_baseline_00_17_median", "DSI12_40_median"],
     )
     drought_index = drought_index.rename(
         columns={
-            "DSI12_ba_4": f"drought_severity_index_{Scenarios.CURRENT}",
-            "DSI12_40_m": f"drought_severity_index_{Scenarios.FORECAST}",
+            "DSI12_baseline_00_17_median": f"drought_severity_index_{Scenarios.CURRENT}",
+            "DSI12_40_median": f"drought_severity_index_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(drought_index)
@@ -1194,16 +1187,15 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
 def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean hot summer days projections, then write to file."""
     hot_days = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.hot_days.zip_path}!"
-        f"{config.hazards.extreme_weather.hot_days.file_path}",
-        columns=["HSD_base_4", "HSD_40_med"],
+        config.paths.raw_input / config.hazards.extreme_weather.hot_days,
+        columns=["HSD_baseline_01_20_median", "HSD_40_median"],
     )
     hot_days["grid_id"] = range(1, len(hot_days) + 1)
     hot_days = hot_days.drop(columns=["geometry"])
     hot_days = hot_days.rename(
         columns={
-            "HSD_base_4": f"hot_summer_days_{Scenarios.CURRENT}",
-            "HSD_40_med": f"hot_summer_days_{Scenarios.FORECAST}",
+            "HSD_baseline_01_20_median": f"hot_summer_days_{Scenarios.CURRENT}",
+            "HSD_40_median": f"hot_summer_days_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(hot_days)
@@ -1223,16 +1215,15 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
 def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean extreme summer days projections, then write to file."""
     extr_days = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.extreme_summer_days.zip_path}!"
-        f"{config.hazards.extreme_weather.extreme_summer_days.file_path}",
-        columns=["ESD_base_4", "ESD_40_med"],
+        config.paths.raw_input / config.hazards.extreme_weather.extreme_summer_days,
+        columns=["ESD_baseline_01_20_median", "ESD_40_median"],
     )
     extr_days["grid_id"] = range(1, len(extr_days) + 1)
     extr_days = extr_days.drop(columns=["geometry"])
     extr_days = extr_days.rename(
         columns={
-            "ESD_base_4": f"extreme_summer_days_{Scenarios.CURRENT}",
-            "ESD_40_med": f"extreme_summer_days_{Scenarios.FORECAST}",
+            "ESD_baseline_01_20_median": f"extreme_summer_days_{Scenarios.CURRENT}",
+            "ESD_40_median": f"extreme_summer_days_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(extr_days)
@@ -1253,16 +1244,15 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
 def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean frost days projections, then write to file."""
     frost_days = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.frost_days.zip_path}!"
-        f"{config.hazards.extreme_weather.frost_days.file_path}",
-        columns=["FrostDay_3", "FrostDa_18"],
+        config.paths.raw_input / config.hazards.extreme_weather.frost_days,
+        columns=["FrostDays_baseline_01_20_median", "FrostDays_40_median"],
     )
     frost_days["grid_id"] = range(1, len(frost_days) + 1)
     frost_days = frost_days.drop(columns=["geometry"])
     frost_days = frost_days.rename(
         columns={
-            "FrostDay_3": f"frost_days_{Scenarios.CURRENT}",
-            "FrostDa_18": f"frost_days_{Scenarios.FORECAST}"
+            "FrostDays_baseline_01_20_median": f"frost_days_{Scenarios.CURRENT}",
+            "FrostDays_40_median": f"frost_days_{Scenarios.FORECAST}"
         }
     )
     len_before_filter = len(frost_days)
@@ -1282,16 +1272,15 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
 def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean icing days projections, then write to file."""
     ice_days = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.icing_days.zip_path}!"
-        f"{config.hazards.extreme_weather.icing_days.file_path}",
-        columns=["IcingDay_3", "IcingDa_18"],
+        config.paths.raw_input / config.hazards.extreme_weather.icing_days,
+        columns=["IcingDays_baseline_01_20_median", "IcingDays_40_median"],
     )
     ice_days["grid_id"] = range(1, len(ice_days) + 1)
     ice_days = ice_days.drop(columns=["geometry"])
     ice_days = ice_days.rename(
         columns={
-            "IcingDay_3": f"icing_days_{Scenarios.CURRENT}",
-            "IcingDa_18": f"icing_days_{Scenarios.FORECAST}"
+            "IcingDays_baseline_01_20_median": f"icing_days_{Scenarios.CURRENT}",
+            "IcingDays_40_median": f"icing_days_{Scenarios.FORECAST}"
         }
     )
     len_before_filter = len(ice_days)
@@ -1311,10 +1300,12 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
 def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read wind speed projections, calculate metrics, clean, then write to file."""
     windspd_current_agg, len_before_filter_current = _read_wind_speed_reduce(
-        config.hazards.extreme_weather.wind_spd_current, Scenarios.CURRENT
+        config.paths.raw_input / config.hazards.extreme_weather.wind_speed["1990_2000"],
+        Scenarios.CURRENT
     )
     windspd_forecast_agg, len_before_filter_forecast = _read_wind_speed_reduce(
-        config.hazards.extreme_weather.wind_spd_forecast, Scenarios.FORECAST
+        config.paths.raw_input / config.hazards.extreme_weather.wind_speed["2070_2080"],
+        Scenarios.FORECAST
     )
 
     metric_cols = [
@@ -1406,24 +1397,23 @@ def _calculate_windspd_percentile(
 def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean wind driven rain index data, then write to file."""
     wind_driven_rain = gpd.read_file(
-        f"zip://{config.hazards.extreme_weather.wdr_index.zip_path}!"
-        f"{config.hazards.extreme_weather.wdr_index.file_path}",
+        config.paths.raw_input / config.hazards.extreme_weather.wdr_index,
         mask=boundary,
-        columns=["WDR_base_1", "WDR_40_Med", "x_coord", "y_coord"],
+        columns=["WDR_baseline_Median", "WDR_40_Median", "x_coord", "y_coord"],
     )
     len_before_filter = len(wind_driven_rain)
     # Aggregate by wind direction to calculate mean wind speed
     wind_driven_rain = (
         wind_driven_rain.groupby(["x_coord", "y_coord"])
-        .agg({"WDR_base_1": "mean", "WDR_40_Med": "mean", "geometry": "first"})
+        .agg({"WDR_baseline_Median": "mean", "WDR_40_Median": "mean", "geometry": "first"})
         .reset_index()
     )
 
     wind_driven_rain = wind_driven_rain.drop(columns=["x_coord", "y_coord"])
     wind_driven_rain = wind_driven_rain.rename(
         columns={
-            "WDR_base_1": f"wind_driven_rain_index_{Scenarios.CURRENT}",
-            "WDR_40_Med": f"wind_driven_rain_index_{Scenarios.FORECAST}",
+            "WDR_baseline_Median": f"wind_driven_rain_index_{Scenarios.CURRENT}",
+            "WDR_40_Median": f"wind_driven_rain_index_{Scenarios.FORECAST}",
         }
     )
     wind_driven_rain = gpd.GeoDataFrame(
