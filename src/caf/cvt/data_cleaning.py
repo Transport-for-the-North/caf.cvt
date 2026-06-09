@@ -9,6 +9,7 @@ from zipfile import BadZipFile, ZipFile
 
 import fiona
 import geopandas as gpd
+import osbng
 import pandas as pd
 import py7zr
 import xarray as xr
@@ -324,6 +325,12 @@ def _nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.Ge
     # Merge back with original gdf1 to restore original geometry
     return gdf1.merge(nearest.drop(columns="geometry"), left_index=True, right_index=True)
 
+
+def _get_bng_codes(boundary: gpd.GeoDataFrame) -> list[str]:
+    """Clip the 100km BNG to the boundary."""
+    bng_100km = gpd.GeoDataFrame.from_features(osbng.grids.bng_grid_100km, crs=BNG_CRS)
+    boundary_bng = clip_to_boundary(bng_100km, boundary)
+    return list(boundary_bng["bng_ref"])
 
 # DATA CLEANING
 
@@ -1436,152 +1443,46 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
 
 ### FLOODING
 
-
-def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Clean flooding data ready for analysis."""
-    LOG.info("Cleaning flooding data...")
-
-    if config.switches.flood_zip_extract:
-        _extract_flood_data(config, _FLOOD_CODE_NUMBER_MAP)
-
-    LOG.info("Cleaning climate change river and sea flooding data...")
-    _clean_flood(
-        config,
-        file_name="RoFRS",
-        flood_type="RoFRS",
-        version="v202501",
-        boundary=boundary,
-        out_path=file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-        climate_change_switch=True,
-        code_number_map=_FLOOD_CODE_NUMBER_MAP,
-        rename_risk_col=f"rivers_sea_flood_risk_{Scenarios.FORECAST}",
-    )
-    LOG.info("Finished cleaning climate change river and sea flooding data.")
-
-    LOG.info("Cleaning river and sea flooding data...")
-    _clean_flood(
-        config,
-        file_name="RoFRS",
-        flood_type="RoFRS",
-        version="v202501",
-        boundary=boundary,
-        out_path=file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
-        climate_change_switch=False,
-        code_number_map=_FLOOD_CODE_NUMBER_MAP,
-        rename_risk_col=f"rivers_sea_flood_risk_{Scenarios.CURRENT}",
-    )
-    LOG.info("Finished cleaning river and sea flooding data.")
-
-    LOG.info("Cleaning climate change surface water flooding data...")
-    _clean_flood(
-        config,
-        file_name="RoFSW CC",
-        flood_type="RoFSW",
-        version="v202509",
-        boundary=boundary,
-        out_path=file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-        climate_change_switch=True,
-        code_number_map=_FLOOD_CODE_NUMBER_MAP,
-        rename_risk_col=f"surface_water_flood_risk_{Scenarios.FORECAST}",
-    )
-    LOG.info("Finished cleaning climate change surface water flooding data.")
-
-    LOG.info("Cleaning surface water flooding data...")
-    _clean_flood(
-        config,
-        file_name="RoFSW",
-        flood_type="RoFSW",
-        version="v202509",
-        boundary=boundary,
-        out_path=file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
-        climate_change_switch=False,
-        code_number_map=_FLOOD_CODE_NUMBER_MAP,
-        rename_risk_col=f"surface_water_flood_risk_{Scenarios.CURRENT}",
-    )
-    LOG.info("Finished cleaning surface water flooding data.")
-    LOG.info("Finished cleaning flooding data.")
+def _get_flood_zip_files(
+        config: model_config.Config,
+        flood_type: str,
+) -> list[pathlib.Path]:
+    """Return all flood zip files."""
+    flood_root = config.hazards.flooding[flood_type]
+    return sorted(flood_root.rglob("*.zip"))
 
 
-def _extract_flood_gdb_file(
-    config: model_config.Config,
-    *,
-    code: str,
-    number: str,
-    flood_data: str,
-    version: str,
-    cc: bool,
-) -> gpd.GeoDataFrame | None:
-    """Extract a flood gdb file from a zip file given its BNG code and number, and version."""
-    try:
-        base_path = config.paths.raw_input / "Hazards" / "Flooding" / flood_data
-        if cc:
-            zip_path = (
-                base_path
-                / code
-                / f"{flood_data}_Climate_Change_01_{code}{number}_{version}.zip"
-            )
-            extract_to = base_path / code
-            gdb_path = (
-                extract_to / f"{flood_data}_Climate_Change_01_{code}{number}_{version}.gdb"
-            )
-        else:
-            zip_path = base_path / code / f"{flood_data}_{code}{number}_{version}.zip"
-            extract_to = base_path / code
-            gdb_path = extract_to / f"{flood_data}_{code}{number}_{version}.gdb"
+def _parse_flood_metadata(zip_path: pathlib.Path) -> dict:
+    """Extract metadata from flood filename."""
+    name = zip_path.stem
+    climate_change = "Climate_Change" in name
 
-        if not zip_path.exists():
-            LOG.warning("Zip file not found: %s", zip_path)
-            return None
-
-        with ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(extract_to)
-
-        if not gdb_path.exists():
-            LOG.warning("GDB folder not found: %s", gdb_path)
-            return None
-
-        layers = fiona.listlayers(gdb_path)
-        if not layers:
-            LOG.warning("No layers found in: %s", gdb_path)
-            return None
-
-        LOG.info("Available layers: %s", layers)
-        return gpd.read_file(gdb_path, layer=layers[0])
-
-    except (FileNotFoundError, BadZipFile):
-        LOG.exception("Error processing %s%s", code, number)
-        return None
-
-
-def _read_flood_gdb(
-    config: model_config.Config,
-    *,
-    code: str,
-    number: str,
-    file_name: str,
-    flood_type: str,
-    version: str,
-    climate_change_switch: bool,
-    boundary: gpd.GeoDataFrame,
-) -> gpd.GeoDataFrame:
-    """Read first layer of flood gdb file."""
-    base_path = config.hazards.flooding.flood_path / file_name / code
-
-    if climate_change_switch:
-        gdb_path = base_path / f"{flood_type}_Climate_Change_01_{code}{number}_{version}.gdb"
+    if climate_change:
+        flood_type, _, _, _, tile, version = name.split("_")
     else:
-        gdb_path = base_path / f"{flood_type}_{code}{number}_{version}.gdb"
+        flood_type, tile, version = name.split("_")
 
-    # Check if GDB folder exists
-    if not gdb_path.exists():
-        raise FileNotFoundError(f"GBD folder not found: {gdb_path}")
+    return {
+        "flood_type": flood_type,
+        "tile": tile,
+        "version": version,
+        "climate_change": climate_change,
+    }
 
-    layers = fiona.listlayers(gdb_path)
+
+def _read_flood_zip(
+        zip_path: pathlib.Path,
+        boundary: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame | None:
+    """Read flood gdb file from zip."""
+    vsi_path = f"zip://{zip_path}!/{zip_path.stem}.gdb"
+    layers = fiona.listlayers(vsi_path)
+
     if not layers:
-        raise ValueError(f"No layers found in GDB: {gdb_path}")
+        raise ValueError(f"No layers found in zip file: {zip_path}")
 
     return gpd.read_file(
-        gdb_path,
+        vsi_path,
         layer=layers[0],
         mask=boundary,
         columns=["Risk_band"],
@@ -1589,134 +1490,72 @@ def _read_flood_gdb(
         use_arrow=True,
     )
 
-
-def _extract_flood_data(
-    config: model_config.Config, code_number_map: dict[str, list[str]]
-) -> None:
-    """Extract GeoDatabase files from raw RoFRS and RoFSW flood data."""
-    for code, num_list in code_number_map.items():
-        for number in num_list:
-            # Forecast (Climate Change) data
-            _extract_flood_gdb_file(
-                config,
-                code=code,
-                number=number,
-                flood_data="RoFRS",
-                version="v202501",
-                cc=True,
-            )
-            _extract_flood_gdb_file(
-                config,
-                code=code,
-                number=number,
-                flood_data="RoFSW",
-                version="v202509",
-                cc=True,
-            )
-
-            # Current data
-            _extract_flood_gdb_file(
-                config,
-                code=code,
-                number=number,
-                flood_data="RoFRS",
-                version="v202501",
-                cc=False,
-            )
-            _extract_flood_gdb_file(
-                config,
-                code=code,
-                number=number,
-                flood_data="RoFSW",
-                version="v202509",
-                cc=False,
-            )
-
-
-def _process_flood_layer(
-    config: model_config.Config,
-    *,
-    code: str,
-    number: str,
-    file_name: str,
-    flood_type: str,
-    version: str,
-    boundary: gpd.GeoDataFrame,
-    climate_change_switch: bool,
-    rename_risk_col: str,
-) -> gpd.GeoDataFrame | None:
-    """Read, clip, clean, and prepare a single flood layer. Helper function for clean_flood."""
-    LOG.info("Processing flood data: %s%s", code, number)
-
-    flood_data = _read_flood_gdb(
-        config,
-        code=code,
-        number=number,
-        file_name=file_name,
-        flood_type=flood_type,
-        version=version,
-        climate_change_switch=climate_change_switch,
-        boundary=boundary,
-    )  # Read file
-    len_before_filter = len(flood_data)
-    flood_data = clip_to_boundary(flood_data, boundary)
-    if flood_data.empty:
-        LOG.info("%s%s layer empty. Continuing.", code, number)
-        return None
-    filter_removed = len_before_filter - len(flood_data)
-
-    LOG.info(
-        "%s %s %s filtered - %s of %s (%.1f percent) rows removed",
-        flood_type,
-        code,
-        number,
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-
-    flood_data = _extract_poly_from_geomcollection(flood_data)
-    flood_data = flood_data[["Risk_band", "geometry"]]
-    return flood_data.rename(columns={"Risk_band": rename_risk_col})
-
-
 def _clean_flood(
-    config: model_config.Config,
-    *,
-    file_name: str,
-    flood_type: str,
-    version: str,
-    boundary: gpd.GeoDataFrame,
-    out_path: pathlib.Path,
-    climate_change_switch: bool,
-    code_number_map: dict[str, list[str]],
-    rename_risk_col: str,
+        config: model_config.Config,
+        flood_type: str,
+        boundary: gpd.GeoDataFrame,
+        out_path: pathlib.Path,
+        rename_risk_col: str,
+        climate_change: bool,
+        bng_codes: list[str],
 ) -> None:
-    """Read and clean flood data, then write to file."""
+    """Clean flood data and write to file."""
+    zip_files = _get_flood_zip_files(config, flood_type)
     first_write = True
-    for code, num_list in code_number_map.items():
-        for number in num_list:
-            flood_data = _process_flood_layer(
-                config,
-                code=code,
-                number=number,
-                file_name=file_name,
-                flood_type=flood_type,
-                version=version,
-                boundary=boundary,
-                climate_change_switch=climate_change_switch,
-                rename_risk_col=rename_risk_col,
-            )
-            if flood_data is None:
-                continue
-            if first_write:
-                write_to_file(flood_data, config.paths.model_input / out_path, mode="w")
-                first_write = False
-            else:
-                write_to_file(flood_data, config.paths.model_input / out_path, mode="a")
 
-            del flood_data
-            gc.collect()
+    for zip_path in zip_files:
+        metadata = _parse_flood_metadata(zip_path)
+
+        if metadata["tile"][:2] not in bng_codes:
+            continue
+        if metadata["climate_change"] != climate_change:
+            continue
+        LOG.info("Processing tile: %s...", metadata["tile"])
+
+        flood_data = _read_flood_zip(zip_path, boundary)
+
+        flood_data = clip_to_boundary(flood_data, boundary)
+
+        if flood_data.empty:
+            LOG.info("%s layer empty. Continuing.", metadata["tile"])
+            continue
+
+        flood_data = _extract_poly_from_geomcollection(flood_data)
+
+        flood_data = flood_data.rename(columns={"Risk_band": rename_risk_col})
+
+        write_to_file(
+            flood_data,
+            config.paths.model_input / out_path / "",
+            mode="w" if first_write else "a",
+        )
+
+        first_write = False
+
+        del flood_data
+        gc.collect()
+
+
+def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+    """Clean flooding data ready for analysis."""
+    LOG.info("Cleaning flooding data...")
+    bng_codes = _get_bng_codes(boundary)
+
+    for flood_type in config.hazards.flooding:
+        for scenario in Scenarios.all():
+            LOG.info("Cleaning %s flooding data for %s scenario...", flood_type, scenario)
+            _clean_flood(
+                config,
+                flood_type=flood_type,
+                boundary=boundary,
+                out_path=file_paths.FLOODING_MODEL_INPUT_PATH / flood_type / scenario
+                            / f"{flood_type}_{scenario}.gpkg",
+                rename_risk_col=f"{flood_type}_flood_risk_{scenario}",
+                climate_change=(scenario == Scenarios.FORECAST),
+                bng_codes=bng_codes,
+            )
+
+    LOG.info("Finished cleaning flooding data.")
 
 
 ### GROUND STABILITY

@@ -268,11 +268,11 @@ class HazardsConfig(ctk.BaseConfig):
 
     Attributes
     ----------
-    coastal_erosion : CoastalErosion
-        Configuration for coastal erosion data.
+    coastal_erosion : ZipFileEntry
+        Configuration for coastal erosion zip file entry.
     extreme_weather : ExtremeWeather
         Configuration for extreme weather data.
-    flooding : Flooding
+    flooding : dict[str, pathlib.Path]
         Configuration for flooding data.
     ground_stability : GroundStability
         Configuration for ground stability data.
@@ -280,7 +280,7 @@ class HazardsConfig(ctk.BaseConfig):
 
     coastal_erosion: ZipFileEntry
     extreme_weather: ExtremeWeather
-    flooding: Flooding
+    flooding: dict[str, pathlib.Path]
     ground_stability: GroundStability
 
 

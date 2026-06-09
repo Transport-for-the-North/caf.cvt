@@ -96,15 +96,9 @@ WIND_DRIVEN_RAIN_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Extreme Weather/Wind Driven Rain Index/wdr.gpkg"
 )
 
-FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH = pathlib.Path(
-    "Hazards/Flooding/RoFRS CC/rofrs_cc.gpkg"
-)
+FLOODING_MODEL_INPUT_PATH = pathlib.Path("Hazards/Flooding")
 
-FLOOD_RIVERS_SEA_MODEL_INPUT_PATH = pathlib.Path("Hazards/Flooding/RoFRS/rofrs.gpkg")
-FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH = pathlib.Path(
-    "Hazards/Flooding/RoFSW CC/rofsw_cc.gpkg"
-)
-FLOOD_SURFACE_WATER_MODEL_INPUT_PATH = pathlib.Path("Hazards/Flooding/RoFSW/rofsw.gpkg")
+
 GEOSURE_MODEL_INPUT_PATH = pathlib.Path("Hazards/Ground Stability/GeoSure/geosure.gpkg")
 GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Ground Stability/BGS Shrink Swell"
