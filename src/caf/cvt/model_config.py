@@ -393,7 +393,6 @@ class SwitchConfig(ctk.BaseConfig):
     ground_stability: bool
     coastal_erosion: bool
 
-    flood_zip_extract: bool = False
     create_flood_grid: bool = False
 
     compute_flood_overlay: bool = False

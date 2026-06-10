@@ -4,8 +4,8 @@
 switches:
   # If running from scratch using only the raw input files these switches should all be true
   run_data_cleaning: true
-  run_functional_rules: false
-  run_layering: false
+  run_functional_rules: true
+  run_layering: true
 
   # Infrastructure switches 
   all_roads: true
@@ -19,8 +19,8 @@ switches:
   petrol_stations: false
   charging_sites: false
   national_cycle_network: false
-  train_stations: false
-  tram_stations: false
+  train_stations: true
+  tram_stations: true
   rapid_transport_stations: false
   ferry_terminals: false
   bus_coach_stations: false
@@ -28,15 +28,13 @@ switches:
   rapid_transport_network: false
 
   # Hazard switches
-  extreme_weather: false
-  flooding: false
-  ground_stability: true
-  coastal_erosion: true
+  extreme_weather: true
+  flooding: true
+  ground_stability: false
+  coastal_erosion: false
 
   
 
-  # True if the raw flood data from Defra data services needs to be extracted from the zip files (this is time consuming)
-  flood_zip_extract: false
   # True if the flood grid needs to be created before upscaling the flood data to this grid
   create_flood_grid: false
 
@@ -81,27 +79,27 @@ other_input:
 infrastructure:
   road:
     os_road:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/oproad_gpkg_gb.zip
+      zip_path: Infrastructure/Road/oproad_gpkg_gb.zip
       file_path: Data/oproad_gb.gpkg
       output_path: 
     noham:
       year: 2023
-      file_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Road/NoHAM 2023/NoHAM_Decarb_DM_Core_2023_carbon.shp
+      file_path: Infrastructure/Road/NoHAM 2023/NoHAM_Decarb_DM_Core_2023_carbon.shp
   rail:
-    rail_links: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Rail/OS Rail Network/TfN_Area_tfn_ntwk_railwaylink.gpkg
+    rail_links: Infrastructure/Rail/OS Rail Network/TfN_Area_tfn_ntwk_railwaylink.gpkg
   other:
     bus_stops:
-      north_east: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ne.csv
-      north_west: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_nw.csv
-      yorkshire: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/Bus Stops/bus_stops_ys.csv
-    ncn_sustrans: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/NCN Sustrans/National_Cycle_Network_Public.shp
-    os_mmrn: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/OS Multi-Modal Routing Network/OSMulti-modalRoutingNetwork.gpkg
+      north_east: Infrastructure/Other/Bus Stops/bus_stops_ne.csv
+      north_west: Infrastructure/Other/Bus Stops/bus_stops_nw.csv
+      yorkshire: Infrastructure/Other/Bus Stops/bus_stops_ys.csv
+    ncn_sustrans: Infrastructure/Other/NCN Sustrans/National_Cycle_Network_Public.shp
+    os_mmrn: Infrastructure/Other/OS Multi-Modal Routing Network/OSMulti-modalRoutingNetwork.gpkg
     poi_uk:
-      zip_path: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/poi_uk.zip
+      zip_path: Infrastructure/Other/poi_uk.zip
       file_path: poi_uk.gpkg
       output_path: 
-    zapmap: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/ZapMap/ZapMap Site Devices.csv
-    airports: D:/Climate Vulnerability Tool/Data/raw inputs/Infrastructure/Other/TfN Airports/tfn_airports.shp
+    zapmap: Infrastructure/Other/ZapMap/ZapMap Site Devices.csv
+    airports: Infrastructure/Other/TfN Airports/tfn_airports.shp
 
 hazards:
   coastal_erosion:

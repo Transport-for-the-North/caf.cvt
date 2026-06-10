@@ -5,7 +5,6 @@ import gc
 import logging
 import os
 import pathlib
-from zipfile import BadZipFile, ZipFile
 
 import fiona
 import geopandas as gpd
@@ -44,22 +43,6 @@ MMRN_NODE_TYPES = {
         "Railway Station (Non Public Accessible);Modal Change",
         "Railway Station (Principal);Tram Station;Modal Change",
     ]
-}
-
-
-_FLOOD_CODE_NUMBER_MAP = {
-    "NT": ["50", "55"],
-    "NU": ["00", "05"],
-    "NX": ["50"],
-    "NY": ["00", "05", "50", "55"],
-    "NZ": ["00", "05", "50"],
-    "OV": ["00"],
-    "SD": ["00", "05", "50", "55"],
-    "SE": ["00", "05", "50", "55"],
-    "SJ": ["00", "05", "50", "55"],
-    "SK": ["00", "05", "50", "55"],
-    "TA": ["00", "05"],
-    "TF": ["00", "05", "50", "55"],
 }
 
 
@@ -348,9 +331,9 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = get_boundary(config)
 
-    #_clean_infrastructure(config, boundary)
+    _clean_infrastructure(config, boundary)
     _clean_hazards(config, boundary)
-    #_clean_impact(config, boundary)
+    _clean_impact(config, boundary)
 
 
 ## INFRASTRUCTURE
@@ -361,7 +344,10 @@ def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFram
     LOG.info("Cleaning infrastructure data...")
     _clean_roads(config, boundary)
 
-    rail_links = _get_rail_links(boundary, config.infrastructure.rail.rail_links)
+    rail_links = _get_rail_links(
+        boundary,
+        config.paths.raw_input / config.infrastructure.rail.rail_links
+    )
     _clean_rail(config, rail_links)
     _clean_other(config, boundary, rail_links)
 
@@ -386,7 +372,8 @@ def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
 def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean OS Open Roads dataset, then write to file."""
     os_road = gpd.read_file(
-        f"zip://{config.infrastructure.road.os_road.zip_path}!{config.infrastructure.road.os_road.file_path}",
+        f"zip://{config.paths.raw_input / config.infrastructure.road.os_road.zip_path}"
+        f"!{config.infrastructure.road.os_road.file_path}",
         mask=boundary,
         columns=[
             "id",
@@ -426,7 +413,9 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     """Read and clean NoHAM network dataset, then write to file."""
     year = config.infrastructure.road.noham.year
     noham_network = gpd.read_file(
-        config.infrastructure.road.noham.file_path, mask=boundary, columns=["link_id"]
+        config.paths.raw_input / config.infrastructure.road.noham.file_path,
+        mask=boundary,
+        columns=["link_id"]
     )
     len_before_filter = len(noham_network)
     noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
@@ -456,6 +445,8 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
         / f"noham_{year}.gpkg",
     )
+
+
 ### RAIL
 
 
@@ -619,7 +610,7 @@ def _clean_other(  # noqa: C901
 
 def _clean_airports(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read airports dataset, then write to file in new directory."""
-    airports = gpd.read_file(config.infrastructure.other.airports)
+    airports = gpd.read_file(config.paths.raw_input / config.infrastructure.other.airports)
     airports = clip_to_boundary(airports, boundary)
     write_to_file(
         airports, config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH
@@ -629,12 +620,14 @@ def _clean_airports(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
 def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read, combine and clean regional bus stops datasets, then write to file."""
     bus_stops_ne = pd.read_csv(
-        config.infrastructure.other.bus_stops["north_east"]
+        config.paths.raw_input / config.infrastructure.other.bus_stops["north_east"]
     )  # North East
     bus_stops_nw = pd.read_csv(
-        config.infrastructure.other.bus_stops["north_west"]
+        config.paths.raw_input / config.infrastructure.other.bus_stops["north_west"]
     )  # North West
-    bus_stops_ys = pd.read_csv(config.infrastructure.other.bus_stops["yorkshire"])  # Yorkshire
+    bus_stops_ys = pd.read_csv(
+        config.paths.raw_input / config.infrastructure.other.bus_stops["yorkshire"]
+    )  # Yorkshire
 
     bus_stops = pd.concat(
         [bus_stops_ne, bus_stops_nw, bus_stops_ys], ignore_index=True
@@ -662,7 +655,8 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
 def _clean_petrol_stations(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean POI data, filter for petrol stations, and write to file."""
     petrol_stations = gpd.read_file(
-        f"zip://{config.infrastructure.other.poi_uk.zip_path}!{config.infrastructure.other.poi_uk.file_path}",
+        f"zip://{config.paths.raw_input / config.infrastructure.other.poi_uk.zip_path}"
+        f"!{config.infrastructure.other.poi_uk.file_path}",
         columns=["id"],
         where="main_category = 'gas_station'",
     )
@@ -685,7 +679,7 @@ def _clean_petrol_stations(config: model_config.Config, boundary: gpd.GeoDataFra
 def _clean_train_stations(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Filter OS MMRN for train stations, then clip to boundary and write to file."""
     os_mmrn_railway_stations = gpd.read_file(
-        config.infrastructure.other.os_mmrn,
+        config.paths.raw_input / config.infrastructure.other.os_mmrn,
         layer="mrn_ntwk_transportnode",
         where="os_nodetype LIKE '%Railway Station%'",
         columns=["nodeid", "os_nodetype"],
@@ -713,7 +707,7 @@ def _clean_train_stations(config: model_config.Config, boundary: gpd.GeoDataFram
 def _clean_tram_stations(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Filter OS MMRN for tram stations, then clip to boundary and write to file."""
     tram_stations = gpd.read_file(
-        config.infrastructure.other.os_mmrn,
+        config.paths.raw_input / config.infrastructure.other.os_mmrn,
         layer="mrn_ntwk_transportnode",
         where="os_nodetype LIKE '%Tram Station%'",
         columns=["nodeid"],
@@ -739,7 +733,7 @@ def _clean_rapid_transport_stations(
 ) -> None:
     """Filter OS MMRN for rapid transport stations, then clip to boundary and write to file."""
     rapid_transport_stations = gpd.read_file(
-        config.infrastructure.other.os_mmrn,
+        config.paths.raw_input / config.infrastructure.other.os_mmrn,
         layer="mrn_ntwk_transportnode",
         where="os_nodetype LIKE '%Underground System%'",
         columns=["nodeid"],
@@ -763,7 +757,7 @@ def _clean_rapid_transport_stations(
 def _clean_ferry_terminals(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Filter OS MMRN for ferry terminals, then clip to boundary and write to file."""
     ferry_terminals = gpd.read_file(
-        config.infrastructure.other.os_mmrn,
+        config.paths.raw_input / config.infrastructure.other.os_mmrn,
         layer="mrn_ntwk_transportnode",
         where="os_nodetype LIKE '%Ferry%'",
         columns=["nodeid"],
@@ -787,7 +781,7 @@ def _clean_ferry_terminals(config: model_config.Config, boundary: gpd.GeoDataFra
 def _clean_bus_coach_stations(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Filter OS MMRN for bus and coach stations, then clip to boundary and write to file."""
     bus_coach_stations = gpd.read_file(
-        config.infrastructure.other.os_mmrn,
+        config.paths.raw_input / config.infrastructure.other.os_mmrn,
         layer="mrn_ntwk_transportnode",
         where="os_nodetype LIKE '%Bus Station%' OR os_nodetype LIKE '%Coach Station%'",
         columns=["nodeid"],
@@ -860,7 +854,7 @@ def _clean_rapid_transport_network(
 def _clean_charging_sites(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean ZapMap charging sites data, then write to file."""
     chg_sites = pd.read_csv(
-        config.infrastructure.other.zapmap,
+        config.paths.raw_input / config.infrastructure.other.zapmap,
         usecols=["identifier", "name", "speed", "value", "lon", "lat"],
     )
     chg_sites = gpd.GeoDataFrame(
@@ -892,7 +886,7 @@ def _clean_charging_sites(config: model_config.Config, boundary: gpd.GeoDataFram
 def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean National Cycle Network data, then write to file."""
     ncn = gpd.read_file(
-        config.infrastructure.other.ncn_sustrans,
+        config.paths.raw_input / config.infrastructure.other.ncn_sustrans,
         mask=boundary,
         columns=[
             "SegmentID",
@@ -1490,6 +1484,7 @@ def _read_flood_zip(
         use_arrow=True,
     )
 
+
 def _clean_flood(
         config: model_config.Config,
         flood_type: str,
@@ -1573,44 +1568,54 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
     """Clean GeoSureHexGrids data, merge by nearest centroids, then write to file."""
     geosure_layers = {
         "collapsible_deposits": gpd.read_file(
-            f"zip://{config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.collapsible_deposits}",
+        f"zip://{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
+        f"{config.hazards.ground_stability.geosure.file_path}",
+            layer="GB_Hex_5km_GS_CollapsibleDeposits_v8",
             mask=boundary,
             columns=["CLASS"],
         ),
         "compressible_ground": gpd.read_file(
-            f"zip://{config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.compressible_ground}",
+            f"zip://"
+            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
+            f"{config.hazards.ground_stability.geosure.file_path}",
+            layer="GB_Hex_5km_GS_CompressibleGround_v8",
             mask=boundary,
             columns=["CLASS"],
         ),
         "landslides": gpd.read_file(
-            f"zip://{config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.landslides}",
+            f"zip://"
+            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
+            f"{config.hazards.ground_stability.geosure.file_path}",
+            layer="GB_Hex_5km_GS_Landslides_v8",
             mask=boundary,
             columns=["CLASS"],
         ),
         "running_sand": gpd.read_file(
-            f"zip://{config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.running_sand}",
+            f"zip://"
+            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
+            f"{config.hazards.ground_stability.geosure.file_path}",
+            layer="GB_Hex_5km_GS_RunningSand_v8",
             mask=boundary,
             columns=["CLASS"],
         ),
         "shrink_swell": gpd.read_file(
-            f"zip://{config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.shrink_swell}",
+            f"zip://"
+            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
+            f"{config.hazards.ground_stability.geosure.file_path}",
+            layer="GB_Hex_5km_GS_ShrinkSwell_v8",
             mask=boundary,
             columns=["CLASS"],
         ),
         "soluble_rocks": gpd.read_file(
-            f"zip://{config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.soluble_rocks}",
+            f"zip://"
+            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
+            f"{config.hazards.ground_stability.geosure.file_path}",
+            layer="GB_Hex_5km_GS_SolubleRocks_v8",
             mask=boundary,
             columns=["CLASS"],
         ),
     }
 
-    geosure_layers = {}
     for code, geosure_data in geosure_layers.items():
         if geosure_data.empty:
             raise ValueError(
@@ -1646,13 +1651,6 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
             f"{code}_risk"
         ]  # Add the matched CLASS column to the base dataframe
 
-    filter_removed = len_before_filter - len(geosure)
-    LOG.info(
-        "GeoSure layers filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
     geosure_risk_cols = [col for col in geosure.columns if col.endswith("_risk")]
     geosure = geosure[[*geosure_risk_cols, "geometry"]]
     write_to_file(
@@ -1664,7 +1662,11 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
 def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean GeoClimate Shrink-Swell data, then write to file."""
     for year, filepath in config.hazards.ground_stability.geo_shrink_swell.items():
-        geoclimate_data = gpd.read_file(filepath, mask=boundary, columns=["CLASS"])
+        geoclimate_data = gpd.read_file(
+            config.paths.raw_input /filepath,
+            mask=boundary,
+            columns=["CLASS"]
+        )
         if geoclimate_data.empty:
             LOG.info("GeoClimate shrink-swell %s layer empty. Continuing.", year)
             continue
@@ -1707,7 +1709,9 @@ def _clean_ground_instability_zones(
 ) -> None:
     """Clean Ground Instability Zones data from NCERM, then write to file."""
     ncerm_giz = gpd.read_file(
-        f"zip://{config.hazards.coastal_erosion.zip_path}!{config.hazards.coastal_erosion.giz}",
+        f"zip://{config.paths.raw_input / config.hazards.coastal_erosion.zip_path}"
+        f"!{config.hazards.coastal_erosion.file_path}",
+        layer="NCERM_Ground_Instability_Zone",
         mask=boundary,
         columns=["smp_no"],
     )
@@ -1739,8 +1743,9 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
     """Clean erosion data from NCERM for 2055, and 2105, then write to file."""
     for year in ["2055", "2105"]:
         erosion_data = gpd.read_file(
-            f"zip://{config.hazards.coastal_erosion.zip_path}!/"
-            + config.hazards.coastal_erosion.smp[year],
+            f"zip://{config.paths.raw_input / config.hazards.coastal_erosion.zip_path}!"
+            f"{config.hazards.coastal_erosion.file_path}",
+            layer=f"NCERM_SMP_{year}_70CC",
             mask=boundary,
             columns=["smp_name"],
         )
@@ -1796,7 +1801,7 @@ def _clean_impact(config: model_config.Config, boundary: gpd.GeoDataFrame) -> No
 def _clean_freight_demand(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean freight demand data ready for analysis."""
     freight_network_demand = _read_freight_demand(
-        config.impact.freight_demand, boundary
+        config.paths.raw_input / config.impact.freight_demand, boundary
     )
 
     os_freight_network_demand = _map_freight_networks(
@@ -2006,8 +2011,8 @@ def _process_single_noham_layer(
         year=year,
         time_period=time_period,
         user_class=user_class,
-        noham_path=config.impact.noham_demand.zip_path,
-        output_path=config.impact.noham_demand.output_path,
+        noham_path=config.paths.raw_input / config.impact.noham_demand.zip_path,
+        output_path=config.paths.raw_input /config.impact.noham_demand.output_path,
         extract=config.switches.noham_zip_extract,
     )
     noham_links["noham_link_id"] = (
