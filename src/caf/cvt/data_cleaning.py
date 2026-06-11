@@ -1437,38 +1437,38 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
 
 ### FLOODING
 
-def _get_flood_zip_files(
+def _get_flooding_zip_files(
         config: model_config.Config,
-        flood_type: str,
+        flooding_type: str,
 ) -> list[pathlib.Path]:
-    """Return all flood zip files."""
-    flood_root = config.hazards.flooding[flood_type]
-    return sorted(flood_root.rglob("*.zip"))
+    """Return all flooding zip files."""
+    flooding_root = config.hazards.flooding[flooding_type]
+    return sorted(flooding_root.rglob("*.zip"))
 
 
-def _parse_flood_metadata(zip_path: pathlib.Path) -> dict:
-    """Extract metadata from flood filename."""
+def _parse_flooding_metadata(zip_path: pathlib.Path) -> dict:
+    """Extract metadata from flooding filename."""
     name = zip_path.stem
     climate_change = "Climate_Change" in name
 
     if climate_change:
-        flood_type, _, _, _, tile, version = name.split("_")
+        flooding_type, _, _, _, tile, version = name.split("_")
     else:
-        flood_type, tile, version = name.split("_")
+        flooding_type, tile, version = name.split("_")
 
     return {
-        "flood_type": flood_type,
+        "flooding_type": flooding_type,
         "tile": tile,
         "version": version,
         "climate_change": climate_change,
     }
 
 
-def _read_flood_zip(
+def _read_flooding_zip(
         zip_path: pathlib.Path,
         boundary: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame | None:
-    """Read flood gdb file from zip."""
+    """Read flooding gdb file from zip."""
     vsi_path = f"zip://{zip_path}!/{zip_path.stem}.gdb"
     layers = fiona.listlayers(vsi_path)
 
@@ -1485,21 +1485,21 @@ def _read_flood_zip(
     )
 
 
-def _clean_flood(
+def _clean_flooding(
         config: model_config.Config,
-        flood_type: str,
+        flooding_type: str,
         boundary: gpd.GeoDataFrame,
         out_path: pathlib.Path,
         rename_risk_col: str,
         climate_change: bool,
         bng_codes: list[str],
 ) -> None:
-    """Clean flood data and write to file."""
-    zip_files = _get_flood_zip_files(config, flood_type)
+    """Clean flooding data and write to file."""
+    zip_files = _get_flooding_zip_files(config, flooding_type)
     first_write = True
 
     for zip_path in zip_files:
-        metadata = _parse_flood_metadata(zip_path)
+        metadata = _parse_flooding_metadata(zip_path)
 
         if metadata["tile"][:2] not in bng_codes:
             continue
@@ -1507,27 +1507,27 @@ def _clean_flood(
             continue
         LOG.info("Processing tile: %s...", metadata["tile"])
 
-        flood_data = _read_flood_zip(zip_path, boundary)
+        flooding_data = _read_flooding_zip(zip_path, boundary)
 
-        flood_data = clip_to_boundary(flood_data, boundary)
+        flooding_data = clip_to_boundary(flooding_data, boundary)
 
-        if flood_data.empty:
+        if flooding_data.empty:
             LOG.info("%s layer empty. Continuing.", metadata["tile"])
             continue
 
-        flood_data = _extract_poly_from_geomcollection(flood_data)
+        flooding_data = _extract_poly_from_geomcollection(flooding_data)
 
-        flood_data = flood_data.rename(columns={"Risk_band": rename_risk_col})
+        flooding_data = flooding_data.rename(columns={"Risk_band": rename_risk_col})
 
         write_to_file(
-            flood_data,
+            flooding_data,
             config.paths.model_input / out_path / "",
             mode="w" if first_write else "a",
         )
 
         first_write = False
 
-        del flood_data
+        del flooding_data
         gc.collect()
 
 
@@ -1536,16 +1536,16 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     LOG.info("Cleaning flooding data...")
     bng_codes = _get_bng_codes(boundary)
 
-    for flood_type in config.hazards.flooding:
+    for flooding_type in config.hazards.flooding:
         for scenario in Scenarios.all():
-            LOG.info("Cleaning %s flooding data for %s scenario...", flood_type, scenario)
-            _clean_flood(
+            LOG.info("Cleaning %s flooding data for %s scenario...", flooding_type, scenario)
+            _clean_flooding(
                 config,
-                flood_type=flood_type,
+                flooding_type=flooding_type,
                 boundary=boundary,
-                out_path=file_paths.FLOODING_MODEL_INPUT_PATH / flood_type / scenario
-                            / f"{flood_type}_{scenario}.gpkg",
-                rename_risk_col=f"{flood_type}_flood_risk_{scenario}",
+                out_path=file_paths.FLOODING_MODEL_INPUT_PATH / flooding_type / scenario
+                            / f"{flooding_type}_{scenario}.gpkg",
+                rename_risk_col=f"{flooding_type}_flooding_risk_{scenario}",
                 climate_change=(scenario == Scenarios.FORECAST),
                 bng_codes=bng_codes,
             )

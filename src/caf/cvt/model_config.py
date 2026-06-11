@@ -240,11 +240,11 @@ class Flooding(ctk.BaseConfig):
 
     Attributes
     ----------
-    flood_path : pathlib.Path
-        Path to the flood data.
+    flooding_path : pathlib.Path
+        Path to the flooding data.
     """
 
-    flood_path: pathlib.Path
+    flooding_path: pathlib.Path
 
 
 
@@ -353,16 +353,16 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include ground stability hazards in the analysis.
     coastal_erosion : bool
         Whether to include coastal erosion hazards in the analysis.
-    flood_zip_extract : bool
-        Whether to extract flood zip files.
-    create_flood_grid : bool
-        Whether to create flood grid.
-    compute_flood_overlay: bool
-        Whether to compute the direct flood overlay.
-    flood_overlay_direct: bool
-        Whether to use a direct overlay of flood data.
-    create_flood_tiles: bool
-        Whether to create flood tiles.
+    flooding_zip_extract : bool
+        Whether to extract flooding zip files.
+    create_flooding_grid : bool
+        Whether to create flooding grid.
+    compute_flooding_overlay: bool
+        Whether to compute the direct flooding overlay.
+    flooding_overlay_direct: bool
+        Whether to use a direct overlay of flooding data.
+    create_flooding_tiles: bool
+        Whether to create flooding tiles.
     noham_zip_extract : bool
         Whether to extract NoHAM zip files.
     """
@@ -393,11 +393,11 @@ class SwitchConfig(ctk.BaseConfig):
     ground_stability: bool
     coastal_erosion: bool
 
-    create_flood_grid: bool = False
+    create_flooding_grid: bool = False
 
-    compute_flood_overlay: bool = False
-    flood_overlay_direct: bool = False
-    create_flood_tiles: bool = False
+    compute_flooding_overlay: bool = False
+    flooding_overlay_direct: bool = False
+    create_flooding_tiles: bool = False
 
     noham_zip_extract: bool = False
 

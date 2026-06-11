@@ -61,8 +61,8 @@ _STORM_WEIGHTS = {
 
 _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE = 10000
 _EXTREME_WEATHER_WEIGHTS = {
-    "heat_risk": 0.25,
-    "cold_risk": 0.25,
+    "extreme_heat_risk": 0.25,
+    "extreme_cold_risk": 0.25,
     "drought_risk": 0.25,
     "storm_risk": 0.25,
 }
@@ -90,10 +90,10 @@ _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
 _COASTAL_EROSION_WEIGHTS = {"erosion_risk": 0.9, "giz_risk": 0.1}
 
-_FLOOD_GRID_SIZE_M = 1000
-_FLOOD_TILE_SIZE_M = 10000
-_FLOOD_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
-_FLOOD_WEIGHTS = {"rivers_sea_flood_risk": 0.5, "surface_water_flood_risk": 0.5}
+_FLOODING_GRID_SIZE_M = 1000
+_FLOODING_TILE_SIZE_M = 10000
+_FLOODING_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
+_FLOODING_WEIGHTS = {"rivers_sea_flooding_risk": 0.5, "surface_water_flooding_risk": 0.5}
 
 
 ### GENERAL FUNCTIONS
@@ -397,26 +397,28 @@ def _overlay_and_clean(
 def _get_cmap_for_column(col: str) -> str:
     """Return the appropriate colormap for a given hazard column."""
     base_col = col.replace("_risk", "")
+    cmap = None
+
     if base_col in MainHazardCols.all():
-        return MainHazardCols.get_cmap(base_col)
+        cmap = MainHazardCols.get_cmap(base_col)
 
     if base_col in ExtremeWeatherCols.all():
-        return ExtremeWeatherCols.get_cmap(base_col)
+        cmap = ExtremeWeatherCols.get_cmap(base_col)
     if base_col in FloodingCols.all():
-        return FloodingCols.get_cmap(base_col)
+        cmap = FloodingCols.get_cmap(base_col)
     if base_col in GroundStabilityCols.all():
-        return GroundStabilityCols.get_cmap(base_col)
+        cmap = GroundStabilityCols.get_cmap(base_col)
 
     if base_col in ExtremeHeatCols.all():
-        return ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.EXTREME_HEAT)
+        cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.EXTREME_HEAT)
     if base_col in ExtremeColdCols.all():
-        return ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.EXTREME_COLD)
+        cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.EXTREME_COLD)
     if base_col in DroughtCols.all():
-        return ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.DROUGHT)
+        cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.DROUGHT)
     if base_col in StormCols.all():
-        return ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.STORM)
+        cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.STORM)
 
-    return "Reds"  # Default colormap
+    return cmap if cmap is not None else "Reds"  # Default colormap
 
 
 def plot_choropleth_current_and_forecast(
@@ -434,15 +436,6 @@ def plot_choropleth_current_and_forecast(
     if basemap_source is not None:
         risk_data = risk_data.to_crs(epsg=3857)
 
-    vmin = min(
-        risk_data[f"{column}_{Scenarios.CURRENT}"].min(),
-        risk_data[f"{column}_{Scenarios.FORECAST}"].min(),
-    )
-    vmax = max(
-        risk_data[f"{column}_{Scenarios.CURRENT}"].max(),
-        risk_data[f"{column}_{Scenarios.FORECAST}"].max(),
-    )
-
     cmap = _get_cmap_for_column(column)
 
     risk_data.plot(
@@ -452,8 +445,8 @@ def plot_choropleth_current_and_forecast(
         ax=ax[0],
         edgecolor=edgecolor,
         legend=True,
-        vmin=vmin,
-        vmax=vmax,
+        vmin=0,
+        vmax=100,
         alpha=0.7 if basemap_source is not None else 1.0,
     )
 
@@ -464,8 +457,8 @@ def plot_choropleth_current_and_forecast(
         ax=ax[1],
         edgecolor=edgecolor,
         legend=True,
-        vmin=vmin,
-        vmax=vmax,
+        vmin=0,
+        vmax=100,
         alpha=0.7 if basemap_source is not None else 1.0,
     )
 
@@ -536,7 +529,7 @@ def apply_functional_rules(config: model_config.Config) -> None:
     if config.switches.extreme_weather:
         _extreme_weather_index(config, audit_path)
     if config.switches.flooding:
-        if config.switches.flood_overlay_direct:
+        if config.switches.flooding_overlay_direct:
             _flooding_index_direct(config, boundary, audit_path)
         else:
             _flooding_index(config, boundary, audit_path)
@@ -568,16 +561,16 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
         [
             "grid_id",
             "part",
-            f"heat_risk_{Scenarios.CURRENT}",
-            f"heat_risk_{Scenarios.FORECAST}",
+            f"extreme_heat_risk_{Scenarios.CURRENT}",
+            f"extreme_heat_risk_{Scenarios.FORECAST}",
         ]
     ].merge(
         extreme_cold[
             [
                 "grid_id",
                 "part",
-                f"cold_risk_{Scenarios.CURRENT}",
-                f"cold_risk_{Scenarios.FORECAST}",
+                f"extreme_cold_risk_{Scenarios.CURRENT}",
+                f"extreme_cold_risk_{Scenarios.FORECAST}",
                 "geometry",
             ]
         ],
@@ -608,10 +601,10 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
     extreme_weather_risk = _iterative_spatial_infilling(
         extreme_weather_risk,
         [
-            f"heat_risk_{Scenarios.CURRENT}",
-            f"heat_risk_{Scenarios.FORECAST}",
-            f"cold_risk_{Scenarios.CURRENT}",
-            f"cold_risk_{Scenarios.FORECAST}",
+            f"extreme_heat_risk_{Scenarios.CURRENT}",
+            f"extreme_heat_risk_{Scenarios.FORECAST}",
+            f"extreme_cold_risk_{Scenarios.CURRENT}",
+            f"extreme_cold_risk_{Scenarios.FORECAST}",
             f"drought_risk_{Scenarios.CURRENT}",
             f"drought_risk_{Scenarios.FORECAST}",
             f"storm_risk_{Scenarios.CURRENT}",
@@ -642,13 +635,15 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
 
     _validate_index(
         extreme_weather_risk,
-        ["heat_risk", "cold_risk", "drought_risk", "storm_risk", "extreme_weather_risk"],
+        ["extreme_heat_risk", "extreme_cold_risk", "drought_risk", "storm_risk",
+         "extreme_weather_risk"],
     )
 
     _audit_index(
         extreme_weather_risk,
-        ["heat_risk", "cold_risk", "drought_risk", "storm_risk", "extreme_weather_risk"],
-        audit_path / "Extreme Weather Risk Index",
+        ["extreme_heat_risk", "extreme_cold_risk", "drought_risk", "storm_risk",
+         "extreme_weather_risk"],
+        audit_path / "Extreme Weather" / "Extreme Weather Risk Index",
     )
 
     data_cleaning.write_to_file(
@@ -701,11 +696,16 @@ def _extreme_heat_index(
     extreme_heat = _calculate_composite_score(
         extreme_heat,
         _EXTREME_HEAT_WEIGHTS,
-        "heat_risk",
+        "extreme_heat_risk",
     )
 
     extreme_heat = min_max_scaling_pair(
-        extreme_heat, [(f"heat_risk_{Scenarios.CURRENT}", f"heat_risk_{Scenarios.FORECAST}")]
+        extreme_heat, [
+            (
+                f"extreme_heat_risk_{Scenarios.CURRENT}",
+                f"extreme_heat_risk_{Scenarios.FORECAST}"
+            )
+        ],
     )
 
     LOG.info("Extreme heat index calculation complete.")
@@ -713,13 +713,15 @@ def _extreme_heat_index(
 
     _validate_index(
         extreme_heat,
-        ["max_temp_summer_risk", "hot_summer_days", "extreme_summer_days", "heat_risk"],
+        ["max_temp_summer_risk", "hot_summer_days", "extreme_summer_days",
+         "extreme_heat_risk"],
     )
 
     _audit_index(
         extreme_heat,
-        ["max_temp_summer_risk", "hot_summer_days", "extreme_summer_days", "heat_risk"],
-        audit_path / "Extreme Heat Index",
+        ["max_temp_summer_risk", "hot_summer_days", "extreme_summer_days",
+         "extreme_heat_risk"],
+        audit_path / "Extreme Weather" / "Extreme Heat Index",
     )
 
     return extreme_heat
@@ -762,24 +764,29 @@ def _extreme_cold_index(
     extreme_cold = _calculate_composite_score(
         extreme_cold,
         _EXTREME_COLD_WEIGHTS,
-        "cold_risk",
+        "extreme_cold_risk",
     )
 
     extreme_cold = min_max_scaling_pair(
-        extreme_cold, [(f"cold_risk_{Scenarios.CURRENT}", f"cold_risk_{Scenarios.FORECAST}")]
+        extreme_cold, [
+            (
+                f"extreme_cold_risk_{Scenarios.CURRENT}",
+                f"extreme_cold_risk_{Scenarios.FORECAST}"
+            )
+        ],
     )
 
     extreme_cold = gpd.GeoDataFrame(extreme_cold, geometry="geometry", crs=hazard_grid.crs)
 
     _validate_index(
         extreme_cold,
-        ["min_temp_winter_risk", "frost_days", "icing_days", "cold_risk"],
+        ["min_temp_winter_risk", "frost_days", "icing_days", "extreme_cold_risk"],
     )
 
     _audit_index(
         extreme_cold,
-        ["min_temp_winter_risk", "frost_days", "icing_days", "cold_risk"],
-        audit_path / "Extreme Cold Index",
+        ["min_temp_winter_risk", "frost_days", "icing_days", "extreme_cold_risk"],
+        audit_path / "Extreme Weather" / "Extreme Cold Index",
     )
 
     LOG.info("Extreme cold index calculation complete.")
@@ -880,7 +887,7 @@ def _drought_index(
     _audit_index(
         drought_risk,
         ["drought_severity_index", "precip_summer_risk", "drought_risk"],
-        audit_path / "Drought Risk Index",
+        audit_path / "Extreme Weather" / "Drought Risk Index",
     )
 
     LOG.info("Drought index calculation complete.")
@@ -1024,7 +1031,7 @@ def _storm_index(
             "wind_speed_risk",
             "storm_risk",
         ],
-        audit_path / "Storm Risk Index",
+        audit_path / "Extreme Weather" / "Storm Risk Index",
     )
 
     LOG.info("Storm index calculation complete.")
@@ -1051,216 +1058,216 @@ def _flooding_index(
     config: model_config.Config, boundary: gpd.GeoDataFrame, audit_path: pathlib.Path
 ) -> None:
     """Combine RoFRS & RoFSW into a single risk score by upscaling them to a common grid."""
-    LOG.info("Calculating flood risk index...")
+    LOG.info("Calculating flooding risk index...")
     # Ensure grid exists
-    if config.switches.create_flood_grid:
-        flood_grid = _create_flood_grid(config, _FLOOD_GRID_SIZE_M, boundary)
+    if config.switches.create_flooding_grid:
+        flooding_grid = _create_flooding_grid(config, _FLOODING_GRID_SIZE_M, boundary)
     else:
-        flood_grid = gpd.read_file(
-            config.paths.model_interim_output / file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH
+        flooding_grid = gpd.read_file(
+            config.paths.model_interim_output / file_paths.FLOODING_GRID_MODEL_INTERIM_OUTPUT_PATH
         )
 
-    current_flood_scenario_map = [
+    current_flooding_scenario_map = [
         (
-            file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
-            f"rivers_sea_flood_risk_{Scenarios.CURRENT}",
+            file_paths.FLOODING_RIVERS_SEA_MODEL_INPUT_PATH,
+            f"rivers_sea_flooding_risk_{Scenarios.CURRENT}",
         ),
         (
-            file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
-            f"surface_water_flood_risk_{Scenarios.CURRENT}",
-        ),
-    ]
-
-    forecast_flood_scenario_map = [
-        (
-            file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-            f"rivers_sea_flood_risk_{Scenarios.FORECAST}",
-        ),
-        (
-            file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-            f"surface_water_flood_risk_{Scenarios.FORECAST}",
+            file_paths.FLOODING_SURFACE_WATER_MODEL_INPUT_PATH,
+            f"surface_water_flooding_risk_{Scenarios.CURRENT}",
         ),
     ]
 
-    LOG.info("Processing %s flood risk...", Scenarios.CURRENT.title())
-    flood_risk_c = _upscale_to_grid(
-        config, flood_grid, current_flood_scenario_map, Scenarios.CURRENT
-    )
-    LOG.info("%s flood risk processing complete.", Scenarios.CURRENT.title())
+    forecast_flooding_scenario_map = [
+        (
+            file_paths.FLOODING_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+            f"rivers_sea_flooding_risk_{Scenarios.FORECAST}",
+        ),
+        (
+            file_paths.FLOODING_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+            f"surface_water_flooding_risk_{Scenarios.FORECAST}",
+        ),
+    ]
 
-    LOG.info("Processing %s flood risk...", Scenarios.FORECAST.title())
-    flood_risk_f = _upscale_to_grid(
-        config, flood_grid, forecast_flood_scenario_map, Scenarios.FORECAST
+    LOG.info("Processing %s flooding risk...", Scenarios.CURRENT.title())
+    flooding_risk_c = _upscale_to_grid(
+        config, flooding_grid, current_flooding_scenario_map, Scenarios.CURRENT
     )
-    LOG.info("%s flood risk processing complete.", Scenarios.FORECAST.title())
+    LOG.info("%s flooding risk processing complete.", Scenarios.CURRENT.title())
+
+    LOG.info("Processing %s flooding risk...", Scenarios.FORECAST.title())
+    flooding_risk_f = _upscale_to_grid(
+        config, flooding_grid, forecast_flooding_scenario_map, Scenarios.FORECAST
+    )
+    LOG.info("%s flooding risk processing complete.", Scenarios.FORECAST.title())
 
     # Merge on grid ID
-    flood_risk = flood_risk_c.merge(flood_risk_f, on="grid_id", how="left")
+    flooding_risk = flooding_risk_c.merge(flooding_risk_f, on="grid_id", how="left")
 
     # Merge with grid to get geometries
-    flood_risk = flood_risk.merge(flood_grid, on="grid_id", how="left")
+    flooding_risk = flooding_risk.merge(flooding_grid, on="grid_id", how="left")
 
     # Convert to GeoDataFrame
-    flood_risk = gpd.GeoDataFrame(flood_risk, geometry="geometry", crs=data_cleaning.BNG_CRS)
+    flooding_risk = gpd.GeoDataFrame(flooding_risk, geometry="geometry", crs=data_cleaning.BNG_CRS)
 
-    flood_risk = flood_risk.drop(columns=["grid_id"])
+    flooding_risk = flooding_risk.drop(columns=["grid_id"])
 
-    flood_risk = min_max_scaling_pair(
-        flood_risk,
+    flooding_risk = min_max_scaling_pair(
+        flooding_risk,
         [
             (
-                f"rivers_sea_flood_risk_{Scenarios.CURRENT}",
-                f"rivers_sea_flood_risk_{Scenarios.FORECAST}",
+                f"rivers_sea_flooding_risk_{Scenarios.CURRENT}",
+                f"rivers_sea_flooding_risk_{Scenarios.FORECAST}",
             ),
             (
-                f"surface_water_flood_risk_{Scenarios.CURRENT}",
-                f"surface_water_flood_risk_{Scenarios.FORECAST}",
+                f"surface_water_flooding_risk_{Scenarios.CURRENT}",
+                f"surface_water_flooding_risk_{Scenarios.FORECAST}",
             ),
         ],
     )
 
-    flood_risk = _calculate_composite_score(
-        flood_risk,
-        _FLOOD_WEIGHTS,
-        "flood_risk",
+    flooding_risk = _calculate_composite_score(
+        flooding_risk,
+        _FLOODING_WEIGHTS,
+        "flooding_risk",
     )
 
-    flood_risk = min_max_scaling_pair(
-        flood_risk,
-        [(f"flood_risk_{Scenarios.CURRENT}", f"flood_risk_{Scenarios.FORECAST}")],
+    flooding_risk = min_max_scaling_pair(
+        flooding_risk,
+        [(f"flooding_risk_{Scenarios.CURRENT}", f"flooding_risk_{Scenarios.FORECAST}")],
     )
 
     _validate_index(
-        flood_risk,
-        ["rivers_sea_flood_risk", "surface_water_flood_risk", "flood_risk"],
+        flooding_risk,
+        ["rivers_sea_flooding_risk", "surface_water_flooding_risk", "flooding_risk"],
     )
 
     _audit_index(
-        flood_risk,
-        ["rivers_sea_flood_risk", "surface_water_flood_risk", "flood_risk"],
-        audit_path / "Flood Risk Index",
+        flooding_risk,
+        ["rivers_sea_flooding_risk", "surface_water_flooding_risk", "flooding_risk"],
+        audit_path / "Flooding" / "Flood Risk Index",
     )
 
     data_cleaning.write_to_file(
-        flood_risk,
-        config.paths.model_interim_output / file_paths.FLOOD_RISK_MODEL_INTERIM_OUTPUT_PATH,
+        flooding_risk,
+        config.paths.model_interim_output / file_paths.FLOODING_RISK_MODEL_INTERIM_OUTPUT_PATH,
     )
 
-    LOG.info("Flood risk index calculation complete.")
+    LOG.info("Flooding risk index calculation complete.")
 
 
-def _create_flood_grid(
+def _create_flooding_grid(
     config: model_config.Config, size_m: int, boundary: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
     """Create a grid of a given size in metres, within a given boundary."""
-    LOG.info("Creating flood grid with cell size %s m2.", size_m)
+    LOG.info("Creating flooding grid with cell size %s m2.", size_m)
     xmin, ymin, xmax, ymax = boundary.total_bounds
     grid = _create_grid(xmin, ymin, xmax, ymax, size_m)
-    flood_grid = data_cleaning.clip_to_boundary(grid, boundary)
+    flooding_grid = data_cleaning.clip_to_boundary(grid, boundary)
     data_cleaning.write_to_file(
-        flood_grid,
-        config.paths.model_interim_output / file_paths.FLOOD_GRID_MODEL_INTERIM_OUTPUT_PATH,
+        flooding_grid,
+        config.paths.model_interim_output / file_paths.FLOODING_GRID_MODEL_INTERIM_OUTPUT_PATH,
     )
-    return flood_grid
+    return flooding_grid
 
 
 def _upscale_to_grid(
     config: model_config.Config,
-    flood_grid: gpd.GeoDataFrame,
+    flooding_grid: gpd.GeoDataFrame,
     scenario_map: list[tuple[pathlib.Path, str]],
     scenario: str,
 ) -> gpd.GeoDataFrame:
-    """Upscale each flood layer to the common grid and writes to file."""
-    flood_upscaled = {}
+    """Upscale each flooding layer to the common grid and writes to file."""
+    flooding_upscaled = {}
     for path, risk_col in scenario_map:
-        LOG.info("Upscaling flood layer %s to a %sm grid", risk_col, _FLOOD_GRID_SIZE_M)
-        flood_upscaled[risk_col] = _area_weighted_flood_assignment(
+        LOG.info("Upscaling flooding layer %s to a %sm grid", risk_col, _FLOODING_GRID_SIZE_M)
+        flooding_upscaled[risk_col] = _area_weighted_flooding_assignment(
             config,
-            flood_grid,
+            flooding_grid,
             config.paths.model_input / path,
             scenario,
             risk_col,
         )
 
-    flood_risk_scenario = flood_upscaled[scenario_map[0][1]].merge(
-        flood_upscaled[scenario_map[1][1]], on="grid_id", how="inner"
+    flooding_risk_scenario = flooding_upscaled[scenario_map[0][1]].merge(
+        flooding_upscaled[scenario_map[1][1]], on="grid_id", how="inner"
     )
 
     data_cleaning.write_to_file(
-        flood_risk_scenario,
+        flooding_risk_scenario,
         config.paths.model_interim_output
-        / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
-        / f"flood_risk_{scenario}.csv",
+        / file_paths.FLOODING_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
+        / f"flooding_risk_{scenario}.csv",
     )
 
-    return flood_risk_scenario
+    return flooding_risk_scenario
 
 
-def _area_weighted_flood_assignment(
+def _area_weighted_flooding_assignment(
     config: model_config.Config,
     grid: gpd.GeoDataFrame,
-    flood_path: pathlib.Path,
+    flooding_path: pathlib.Path,
     scenario: str,
     risk_column: str,
 ) -> gpd.GeoDataFrame:
-    """Assign flood risk to grid squares using an area-weighted average."""
+    """Assign flooding risk to grid squares using an area-weighted average."""
     # Perform chunked overlay to get intersections
-    flood_intersections, len_before_upscale = _chunked_grid_polygon_flood_overlay(
+    flooding_intersections, len_before_upscale = _chunked_grid_polygon_flooding_overlay(
         config,
-        flood_path=flood_path,
-        flood_grid=grid,
+        flooding_path=flooding_path,
+        flooding_grid=grid,
         scenario=scenario,
         risk_column=risk_column,
     )
 
     # Compute weighted risk contribution
-    flood_intersections["weighted"] = (
-        flood_intersections[risk_column] * flood_intersections["area"]
+    flooding_intersections["weighted"] = (
+        flooding_intersections[risk_column] * flooding_intersections["area"]
     )
 
     # Compute aggregated weighted sum per grid cell (total exposure)
-    exposure_agg = flood_intersections.groupby("grid_id").agg(weighted_sum=("weighted", "sum"))
+    exposure_agg = flooding_intersections.groupby("grid_id").agg(weighted_sum=("weighted", "sum"))
 
-    # Assign weighted average flood risk back to the original grid
-    flood_result = grid[["grid_id", "geometry"]].copy().set_index("grid_id")
-    flood_result["grid_area"] = flood_result.geometry.area
-    flood_result[risk_column] = 0.0
-    flood_result.loc[exposure_agg.index, risk_column] = (
-        exposure_agg["weighted_sum"] / flood_result.loc[exposure_agg.index, "grid_area"]
+    # Assign weighted average flooding risk back to the original grid
+    flooding_result = grid[["grid_id", "geometry"]].copy().set_index("grid_id")
+    flooding_result["grid_area"] = flooding_result.geometry.area
+    flooding_result[risk_column] = 0.0
+    flooding_result.loc[exposure_agg.index, risk_column] = (
+        exposure_agg["weighted_sum"] / flooding_result.loc[exposure_agg.index, "grid_area"]
     )
-    flood_result = flood_result.drop(columns=["geometry", "grid_area"])
-    flood_result = flood_result.reset_index()
+    flooding_result = flooding_result.drop(columns=["geometry", "grid_area"])
+    flooding_result = flooding_result.reset_index()
 
     # Fill missing values with 0 (no risk) since no data means no risk in the underlying data
-    num_na_rows = flood_result[risk_column].isna().sum()
-    pct_na_rows = (num_na_rows / len(flood_result)) * 100
-    flood_result[risk_column] = flood_result[risk_column].fillna(0.0)
+    num_na_rows = flooding_result[risk_column].isna().sum()
+    pct_na_rows = (num_na_rows / len(flooding_result)) * 100
+    flooding_result[risk_column] = flooding_result[risk_column].fillna(0.0)
     LOG.info(
-        "Filled %s NA values (%s percent of data) in flood data column %s with 0.",
+        "Filled %s NA values (%s percent of data) in flooding data column %s with 0.",
         num_na_rows,
         pct_na_rows,
         risk_column,
     )
 
-    len_after_upscale = len(flood_result)
+    len_after_upscale = len(flooding_result)
     LOG.info(
-        "Upscaled flood layer %s from %s geometries to %s grid cells "
+        "Upscaled flooding layer %s from %s geometries to %s grid cells "
         "using area-weighted average.",
         risk_column,
         len_before_upscale,
         len_after_upscale,
     )
 
-    return flood_result
+    return flooding_result
 
 
-def _process_flood_grid_tile(
+def _process_flooding_grid_tile(
     *,
-    flood_path: pathlib.Path,
+    flooding_path: pathlib.Path,
     grid_square: gpd.GeoSeries,
     risk_column: str,
 ) -> tuple[pd.DataFrame, int]:
-    """Process the flood overlay for a single grid tile."""
+    """Process the flooding overlay for a single grid tile."""
     grid_geom = grid_square.geometry
     grid_bbox = grid_geom.bounds
 
@@ -1268,30 +1275,30 @@ def _process_flood_grid_tile(
         {"grid_id": [grid_square["grid_id"]]}, geometry=[grid_geom], crs=data_cleaning.BNG_CRS
     )
 
-    flood_layer = gpd.read_file(flood_path, bbox=grid_bbox)
-    rows_before = len(flood_layer)
+    flooding_layer = gpd.read_file(flooding_path, bbox=grid_bbox)
+    rows_before = len(flooding_layer)
 
-    if flood_layer.empty:
+    if flooding_layer.empty:
         return pd.DataFrame(), rows_before
 
-    flood_layer[risk_column] = flood_layer[risk_column].map(_FLOOD_RISK_SCORE_MAP)
+    flooding_layer[risk_column] = flooding_layer[risk_column].map(_FLOODING_RISK_SCORE_MAP)
 
-    flood_chunk = gpd.overlay(flood_layer, grid_square_gdf, how="intersection")
+    flooding_chunk = gpd.overlay(flooding_layer, grid_square_gdf, how="intersection")
 
-    if flood_chunk.empty:
+    if flooding_chunk.empty:
         return pd.DataFrame, rows_before
 
-    flood_chunk["area"] = flood_chunk.geometry.area
-    flood_chunk = flood_chunk.drop(columns=["geometry"])
+    flooding_chunk["area"] = flooding_chunk.geometry.area
+    flooding_chunk = flooding_chunk.drop(columns=["geometry"])
 
-    return flood_chunk, rows_before
+    return flooding_chunk, rows_before
 
 
-def _chunked_grid_polygon_flood_overlay(
+def _chunked_grid_polygon_flooding_overlay(
     config: model_config.Config,
     *,
-    flood_path: pathlib.Path,
-    flood_grid: gpd.GeoDataFrame,
+    flooding_path: pathlib.Path,
+    flooding_grid: gpd.GeoDataFrame,
     scenario: str,
     risk_column: str,
     log_every: int = 1000,
@@ -1300,8 +1307,8 @@ def _chunked_grid_polygon_flood_overlay(
     # Prepare output csv
     output_path = (
         config.paths.model_interim_output
-        / file_paths.FLOOD_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
-        / f"flood_risk_overlay_{scenario}.csv"
+        / file_paths.FLOODING_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH
+        / f"flooding_risk_overlay_{scenario}.csv"
     )
     first_write = True
 
@@ -1309,35 +1316,35 @@ def _chunked_grid_polygon_flood_overlay(
     rows_written = 0
 
     # For each tile, do spatial filtering and run overlay and clean
-    for i, grid_square in flood_grid.iterrows():
+    for i, grid_square in flooding_grid.iterrows():
         if i % log_every == 0:
             LOG.info(
                 "Overlay progress: %s/%s grid squares (%.1f%%), "
                 "%s intersections written to file",
                 i,
-                len(flood_grid),
-                (i / len(flood_grid) * 100),
+                len(flooding_grid),
+                (i / len(flooding_grid) * 100),
                 rows_written,
             )
 
-        flood_chunk, rows_before = _process_flood_grid_tile(
-            flood_path=flood_path, grid_square=grid_square, risk_column=risk_column
+        flooding_chunk, rows_before = _process_flooding_grid_tile(
+            flooding_path=flooding_path, grid_square=grid_square, risk_column=risk_column
         )
 
         total_rows_read += rows_before
 
         # If there are no resulting geometries, skip to the next tile
-        if flood_chunk.empty:
+        if flooding_chunk.empty:
             continue
 
         data_cleaning.write_to_file(
-            flood_chunk,
+            flooding_chunk,
             output_path,
             mode="w" if first_write else "a",
         )
         first_write = False
 
-        rows_written += len(flood_chunk)
+        rows_written += len(flooding_chunk)
 
     LOG.info("Chunked overlay completed. Output written to %s", output_path)
 
@@ -1347,95 +1354,95 @@ def _chunked_grid_polygon_flood_overlay(
 def _flooding_index_direct(
     config: model_config.Config, boundary: gpd.GeoDataFrame, audit_path: pathlib.Path
 ) -> gpd.GeoDataFrame:
-    """Overlay all four flood datasets using a tiled chunking method."""
-    LOG.info("Combining all four flood datasets...")
+    """Overlay all four flooding datasets using a tiled chunking method."""
+    LOG.info("Combining all four flooding datasets...")
 
     # If the direct tiled overlay hasn't been done yet, do it.
-    if config.switches.compute_flood_overlay:
-        _tile_polygon_flood_overlay(
+    if config.switches.compute_flooding_overlay:
+        _tile_polygon_flooding_overlay(
             config,
             boundary,
             [
-                config.paths.model_input / file_paths.FLOOD_RIVERS_SEA_MODEL_INPUT_PATH,
+                config.paths.model_input / file_paths.FLOODING_RIVERS_SEA_MODEL_INPUT_PATH,
                 config.paths.model_input
-                / file_paths.FLOOD_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-                config.paths.model_input / file_paths.FLOOD_SURFACE_WATER_MODEL_INPUT_PATH,
+                / file_paths.FLOODING_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+                config.paths.model_input / file_paths.FLOODING_SURFACE_WATER_MODEL_INPUT_PATH,
                 config.paths.model_input
-                / file_paths.FLOOD_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
+                / file_paths.FLOODING_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
             ],
             crs=data_cleaning.BNG_CRS,
-            tile_size_m=_FLOOD_TILE_SIZE_M,
+            tile_size_m=_FLOODING_TILE_SIZE_M,
         )
 
     # Read the direct overlay result, and filter to region
-    flood_risk = gpd.read_file(
+    flooding_risk = gpd.read_file(
         config.paths.model_interim_output
-        / file_paths.FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH,
+        / file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH,
         mask=boundary,
-        layer="flood_overlay",
+        layer="flooding_overlay",
     )
 
     # Map original risk categories to numeric scores
     for col in [
-        f"rivers_sea_flood_risk_{Scenarios.CURRENT}",
-        f"rivers_sea_flood_risk_{Scenarios.FORECAST}",
-        f"surface_water_flood_risk_{Scenarios.CURRENT}",
-        f"surface_water_flood_risk_{Scenarios.FORECAST}",
+        f"rivers_sea_flooding_risk_{Scenarios.CURRENT}",
+        f"rivers_sea_flooding_risk_{Scenarios.FORECAST}",
+        f"surface_water_flooding_risk_{Scenarios.CURRENT}",
+        f"surface_water_flooding_risk_{Scenarios.FORECAST}",
     ]:
-        flood_risk[col] = flood_risk[col].map(_FLOOD_RISK_SCORE_MAP)
+        flooding_risk[col] = flooding_risk[col].map(_FLOODING_RISK_SCORE_MAP)
 
     # Fill NA values with 0 (no risk) since no data means no risk in the underlying data
-    flood_risk = flood_risk.fillna(0)
+    flooding_risk = flooding_risk.fillna(0)
 
-    flood_risk = min_max_scaling_pair(
-        flood_risk,
+    flooding_risk = min_max_scaling_pair(
+        flooding_risk,
         [
             (
-                f"rivers_sea_flood_risk_{Scenarios.CURRENT}",
-                f"rivers_sea_flood_risk_{Scenarios.FORECAST}",
+                f"rivers_sea_flooding_risk_{Scenarios.CURRENT}",
+                f"rivers_sea_flooding_risk_{Scenarios.FORECAST}",
             ),
             (
-                f"surface_water_flood_risk_{Scenarios.CURRENT}",
-                f"surface_water_flood_risk_{Scenarios.FORECAST}",
+                f"surface_water_flooding_risk_{Scenarios.CURRENT}",
+                f"surface_water_flooding_risk_{Scenarios.FORECAST}",
             ),
         ],
     )
 
-    flood_risk = _calculate_composite_score(
-        flood_risk,
-        _FLOOD_WEIGHTS,
-        "flood_risk",
+    flooding_risk = _calculate_composite_score(
+        flooding_risk,
+        _FLOODING_WEIGHTS,
+        "flooding_risk",
     )
 
-    flood_risk = min_max_scaling_pair(
-        flood_risk, [(f"flood_risk_{Scenarios.CURRENT}", f"flood_risk_{Scenarios.FORECAST}")]
+    flooding_risk = min_max_scaling_pair(
+        flooding_risk, [(f"flooding_risk_{Scenarios.CURRENT}", f"flooding_risk_{Scenarios.FORECAST}")]
     )
 
     _validate_index(
-        flood_risk,
-        ["rivers_sea_flood_risk", "surface_water_flood_risk", "flood_risk"],
+        flooding_risk,
+        ["rivers_sea_flooding_risk", "surface_water_flooding_risk", "flooding_risk"],
     )
 
     _audit_index(
-        flood_risk,
-        ["rivers_sea_flood_risk", "surface_water_flood_risk", "flood_risk"],
-        audit_path / "Flood Risk Index (Direct Overlay)",
+        flooding_risk,
+        ["rivers_sea_flooding_risk", "surface_water_flooding_risk", "flooding_risk"],
+        audit_path / "Flooding" /"Flooding Risk Index (Direct Overlay)",
     )
 
     data_cleaning.write_to_file(
-        flood_risk,
+        flooding_risk,
         config.paths.model_interim_output
-        / file_paths.FLOOD_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH,
+        / file_paths.FLOODING_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH,
     )
 
-    LOG.info("Flood risk index calculation complete.")
-    return flood_risk
+    LOG.info("Flooding risk index calculation complete.")
+    return flooding_risk
 
 
-def _create_flood_tiles(
+def _create_flooding_tiles(
     config: model_config.Config, boundary: gpd.GeoDataFrame, tile_size_m: int
 ) -> gpd.GeoDataFrame:
-    """Create flood tiles to be used in chunked overlay."""
+    """Create flooding tiles to be used in chunked overlay."""
     xmin, ymin, xmax, ymax = boundary.total_bounds
     tiles = _create_grid(xmin, ymin, xmax, ymax, tile_size_m)
     tiles = tiles[tiles.geometry.intersects(boundary.geometry.iloc[0])].copy()
@@ -1448,10 +1455,10 @@ def _create_flood_tiles(
     return tiles
 
 
-def _process_flood_overlay_tile(
+def _process_flooding_overlay_tile(
     *, tile: gpd.GeoSeries, layer_paths: list[pathlib.Path], crs: str
 ) -> gpd.GeoDataFrame | None:
-    """Process flood overlay for a single tile."""
+    """Process flooding overlay for a single tile."""
     tile_geom = tile.geometry
     tile_bbox = tile_geom.bounds
     tile_gdf = gpd.GeoDataFrame(geometry=[tile_geom], crs=crs)
@@ -1480,7 +1487,7 @@ def _process_flood_overlay_tile(
     return tile_overlay
 
 
-def _tile_polygon_flood_overlay(
+def _tile_polygon_flooding_overlay(
     config: model_config.Config,
     boundary: gpd.GeoDataFrame,
     layer_paths: list[gpd.GeoDataFrame],
@@ -1489,8 +1496,8 @@ def _tile_polygon_flood_overlay(
 ) -> gpd.GeoDataFrame:
     """Chunked polygon-polygon overlay using a tile grid."""
     # Create tiles
-    if config.switches.create_flood_tiles:
-        tiles = _create_flood_tiles(config, boundary, tile_size_m)
+    if config.switches.create_flooding_tiles:
+        tiles = _create_flooding_tiles(config, boundary, tile_size_m)
     else:
         tiles = gpd.read_file(
             config.paths.model_interim_output / file_paths.TILE_GRID_MODEL_INTERIM_OUTPUT_PATH
@@ -1499,16 +1506,16 @@ def _tile_polygon_flood_overlay(
     # Prepare output GPKG
     output_path = (
         config.paths.model_interim_output
-        / file_paths.FLOOD_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH
+        / file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH
     )
-    layer_name = "flood_overlay"
+    layer_name = "flooding_overlay"
     first_write = True
 
     # For each tile, do spatial filtering and run overlay and clean
     for tile_idx, tile in tiles.iterrows():
         LOG.info("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
 
-        tile_overlay = _process_flood_overlay_tile(tile=tile, layer_paths=layer_paths, crs=crs)
+        tile_overlay = _process_flooding_overlay_tile(tile=tile, layer_paths=layer_paths, crs=crs)
 
         # If there are no resulting geometries, skip to the next tile
         if tile_overlay is None:
@@ -1606,7 +1613,7 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
     _audit_index(
         ground_stability,
         [f"{col}_risk" for col in GroundStabilityCols.all()] + ["ground_stability_risk"],
-        audit_path / "Ground Stability Risk Index",
+        audit_path / "Ground Stability" / "Ground Stability Risk Index",
     )
 
     data_cleaning.write_to_file(
@@ -1707,7 +1714,7 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
     _audit_index(
         coastal_erosion_risk,
         ["coastal_erosion_risk"],
-        audit_path / "Coastal Erosion Risk Index",
+        audit_path / "Coastal Erosion" / "Coastal Erosion Risk Index",
     )
 
     data_cleaning.write_to_file(

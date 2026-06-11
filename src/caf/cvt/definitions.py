@@ -80,8 +80,8 @@ class ExtremeWeatherCols(Columns):
 class FloodingCols(Columns):
     """Column definitions for flooding subhazard layers."""
 
-    RIVERS_SEA = "rivers_sea"
-    SURFACE_WATER = "surface_water"
+    RIVERS_SEA = "rivers_sea_flood"
+    SURFACE_WATER = "surface_water_flood"
 
     @classmethod
     def all(cls) -> list[FloodingCols]:
