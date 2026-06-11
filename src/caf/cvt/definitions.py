@@ -77,6 +77,7 @@ class ExtremeWeatherCols(Columns):
         }
         return cmap_mapping[col]
 
+
 class FloodingCols(Columns):
     """Column definitions for flooding subhazard layers."""
 
@@ -96,6 +97,7 @@ class FloodingCols(Columns):
             cls.SURFACE_WATER: "Blues",
         }
         return cmap_mapping[col]
+
 
 class GroundStabilityCols(Columns):
     """Column definitions for ground stability subhazard layers."""
@@ -140,6 +142,7 @@ class ExtremeHeatCols(Columns):
         """Return a list of all extreme heat subhazard columns."""
         return [col for col in cls]
 
+
 class ExtremeColdCols(Columns):
     """Column definitions for extreme cold subhazard layers."""
 
@@ -152,6 +155,7 @@ class ExtremeColdCols(Columns):
         """Return a list of all extreme cold subhazard columns."""
         return [col for col in cls]
 
+
 class DroughtCols(Columns):
     """Column definitions for drought subhazard layers."""
 
@@ -162,6 +166,7 @@ class DroughtCols(Columns):
     def all(cls) -> list[DroughtCols]:
         """Return a list of all drought subhazard columns."""
         return [col for col in cls]
+
 
 class StormCols(Columns):
     """Column definitions for storm subhazard layers."""
@@ -177,6 +182,7 @@ class StormCols(Columns):
         """Return a list of all storm subhazard columns."""
         return [col for col in cls]
 
+
 class NoHAMImpactCols(Columns):
     """Column definitions for NoHAM impact layers."""
 
@@ -191,6 +197,7 @@ class NoHAMImpactCols(Columns):
     def all(cls) -> list[NoHAMImpactCols]:
         """Return a list of all NoHAM impact columns."""
         return [col for col in cls]
+
 
 class Scenarios(Columns):
     """Column definitions for scenarios."""
@@ -212,15 +219,14 @@ class Scenarios(Columns):
 class NoHAMYears:
     """Mapping between NoHAM years and scenario definitions."""
 
-    YEAR_TO_SCENARIO: dict[int, Scenarios] = {
-        2023: Scenarios.CURRENT,
-        2048: Scenarios.FORECAST,
-    }
-
     @classmethod
     def get_scenario(cls, year: int) -> str:
         """Return the scenario corresponding to a given year."""
-        return cls.YEAR_TO_SCENARIO[int(year)]
+        mapping = {
+            2023: Scenarios.CURRENT,
+            2048: Scenarios.FORECAST,
+        }
+        return mapping[int(year)]
 
 
 class NoHAM:

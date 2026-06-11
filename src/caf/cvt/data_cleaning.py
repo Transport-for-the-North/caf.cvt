@@ -315,6 +315,7 @@ def _get_bng_codes(boundary: gpd.GeoDataFrame) -> list[str]:
     boundary_bng = clip_to_boundary(bng_100km, boundary)
     return list(boundary_bng["bng_ref"])
 
+
 # DATA CLEANING
 
 
@@ -345,8 +346,7 @@ def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFram
     _clean_roads(config, boundary)
 
     rail_links = _get_rail_links(
-        boundary,
-        config.paths.raw_input / config.infrastructure.rail.rail_links
+        boundary, config.paths.raw_input / config.infrastructure.rail.rail_links
     )
     _clean_rail(config, rail_links)
     _clean_other(config, boundary, rail_links)
@@ -415,7 +415,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     noham_network = gpd.read_file(
         config.paths.raw_input / config.infrastructure.road.noham.file_path,
         mask=boundary,
-        columns=["link_id"]
+        columns=["link_id"],
     )
     len_before_filter = len(noham_network)
     noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
@@ -512,9 +512,7 @@ def _get_rail_links(
     return rail_links
 
 
-def _clean_passenger_rail(
-    config: model_config.Config, rail_links: gpd.GeoDataFrame
-) -> None:
+def _clean_passenger_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
     """Filter OS rail data to passenger rail network, then write to file."""
     len_before_filter = len(rail_links)
     passenger_rail = rail_links[
@@ -538,9 +536,7 @@ def _clean_passenger_rail(
     )
 
 
-def _clean_freight_rail(
-    config: model_config.Config, rail_links: gpd.GeoDataFrame
-) -> None:
+def _clean_freight_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
     """Filter OS rail data to freight rail network, then write to file."""
     len_before_filter = len(rail_links)
     freight_rail = rail_links[
@@ -612,9 +608,7 @@ def _clean_airports(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     """Read airports dataset, then write to file in new directory."""
     airports = gpd.read_file(config.paths.raw_input / config.infrastructure.other.airports)
     airports = clip_to_boundary(airports, boundary)
-    write_to_file(
-        airports, config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH
-    )
+    write_to_file(airports, config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH)
 
 
 def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -802,17 +796,13 @@ def _clean_bus_coach_stations(config: model_config.Config, boundary: gpd.GeoData
     )
 
 
-def _clean_tram_network(
-    config: model_config.Config, rail_links: gpd.GeoDataFrame
-) -> None:
+def _clean_tram_network(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
     """Filter OS rail links for tram network, then write to file."""
     len_before_filter = len(rail_links)
     tram_links = rail_links[
         rail_links["rail_use"].isin(["Freight And Passenger", "Passenger"])
     ]
-    tram_links = tram_links[
-        tram_links["desc"].isin(["Tram", "Main Line And Tram"])
-    ]
+    tram_links = tram_links[tram_links["desc"].isin(["Tram", "Main Line And Tram"])]
     filter_removed = len_before_filter - len(tram_links)
     LOG.info(
         "Tram network links filtered - %s of %s (%.1f percent) rows removed",
@@ -1011,8 +1001,8 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         }
     )
     temp_max[f"max_temp_summer_{Scenarios.FORECAST}"] = (
-        temp_max[f"max_temp_summer_{Scenarios.CURRENT}"] +
-        temp_max[f"max_temp_summer_{Scenarios.FORECAST}"]
+        temp_max[f"max_temp_summer_{Scenarios.CURRENT}"]
+        + temp_max[f"max_temp_summer_{Scenarios.FORECAST}"]
     )
     len_before_filter = len(temp_max)
     temp_max = temp_max[temp_max["grid_id"].isin(grid["grid_id"])]
@@ -1024,9 +1014,7 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    write_to_file(
-        temp_max, config.paths.model_input / file_paths.TEMP_MAX_MODEL_INPUT_PATH
-    )
+    write_to_file(temp_max, config.paths.model_input / file_paths.TEMP_MAX_MODEL_INPUT_PATH)
 
 
 def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -1044,10 +1032,8 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         }
     )
     temp_min[f"min_temp_winter_{Scenarios.FORECAST}"] = (
-        temp_min[
-            f"min_temp_winter_{Scenarios.CURRENT}"]
-              + temp_min[f"min_temp_winter_{Scenarios.FORECAST}"
-        ]
+        temp_min[f"min_temp_winter_{Scenarios.CURRENT}"]
+        + temp_min[f"min_temp_winter_{Scenarios.FORECAST}"]
     )
     len_before_filter = len(temp_min)
     temp_min = temp_min[temp_min["grid_id"].isin(grid["grid_id"])]
@@ -1079,10 +1065,9 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
             "pr_summer_change_40_median": f"precip_summer_pct_chg_{Scenarios.FORECAST}",
         }
     )
-    precip_sum[f"precip_summer_{Scenarios.FORECAST}"] = (
-        precip_sum[f"precip_summer_{Scenarios.CURRENT}"] *
-            (1 + (precip_sum[f"precip_summer_pct_chg_{Scenarios.FORECAST}"] / 100))
-    )
+    precip_sum[f"precip_summer_{Scenarios.FORECAST}"] = precip_sum[
+        f"precip_summer_{Scenarios.CURRENT}"
+    ] * (1 + (precip_sum[f"precip_summer_pct_chg_{Scenarios.FORECAST}"] / 100))
     precip_sum = precip_sum.drop(columns=[f"precip_summer_pct_chg_{Scenarios.FORECAST}"])
     len_before_filter = len(precip_sum)
     precip_sum = precip_sum[precip_sum["grid_id"].isin(grid["grid_id"])]
@@ -1113,10 +1098,9 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
             "pr_winter_change_40_median": f"precip_winter_pct_chg_{Scenarios.FORECAST}",
         },
     )
-    precip_win[f"precip_winter_{Scenarios.FORECAST}"] = (
-        precip_win[f"precip_winter_{Scenarios.CURRENT}"] *
-        (1 + (precip_win[f"precip_winter_pct_chg_{Scenarios.FORECAST}"] / 100))
-    )
+    precip_win[f"precip_winter_{Scenarios.FORECAST}"] = precip_win[
+        f"precip_winter_{Scenarios.CURRENT}"
+    ] * (1 + (precip_win[f"precip_winter_pct_chg_{Scenarios.FORECAST}"] / 100))
     precip_win = precip_win.drop(columns=[f"precip_winter_pct_chg_{Scenarios.FORECAST}"])
     len_before_filter = len(precip_win)
     precip_win = precip_win[precip_win["grid_id"].isin(grid["grid_id"])]
@@ -1152,9 +1136,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         (filter_removed / len_before_filter) * 100,
     )
     rain_days = explode_to_polygons(rain_days)
-    write_to_file(
-        rain_days, config.paths.model_input / file_paths.RAIN_DAYS_MODEL_INPUT_PATH
-    )
+    write_to_file(rain_days, config.paths.model_input / file_paths.RAIN_DAYS_MODEL_INPUT_PATH)
 
 
 def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -1253,7 +1235,7 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     frost_days = frost_days.rename(
         columns={
             "FrostDays_baseline_01_20_median": f"frost_days_{Scenarios.CURRENT}",
-            "FrostDays_40_median": f"frost_days_{Scenarios.FORECAST}"
+            "FrostDays_40_median": f"frost_days_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(frost_days)
@@ -1281,7 +1263,7 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     ice_days = ice_days.rename(
         columns={
             "IcingDays_baseline_01_20_median": f"icing_days_{Scenarios.CURRENT}",
-            "IcingDays_40_median": f"icing_days_{Scenarios.FORECAST}"
+            "IcingDays_40_median": f"icing_days_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(ice_days)
@@ -1293,20 +1275,18 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    write_to_file(
-        ice_days, config.paths.model_input / file_paths.ICING_DAYS_MODEL_INPUT_PATH
-    )
+    write_to_file(ice_days, config.paths.model_input / file_paths.ICING_DAYS_MODEL_INPUT_PATH)
 
 
 def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read wind speed projections, calculate metrics, clean, then write to file."""
     windspd_current_agg, len_before_filter_current = _read_wind_speed_reduce(
         config.paths.raw_input / config.hazards.extreme_weather.wind_speed["1990_2000"],
-        Scenarios.CURRENT
+        Scenarios.CURRENT,
     )
     windspd_forecast_agg, len_before_filter_forecast = _read_wind_speed_reduce(
         config.paths.raw_input / config.hazards.extreme_weather.wind_speed["2070_2080"],
-        Scenarios.FORECAST
+        Scenarios.FORECAST,
     )
 
     metric_cols = [
@@ -1417,9 +1397,7 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
             "WDR_40_Median": f"wind_driven_rain_index_{Scenarios.FORECAST}",
         }
     )
-    wind_driven_rain = gpd.GeoDataFrame(
-        wind_driven_rain, geometry="geometry", crs="EPSG:3857"
-    )
+    wind_driven_rain = gpd.GeoDataFrame(wind_driven_rain, geometry="geometry", crs="EPSG:3857")
     wind_driven_rain = clip_to_boundary(wind_driven_rain, boundary)
     filter_removed = len_before_filter - len(wind_driven_rain)
     LOG.info(
@@ -1437,9 +1415,10 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
 
 ### FLOODING
 
+
 def _get_flooding_zip_files(
-        config: model_config.Config,
-        flooding_type: str,
+    config: model_config.Config,
+    flooding_type: str,
 ) -> list[pathlib.Path]:
     """Return all flooding zip files."""
     flooding_root = config.hazards.flooding[flooding_type]
@@ -1465,8 +1444,8 @@ def _parse_flooding_metadata(zip_path: pathlib.Path) -> dict:
 
 
 def _read_flooding_zip(
-        zip_path: pathlib.Path,
-        boundary: gpd.GeoDataFrame,
+    zip_path: pathlib.Path,
+    boundary: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame | None:
     """Read flooding gdb file from zip."""
     vsi_path = f"zip://{zip_path}!/{zip_path.stem}.gdb"
@@ -1486,13 +1465,13 @@ def _read_flooding_zip(
 
 
 def _clean_flooding(
-        config: model_config.Config,
-        flooding_type: str,
-        boundary: gpd.GeoDataFrame,
-        out_path: pathlib.Path,
-        rename_risk_col: str,
-        climate_change: bool,
-        bng_codes: list[str],
+    config: model_config.Config,
+    flooding_type: str,
+    boundary: gpd.GeoDataFrame,
+    out_path: pathlib.Path,
+    rename_risk_col: str,
+    climate_change: bool,
+    bng_codes: list[str],
 ) -> None:
     """Clean flooding data and write to file."""
     zip_files = _get_flooding_zip_files(config, flooding_type)
@@ -1543,8 +1522,10 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
                 config,
                 flooding_type=flooding_type,
                 boundary=boundary,
-                out_path=file_paths.FLOODING_MODEL_INPUT_PATH / flooding_type / scenario
-                            / f"{flooding_type}_{scenario}.gpkg",
+                out_path=file_paths.FLOODING_MODEL_INPUT_PATH
+                / flooding_type
+                / scenario
+                / f"{flooding_type}_{scenario}.gpkg",
                 rename_risk_col=f"{flooding_type}_flooding_risk_{scenario}",
                 climate_change=(scenario == Scenarios.FORECAST),
                 bng_codes=bng_codes,
@@ -1568,8 +1549,9 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
     """Clean GeoSureHexGrids data, merge by nearest centroids, then write to file."""
     geosure_layers = {
         "collapsible_deposits": gpd.read_file(
-        f"zip://{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-        f"{config.hazards.ground_stability.geosure.file_path}",
+            f"zip://"
+            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
+            f"{config.hazards.ground_stability.geosure.file_path}",
             layer="GB_Hex_5km_GS_CollapsibleDeposits_v8",
             mask=boundary,
             columns=["CLASS"],
@@ -1644,9 +1626,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
         layer_subset = layer[
             [f"{code}_risk", "geometry"]
         ]  # Select only the relevant class and geometry columns
-        matched = _nearest_centroids(
-            geosure, layer_subset
-        )  # Apply nearest centroid matching
+        matched = _nearest_centroids(geosure, layer_subset)  # Apply nearest centroid matching
         geosure[f"{code}_risk"] = matched[
             f"{code}_risk"
         ]  # Add the matched CLASS column to the base dataframe
@@ -1663,9 +1643,7 @@ def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     """Read and clean GeoClimate Shrink-Swell data, then write to file."""
     for year, filepath in config.hazards.ground_stability.geo_shrink_swell.items():
         geoclimate_data = gpd.read_file(
-            config.paths.raw_input /filepath,
-            mask=boundary,
-            columns=["CLASS"]
+            config.paths.raw_input / filepath, mask=boundary, columns=["CLASS"]
         )
         if geoclimate_data.empty:
             LOG.info("GeoClimate shrink-swell %s layer empty. Continuing.", year)
@@ -1823,7 +1801,7 @@ def _read_freight_demand(path: pathlib.Path, boundary: gpd.GeoDataFrame) -> gpd.
     freight_network_demand = freight_network_demand.rename(
         columns={
             "2022_23_total": f"demand_{Scenarios.CURRENT}",
-            "2050_51 sc2_total": f"demand_{Scenarios.FORECAST}"
+            "2050_51 sc2_total": f"demand_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(freight_network_demand)
@@ -1862,11 +1840,9 @@ def _map_freight_networks(
 
     os_freight_network_demand[
         [f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}"]
-    ] = (
-        os_freight_network_demand[
-            [f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}"]
-        ].fillna(0)
-    )
+    ] = os_freight_network_demand[
+        [f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}"]
+    ].fillna(0)
     return os_freight_network_demand.drop(columns=["index_right"])
 
 
@@ -1888,9 +1864,9 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         scenario = NoHAMYears.get_scenario(year)
         flows = _aggregate_link_flows_year(config, year, network_link_ids)
 
-        flows = flows.rename(columns={
-            col: f"{col}_{scenario}" for col in flows.columns if col != "link_id"
-        })
+        flows = flows.rename(
+            columns={col: f"{col}_{scenario}" for col in flows.columns if col != "link_id"}
+        )
 
         scenario_flows[scenario] = flows
 
@@ -1915,18 +1891,14 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         len(forecast_only_ids),
     )
 
-    noham_net_flows = noham_network.merge(
-        noham_flows, on="link_id", how="left"
-    )
+    noham_net_flows = noham_network.merge(noham_flows, on="link_id", how="left")
 
     noham_net_flows = gpd.GeoDataFrame(
         noham_net_flows, geometry="geometry", crs=noham_network.crs
     )
 
     write_to_file(
-        noham_net_flows,
-        config.paths.model_input
-        / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
+        noham_net_flows, config.paths.model_input / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
     )
 
 
@@ -1981,11 +1953,7 @@ def _aggregate_link_flows(
 ) -> pd.DataFrame:
     """Take NoHAM od's, routes, and link to create aggregated link flows DataFrame."""
     # Merge OD demand onto routes
-    od_routes = routes.merge(
-        ods[["route", "abs_demand"]],
-        on="route",
-        how="inner"
-    )
+    od_routes = routes.merge(ods[["route", "abs_demand"]], on="route", how="inner")
 
     link_demand = od_routes.groupby("link_id")["abs_demand"].sum().reset_index()
 
@@ -2012,7 +1980,7 @@ def _process_single_noham_layer(
         time_period=time_period,
         user_class=user_class,
         noham_path=config.paths.raw_input / config.impact.noham_demand.zip_path,
-        output_path=config.paths.raw_input /config.impact.noham_demand.output_path,
+        output_path=config.paths.raw_input / config.impact.noham_demand.output_path,
         extract=config.switches.noham_zip_extract,
     )
     noham_links["noham_link_id"] = (
@@ -2022,12 +1990,12 @@ def _process_single_noham_layer(
     noham_routes = noham_routes[noham_routes["link_id"].isin(noham_links.index)]
 
     link_demand = _aggregate_link_flows(
-        noham_ods, noham_routes, noham_links,
+        noham_ods,
+        noham_routes,
+        noham_links,
     )
 
-    link_demand["link_id"] = (
-        link_demand["a"].astype(str) + "_" + link_demand["b"].astype(str)
-    )
+    link_demand["link_id"] = link_demand["a"].astype(str) + "_" + link_demand["b"].astype(str)
 
     link_demand = link_demand[["link_id", "abs_demand"]]
     link_demand = link_demand.rename(
@@ -2098,4 +2066,3 @@ def _aggregate_link_flows_year(
     return combined_ts_df[
         ["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in NoHAM.all_user_classes()]
     ]
-

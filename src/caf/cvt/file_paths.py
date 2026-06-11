@@ -126,7 +126,9 @@ TILE_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Other/tiles.gpkg")
 FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
     "Flooding Risk/flooding_risk_tile_overlay.gpkg"
 )
-FLOODING_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Flooding Risk/flooding_risk_direct.gpkg")
+FLOODING_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
+    "Flooding Risk/flooding_risk_direct.gpkg"
+)
 FLOODING_RISK_SCENARIO_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Flooding Risk")
 
 GROUND_STABILITY_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(

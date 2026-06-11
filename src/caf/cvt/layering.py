@@ -408,17 +408,22 @@ def _normalise_total_demand(noham: pd.DataFrame) -> pd.DataFrame:
     """Normalise NoHAM demand across all user classes combined."""
     pairs = [(f"all_vehs_total_{Scenarios.CURRENT}", f"all_vehs_total_{Scenarios.FORECAST}")]
     noham = functional_rules.min_max_scaling_pair(noham, pairs)
-    return noham.rename(columns={
-        f"all_vehs_total_{Scenarios.CURRENT}": f"demand_{Scenarios.CURRENT}",
-        f"all_vehs_total_{Scenarios.FORECAST}": f"demand_{Scenarios.FORECAST}",
-    })
+    return noham.rename(
+        columns={
+            f"all_vehs_total_{Scenarios.CURRENT}": f"demand_{Scenarios.CURRENT}",
+            f"all_vehs_total_{Scenarios.FORECAST}": f"demand_{Scenarios.FORECAST}",
+        }
+    )
 
 
 def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
     """Calculate NoHAM impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
-    risk_cols = [col for col in MainHazardCols.all_risk_cols()
-                 if f"{col}_{Scenarios.CURRENT}" in noham.columns]
+    risk_cols = [
+        col
+        for col in MainHazardCols.all_risk_cols()
+        if f"{col}_{Scenarios.CURRENT}" in noham.columns
+    ]
 
     hazards = [col.removesuffix("_risk") for col in risk_cols]
     impact_weights = _get_impact_weights(hazards)
@@ -440,15 +445,13 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalise_noham_impact(
-        noham: pd.DataFrame,
+    noham: pd.DataFrame,
 ) -> pd.DataFrame:
     """Normalise NoHAM impact scores across all user classes combined."""
     pairs = [
         (f"{uc}_impact_{Scenarios.CURRENT}", f"{uc}_impact_{Scenarios.FORECAST}")
         for uc in NoHAM.all_user_classes()
-    ] + [
-        (f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")
-    ]
+    ] + [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")]
 
     return functional_rules.min_max_scaling_pair(noham, pairs)
 
@@ -500,8 +503,10 @@ def _passenger_rail_risk(
 
     data_cleaning.write_to_file(
         passenger_rail_network_risk,
-        config.paths.model_output / "Rail" / "Passenger Rail"
-        / "passenger_rail_network_risk.gpkg"
+        config.paths.model_output
+        / "Rail"
+        / "Passenger Rail"
+        / "passenger_rail_network_risk.gpkg",
     )
 
     passenger_rail_network_risk = _prepare_model_output(
@@ -516,7 +521,6 @@ def _passenger_rail_risk(
         },
         risk_cols_order=risk_cols,
     )
-
 
     _split_csv_shapefile(
         config,
@@ -568,7 +572,7 @@ def _freight_rail_risk(
 
     data_cleaning.write_to_file(
         freight_rail_network_risk,
-        config.paths.model_output / "Rail" / "Freight Rail" / "freight_rail_network_risk.gpkg"
+        config.paths.model_output / "Rail" / "Freight Rail" / "freight_rail_network_risk.gpkg",
     )
 
     freight_rail_network_risk = _prepare_model_output(
@@ -586,7 +590,6 @@ def _freight_rail_risk(
         },
         risk_cols_order=[*risk_cols, "impact"],
     )
-
 
     _split_csv_shapefile(
         config,
@@ -618,8 +621,11 @@ def _freight_impact_index(freight_rail_network_risk: gpd.GeoDataFrame) -> gpd.Ge
 
 def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
     """Calculate composite impact score for current and forecast years."""
-    risk_cols = [col for col in MainHazardCols.all_risk_cols()
-                 if f"{col}_{Scenarios.CURRENT}" in freight_data.columns]
+    risk_cols = [
+        col
+        for col in MainHazardCols.all_risk_cols()
+        if f"{col}_{Scenarios.CURRENT}" in freight_data.columns
+    ]
 
     hazards = [col.removesuffix("_risk") for col in risk_cols]
     impact_weights = _get_impact_weights(hazards)
@@ -863,7 +869,9 @@ def _bus_coach_stations_risk(
 
     data_cleaning.write_to_file(
         bus_coach_stations_risk,
-        config.paths.model_output / "Other" / "Bus and Coach Stations"
+        config.paths.model_output
+        / "Other"
+        / "Bus and Coach Stations"
         / "bus_coach_stations_risk.gpkg",
     )
 
@@ -1012,7 +1020,9 @@ def _rapid_transport_stations_risk(
 
     data_cleaning.write_to_file(
         rapid_transport_stations_risk,
-        config.paths.model_output / "Other" / "Rapid Transport Stations"
+        config.paths.model_output
+        / "Other"
+        / "Rapid Transport Stations"
         / "rapid_transport_stations_risk.gpkg",
     )
 
@@ -1275,7 +1285,9 @@ def _rapid_transport_network_risk(
 
     data_cleaning.write_to_file(
         rapid_transport_risk,
-        config.paths.model_output / "Other" / "Rapid Transport Network"
+        config.paths.model_output
+        / "Other"
+        / "Rapid Transport Network"
         / "rapid_transport_network_risk.gpkg",
     )
 

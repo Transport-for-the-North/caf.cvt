@@ -33,18 +33,9 @@ switches:
   ground_stability: false
   coastal_erosion: false
 
-  
 
-  # True if the flooding grid needs to be created before upscaling the flooding data to this grid
-  create_flooding_grid: false
-
-  # True if overlaying the flooding data directly to retain maximum spatial detail (this takes several months), 
-  # False if upscaling flooding data to 1km grid
+  # True if the direct flooding overlay should be computed (this takes 2-3 Months to run for whole North), 
   compute_flooding_overlay: false
-  # True if using the direct flooding overlay to calculate flooding risk
-  flooding_overlay_direct: true
-  # True if the flooding tiles need to be created before using these in the direct flooding overlay
-  create_flooding_tiles: false
 
   # True if the raw NoHAM h5 files need to be extracted from zip file
   noham_zip_extract: false

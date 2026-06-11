@@ -15,6 +15,7 @@ def _check_none(value: str) -> str | None:
         return None
     return value
 
+
 ### CONFIG SET UP
 
 
@@ -247,7 +248,6 @@ class Flooding(ctk.BaseConfig):
     flooding_path: pathlib.Path
 
 
-
 class GroundStability(ctk.BaseConfig):
     """Configuration for ground stability data.
 
@@ -353,16 +353,8 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include ground stability hazards in the analysis.
     coastal_erosion : bool
         Whether to include coastal erosion hazards in the analysis.
-    flooding_zip_extract : bool
-        Whether to extract flooding zip files.
-    create_flooding_grid : bool
-        Whether to create flooding grid.
     compute_flooding_overlay: bool
         Whether to compute the direct flooding overlay.
-    flooding_overlay_direct: bool
-        Whether to use a direct overlay of flooding data.
-    create_flooding_tiles: bool
-        Whether to create flooding tiles.
     noham_zip_extract : bool
         Whether to extract NoHAM zip files.
     """
@@ -393,11 +385,7 @@ class SwitchConfig(ctk.BaseConfig):
     ground_stability: bool
     coastal_erosion: bool
 
-    create_flooding_grid: bool = False
-
     compute_flooding_overlay: bool = False
-    flooding_overlay_direct: bool = False
-    create_flooding_tiles: bool = False
 
     noham_zip_extract: bool = False
 
@@ -498,4 +486,3 @@ class Config(ctk.BaseConfig):
     infrastructure: InfrastructureConfig
     hazards: HazardsConfig
     impact: ImpactConfig
-
