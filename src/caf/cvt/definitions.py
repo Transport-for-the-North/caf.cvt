@@ -220,7 +220,7 @@ class NoHAMYears:
     """Mapping between NoHAM years and scenario definitions."""
 
     @classmethod
-    def get_scenario(cls, year: int) -> str:
+    def get_scenario(cls, year: str) -> str:
         """Return the scenario corresponding to a given year."""
         mapping = {
             2023: Scenarios.CURRENT,

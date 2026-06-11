@@ -238,7 +238,7 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
         LOG.info("Reading flooding layer.")
         hazard_layers["Flooding"] = gpd.read_file(
             config.paths.model_interim_output
-            / file_paths.FLOODING_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH
+            / file_paths.FLOODING_RISK_MODEL_INTERIM_OUTPUT_PATH
         )
     if config.switches.ground_stability:
         LOG.info("Reading ground stability layer.")

@@ -398,14 +398,14 @@ def _get_cmap_for_column(col: str) -> str:
     cmap = None
 
     if base_col in MainHazardCols.all():
-        cmap = MainHazardCols.get_cmap(base_col)
+        cmap = MainHazardCols.get_cmap(MainHazardCols(base_col))
 
     if base_col in ExtremeWeatherCols.all():
-        cmap = ExtremeWeatherCols.get_cmap(base_col)
+        cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols(base_col))
     if base_col in FloodingCols.all():
-        cmap = FloodingCols.get_cmap(base_col)
+        cmap = FloodingCols.get_cmap(FloodingCols(base_col))
     if base_col in GroundStabilityCols.all():
-        cmap = GroundStabilityCols.get_cmap(base_col)
+        cmap = GroundStabilityCols.get_cmap(GroundStabilityCols(base_col))
 
     if base_col in ExtremeHeatCols.all():
         cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.EXTREME_HEAT)
@@ -1075,19 +1075,22 @@ def _flooding_index(
     """Overlay all four flooding datasets using a tiled chunking method."""
     LOG.info("Combining all four flooding datasets...")
 
+    flooding_paths = []
+    for flooding_type in config.hazards.flooding:
+        for scenario in Scenarios.all():
+            flooding_paths.append(
+                file_paths.FLOODING_MODEL_INPUT_PATH
+                / flooding_type
+                / scenario
+                / f"{flooding_type}_{scenario}.gpkg    "
+            )
+
     # If the direct tiled overlay hasn't been done yet, do it.
     if config.switches.compute_flooding_overlay:
         _tile_polygon_flooding_overlay(
             config,
             boundary,
-            [
-                config.paths.model_input / file_paths.FLOODING_RIVERS_SEA_MODEL_INPUT_PATH,
-                config.paths.model_input
-                / file_paths.FLOODING_RIVERS_SEA_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-                config.paths.model_input / file_paths.FLOODING_SURFACE_WATER_MODEL_INPUT_PATH,
-                config.paths.model_input
-                / file_paths.FLOODING_SURFACE_WATER_CLIMATE_CHANGE_MODEL_INPUT_PATH,
-            ],
+            flooding_paths,
             crs=data_cleaning.BNG_CRS,
             tile_size_m=_FLOODING_TILE_SIZE_M,
         )
@@ -1152,8 +1155,7 @@ def _flooding_index(
 
     data_cleaning.write_to_file(
         flooding_risk,
-        config.paths.model_interim_output
-        / file_paths.FLOODING_RISK_DIRECT_MODEL_INTERIM_OUTPUT_PATH,
+        config.paths.model_interim_output / file_paths.FLOODING_RISK_MODEL_INTERIM_OUTPUT_PATH,
     )
 
     LOG.info("Flooding risk index calculation complete.")

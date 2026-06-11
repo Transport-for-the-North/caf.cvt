@@ -299,7 +299,7 @@ class ImpactConfig(ctk.BaseConfig):
 
     freight_demand: pathlib.Path
     noham_demand: ZipFileEntry
-    noham_years: list[int]
+    noham_years: list[str]
 
 
 class SwitchConfig(ctk.BaseConfig):

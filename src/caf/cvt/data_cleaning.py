@@ -1416,6 +1416,76 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
 ### FLOODING
 
 
+def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+    """Clean flooding data ready for analysis."""
+    LOG.info("Cleaning flooding data...")
+    bng_codes = _get_bng_codes(boundary)
+
+    for flooding_type in config.hazards.flooding:
+        for scenario in Scenarios.all():
+            LOG.info("Cleaning %s flooding data for %s scenario...", flooding_type, scenario)
+            _clean_flooding_layer(
+                config,
+                flooding_type=flooding_type,
+                boundary=boundary,
+                out_path=file_paths.FLOODING_MODEL_INPUT_PATH
+                / flooding_type
+                / scenario
+                / f"{flooding_type}_{scenario}.gpkg",
+                rename_risk_col=f"{flooding_type}_flooding_risk_{scenario}",
+                climate_change=(scenario == Scenarios.FORECAST),
+                bng_codes=bng_codes,
+            )
+
+    LOG.info("Finished cleaning flooding data.")
+
+
+def _clean_flooding_layer(
+    config: model_config.Config,
+    flooding_type: str,
+    boundary: gpd.GeoDataFrame,
+    out_path: pathlib.Path,
+    rename_risk_col: str,
+    climate_change: bool,
+    bng_codes: list[str],
+) -> None:
+    """Clean flooding data and write to file."""
+    zip_files = _get_flooding_zip_files(config, flooding_type)
+    first_write = True
+
+    for zip_path in zip_files:
+        metadata = _parse_flooding_metadata(zip_path)
+
+        if metadata["tile"][:2] not in bng_codes:
+            continue
+        if metadata["climate_change"] != climate_change:
+            continue
+        LOG.info("Processing tile: %s...", metadata["tile"])
+
+        flooding_data = _read_flooding_zip(zip_path, boundary)
+
+        flooding_data = clip_to_boundary(flooding_data, boundary)
+
+        if flooding_data.empty:
+            LOG.info("%s layer empty. Continuing.", metadata["tile"])
+            continue
+
+        flooding_data = _extract_poly_from_geomcollection(flooding_data)
+
+        flooding_data = flooding_data.rename(columns={"Risk_band": rename_risk_col})
+
+        write_to_file(
+            flooding_data,
+            config.paths.model_input / out_path / "",
+            mode="w" if first_write else "a",
+        )
+
+        first_write = False
+
+        del flooding_data
+        gc.collect()
+
+
 def _get_flooding_zip_files(
     config: model_config.Config,
     flooding_type: str,
@@ -1462,76 +1532,6 @@ def _read_flooding_zip(
         engine="pyogrio",
         use_arrow=True,
     )
-
-
-def _clean_flooding(
-    config: model_config.Config,
-    flooding_type: str,
-    boundary: gpd.GeoDataFrame,
-    out_path: pathlib.Path,
-    rename_risk_col: str,
-    climate_change: bool,
-    bng_codes: list[str],
-) -> None:
-    """Clean flooding data and write to file."""
-    zip_files = _get_flooding_zip_files(config, flooding_type)
-    first_write = True
-
-    for zip_path in zip_files:
-        metadata = _parse_flooding_metadata(zip_path)
-
-        if metadata["tile"][:2] not in bng_codes:
-            continue
-        if metadata["climate_change"] != climate_change:
-            continue
-        LOG.info("Processing tile: %s...", metadata["tile"])
-
-        flooding_data = _read_flooding_zip(zip_path, boundary)
-
-        flooding_data = clip_to_boundary(flooding_data, boundary)
-
-        if flooding_data.empty:
-            LOG.info("%s layer empty. Continuing.", metadata["tile"])
-            continue
-
-        flooding_data = _extract_poly_from_geomcollection(flooding_data)
-
-        flooding_data = flooding_data.rename(columns={"Risk_band": rename_risk_col})
-
-        write_to_file(
-            flooding_data,
-            config.paths.model_input / out_path / "",
-            mode="w" if first_write else "a",
-        )
-
-        first_write = False
-
-        del flooding_data
-        gc.collect()
-
-
-def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Clean flooding data ready for analysis."""
-    LOG.info("Cleaning flooding data...")
-    bng_codes = _get_bng_codes(boundary)
-
-    for flooding_type in config.hazards.flooding:
-        for scenario in Scenarios.all():
-            LOG.info("Cleaning %s flooding data for %s scenario...", flooding_type, scenario)
-            _clean_flooding(
-                config,
-                flooding_type=flooding_type,
-                boundary=boundary,
-                out_path=file_paths.FLOODING_MODEL_INPUT_PATH
-                / flooding_type
-                / scenario
-                / f"{flooding_type}_{scenario}.gpkg",
-                rename_risk_col=f"{flooding_type}_flooding_risk_{scenario}",
-                climate_change=(scenario == Scenarios.FORECAST),
-                bng_codes=bng_codes,
-            )
-
-    LOG.info("Finished cleaning flooding data.")
 
 
 ### GROUND STABILITY
@@ -1929,7 +1929,7 @@ def _read_noham_h5(
     noham_demand_path = (
         output_path
         / "input h5s"
-        / str(year)
+        / year
         / f"NoHAM_Decarb_DM_Core_{year!s}_{time_period}_v107_SatPig_{user_class}.h5"
     )
 
@@ -2015,7 +2015,7 @@ def _process_single_noham_layer(
 
 def _aggregate_link_flows_year(
     config: model_config.Config, year: str, network_link_ids: set[str]
-) -> dict[str, pd.DataFrame]:
+) -> pd.DataFrame:
     """Aggregate link flows for each year, time period, and user class."""
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}
 
