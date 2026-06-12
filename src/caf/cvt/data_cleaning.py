@@ -15,14 +15,11 @@ import xarray as xr
 from shapely import geometry
 
 from caf.cvt import file_paths, model_config
-from caf.cvt.definitions import NoHAM, NoHAMYears, Scenarios
+from caf.cvt.definitions import NoHAM, Scenarios
 
 LOG = logging.getLogger(__name__)
 
 ### ENVIRONMENT VARIABLES ###
-
-# Minimum a and b values for NoHAM road links to keep
-_NOHAM_ROAD_THRESHOLD = int(os.getenv("NOHAM_ROAD_THRESHOLD", "10000"))
 
 
 # British National Grid CRS, for use in spatially merging datasets
@@ -424,8 +421,8 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     )
     # Filter out links with a or b less than 10,000 (zone connectors)
     noham_network_clean = noham_network_clean[
-        (noham_network_clean["a"] >= _NOHAM_ROAD_THRESHOLD)
-        & (noham_network_clean["b"] >= _NOHAM_ROAD_THRESHOLD)
+        (noham_network_clean["a"] >= NoHAM.NOHAM_ROAD_ID_THRESHOLD)
+        & (noham_network_clean["b"] >= NoHAM.NOHAM_ROAD_ID_THRESHOLD)
     ]
     noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
     noham_network_clean = noham_network_clean[~noham_network_clean.geometry.is_empty]
@@ -1425,7 +1422,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         for scenario in Scenarios.all():
             LOG.info("Cleaning %s flooding data for %s scenario...", flooding_type, scenario)
             _clean_flooding_layer(
-                config,
+                config=config,
                 flooding_type=flooding_type,
                 boundary=boundary,
                 out_path=file_paths.FLOODING_MODEL_INPUT_PATH
@@ -1444,6 +1441,7 @@ def _clean_flooding_layer(
     config: model_config.Config,
     flooding_type: str,
     boundary: gpd.GeoDataFrame,
+    *,
     out_path: pathlib.Path,
     rename_risk_col: str,
     climate_change: bool,
@@ -1861,7 +1859,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
 
     scenario_flows = {}
     for year in config.impact.noham_years:
-        scenario = NoHAMYears.get_scenario(year)
+        scenario = NoHAM.get_scenario(year)
         flows = _aggregate_link_flows_year(config, year, network_link_ids)
 
         flows = flows.rename(

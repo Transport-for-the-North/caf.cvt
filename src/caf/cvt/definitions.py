@@ -22,14 +22,14 @@ class MainHazardCols(Columns):
     """Column definitions for main hazard layers."""
 
     EXTREME_WEATHER = "extreme_weather"
-    FLOODING = "flood"
+    FLOODING = "flooding"
     GROUND_STABILITY = "ground_stability"
     COASTAL_EROSION = "coastal_erosion"
 
     @classmethod
     def all(cls) -> list[MainHazardCols]:
         """Return a list of all main hazard columns."""
-        return [col for col in cls]
+        return list(cls)
 
     @classmethod
     def all_risk_cols(cls) -> list[str]:
@@ -64,7 +64,7 @@ class ExtremeWeatherCols(Columns):
     @classmethod
     def all(cls) -> list[ExtremeWeatherCols]:
         """Return a list of all extreme weather subhazard columns."""
-        return [col for col in cls]
+        return list(cls)
 
     @classmethod
     def get_cmap(cls, col: ExtremeWeatherCols) -> str:
@@ -81,13 +81,13 @@ class ExtremeWeatherCols(Columns):
 class FloodingCols(Columns):
     """Column definitions for flooding subhazard layers."""
 
-    RIVERS_SEA = "rivers_sea_flood"
-    SURFACE_WATER = "surface_water_flood"
+    RIVERS_SEA = "rivers_sea_flooding"
+    SURFACE_WATER = "surface_water_flooding"
 
     @classmethod
     def all(cls) -> list[FloodingCols]:
         """Return a list of all flooding subhazard columns."""
-        return [col for col in cls]
+        return list(cls)
 
     @classmethod
     def get_cmap(cls, col: FloodingCols) -> str:
@@ -113,7 +113,7 @@ class GroundStabilityCols(Columns):
     @classmethod
     def all(cls) -> list[GroundStabilityCols]:
         """Return a list of all ground stability subhazard columns."""
-        return [col for col in cls]
+        return list(cls)
 
     @classmethod
     def get_cmap(cls, col: GroundStabilityCols) -> str:
@@ -140,7 +140,7 @@ class ExtremeHeatCols(Columns):
     @classmethod
     def all(cls) -> list[ExtremeHeatCols]:
         """Return a list of all extreme heat subhazard columns."""
-        return [col for col in cls]
+        return list(cls)
 
 
 class ExtremeColdCols(Columns):
@@ -153,7 +153,7 @@ class ExtremeColdCols(Columns):
     @classmethod
     def all(cls) -> list[ExtremeColdCols]:
         """Return a list of all extreme cold subhazard columns."""
-        return [col for col in cls]
+        return list(cls)
 
 
 class DroughtCols(Columns):
@@ -165,7 +165,7 @@ class DroughtCols(Columns):
     @classmethod
     def all(cls) -> list[DroughtCols]:
         """Return a list of all drought subhazard columns."""
-        return [col for col in cls]
+        return list(cls)
 
 
 class StormCols(Columns):
@@ -180,7 +180,7 @@ class StormCols(Columns):
     @classmethod
     def all(cls) -> list[StormCols]:
         """Return a list of all storm subhazard columns."""
-        return [col for col in cls]
+        return list(cls)
 
 
 class NoHAMImpactCols(Columns):
@@ -196,7 +196,7 @@ class NoHAMImpactCols(Columns):
     @classmethod
     def all(cls) -> list[NoHAMImpactCols]:
         """Return a list of all NoHAM impact columns."""
-        return [col for col in cls]
+        return list(cls)
 
 
 class Scenarios(Columns):
@@ -208,25 +208,12 @@ class Scenarios(Columns):
     @classmethod
     def all(cls) -> list[Scenarios]:
         """Return a list of all scenarios."""
-        return [col for col in cls]
+        return list(cls)
 
     @classmethod
     def scenario_or_column(cls) -> str:
         """Return the name of the scenario column."""
         return f"{cls.CURRENT}_or_{cls.FORECAST}"
-
-
-class NoHAMYears:
-    """Mapping between NoHAM years and scenario definitions."""
-
-    @classmethod
-    def get_scenario(cls, year: str) -> str:
-        """Return the scenario corresponding to a given year."""
-        mapping = {
-            2023: Scenarios.CURRENT,
-            2048: Scenarios.FORECAST,
-        }
-        return mapping[int(year)]
 
 
 class NoHAM:
@@ -241,6 +228,8 @@ class NoHAM:
     TIME_PERIOD_1 = "TS1"
     TIME_PERIOD_2 = "TS2"
     TIME_PERIOD_3 = "TS3"
+
+    NOHAM_ROAD_ID_THRESHOLD = 10000
 
     @classmethod
     def all_user_classes(cls) -> list[str]:
@@ -257,3 +246,12 @@ class NoHAM:
     def all_time_periods(cls) -> list[str]:
         """Return a list of all NoHAM time periods."""
         return [cls.TIME_PERIOD_1, cls.TIME_PERIOD_2, cls.TIME_PERIOD_3]
+
+    @classmethod
+    def get_scenario(cls, year: str) -> str:
+        """Return the scenario corresponding to a given year."""
+        mapping = {
+            2023: Scenarios.CURRENT,
+            2048: Scenarios.FORECAST,
+        }
+        return mapping[int(year)]

@@ -424,6 +424,7 @@ def plot_choropleth_current_and_forecast(
     column: str,
     title: str,
     out_path: pathlib.Path,
+    *,
     linewidth: float = 0.1,
     edgecolor: str | None = "black",
     basemap_source: xyzservices.TileProvider | None = ctx.providers.CartoDB.Positron,
@@ -499,10 +500,10 @@ def _audit_index(
     for var in index_vars:
         # Plot Choropleth Maps for each variable
         plot_choropleth_current_and_forecast(
-            index,
-            var,
-            f"{var.replace('_', ' ').title()}",
-            out_path / f"{var}_choropleth.png",
+            risk_data=index,
+            column=var,
+            title=f"{var.replace('_', ' ').title()}",
+            out_path=out_path / f"{var}_choropleth.png",
         )
 
 

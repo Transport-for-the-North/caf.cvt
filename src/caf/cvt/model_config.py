@@ -391,41 +391,36 @@ class SwitchConfig(ctk.BaseConfig):
 
     @pydantic.model_validator(mode="after")
     def _check(self) -> Self:
-        if (
-            not self.run_data_cleaning
-            and not self.run_functional_rules
-            and not self.run_layering
-        ):
+        if not any([self.run_data_cleaning, self.run_functional_rules, self.run_layering]):
             raise ValueError(
                 "At least one of 'run_data_cleaning', 'run_functional_rules' "
                 "or 'run_layering' must be True."
             )
 
-        if (
-            not self.all_roads
-            and not self.noham_roads
-            and not self.passenger_rail
-            and not self.freight_rail
-            and not self.airports
-            and not self.bus_stops
-            and not self.petrol_stations
-            and not self.charging_sites
-            and not self.national_cycle_network
-            and not self.train_stations
-            and not self.tram_stations
-            and not self.rapid_transport_stations
-            and not self.ferry_terminals
-            and not self.bus_coach_stations
-            and not self.tram_network
-            and not self.rapid_transport_network
+        if not any(
+            [
+                self.all_roads,
+                self.noham_roads,
+                self.passenger_rail,
+                self.freight_rail,
+                self.airports,
+                self.bus_stops,
+                self.petrol_stations,
+                self.charging_sites,
+                self.national_cycle_network,
+                self.train_stations,
+                self.tram_stations,
+                self.rapid_transport_stations,
+                self.ferry_terminals,
+                self.bus_coach_stations,
+                self.tram_network,
+                self.rapid_transport_network,
+            ]
         ):
             raise ValueError("At least one infrastructure switch must be True.")
 
-        if (
-            not self.extreme_weather
-            and not self.flooding
-            and not self.ground_stability
-            and not self.coastal_erosion
+        if not any(
+            [self.extreme_weather, self.flooding, self.ground_stability, self.coastal_erosion]
         ):
             raise ValueError("At least one hazard switch must be True.")
 
@@ -450,7 +445,7 @@ class ParameterConfig(ctk.BaseConfig):
 
     @pydantic.model_validator(mode="after")
     def _check(self) -> Self:
-        if not ((self.stb is None) ^ (self.ca is None)):
+        if not (self.stb is None) ^ (self.ca is None):
             raise ValueError("Exactly one of 'stb' or 'ca' must be provided, but not both.")
         return self
 
