@@ -3,9 +3,9 @@
 # Model Section Switches
 switches:
   # If running from scratch using only the raw input files these switches should all be true
-  run_data_cleaning: false
+  run_data_cleaning: true
   run_functional_rules: true
-  run_layering: false
+  run_layering: true
 
   # Infrastructure switches 
   all_roads: true
@@ -28,7 +28,7 @@ switches:
   rapid_transport_network: false
 
   # Hazard switches
-  extreme_weather: false
+  extreme_weather: true
   flooding: true
   ground_stability: false
   coastal_erosion: false
