@@ -3,9 +3,9 @@
 # Model Section Switches
 switches:
   # If running from scratch using only the raw input files these switches should all be true
-  run_data_cleaning: true
+  run_data_cleaning: false
   run_functional_rules: true
-  run_layering: true
+  run_layering: false
 
   # Infrastructure switches 
   all_roads: true
@@ -28,13 +28,14 @@ switches:
   rapid_transport_network: false
 
   # Hazard switches
-  extreme_weather: true
+  extreme_weather: false
   flooding: true
   ground_stability: false
   coastal_erosion: false
 
 
   # True if the direct flooding overlay should be computed (this takes 2-3 Months to run for whole North), 
+  # but should be turned False if using the overlay that has already been computed for the North. 
   compute_flooding_overlay: false
 
   # True if the raw NoHAM h5 files need to be extracted from zip file

@@ -1476,7 +1476,7 @@ def _clean_flooding_layer(
 
         write_to_file(
             flooding_data,
-            config.paths.model_input / out_path / "",
+            config.paths.model_input / out_path,
             mode="w" if first_write else "a",
         )
 

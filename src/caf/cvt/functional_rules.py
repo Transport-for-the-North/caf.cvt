@@ -735,7 +735,7 @@ def _extreme_heat_index(
             "extreme_summer_days",
             "extreme_heat_risk",
         ],
-        audit_path / "Extreme Weather" / "Extreme Heat Index",
+        audit_path / "Extreme Weather" / "Extreme Heat Risk Index",
     )
 
     return extreme_heat
@@ -801,7 +801,7 @@ def _extreme_cold_index(
     _audit_index(
         extreme_cold,
         ["min_temp_winter_risk", "frost_days", "icing_days", "extreme_cold_risk"],
-        audit_path / "Extreme Weather" / "Extreme Cold Index",
+        audit_path / "Extreme Weather" / "Extreme Cold Risk Index",
     )
 
     LOG.info("Extreme cold index calculation complete.")
@@ -1075,18 +1075,19 @@ def _flooding_index(
     """Overlay all four flooding datasets using a tiled chunking method."""
     LOG.info("Combining all four flooding datasets...")
 
-    flooding_paths = []
-    for flooding_type in config.hazards.flooding:
-        for scenario in Scenarios.all():
-            flooding_paths.append(
-                file_paths.FLOODING_MODEL_INPUT_PATH
-                / flooding_type
-                / scenario
-                / f"{flooding_type}_{scenario}.gpkg    "
-            )
 
-    # If the direct tiled overlay hasn't been done yet, do it.
+    # If the direct tiled overlay hasn't been done yet, do it
     if config.switches.compute_flooding_overlay:
+        flooding_paths = []
+        for flooding_type in config.hazards.flooding:
+            for scenario in Scenarios.all():
+                flooding_paths.append(
+                    file_paths.FLOODING_MODEL_INPUT_PATH
+                    / flooding_type
+                    / scenario
+                    / f"{flooding_type}_{scenario}.gpkg"
+                )
+
         _tile_polygon_flooding_overlay(
             config,
             boundary,
@@ -1096,12 +1097,24 @@ def _flooding_index(
         )
 
     # Read the direct overlay result, and filter to region
+    # Eventually want to rename the layer to 'flooding_overlay'
     flooding_risk = gpd.read_file(
         config.paths.model_interim_output
         / file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH,
         mask=boundary,
-        layer="flooding_overlay",
+        layer="flood_overlay",
     )
+    # Eventually want to rename columns to 'flooding' rather than 'flood'
+    flooding_risk = flooding_risk.rename(columns={
+        f"rivers_sea_flood_risk_{Scenarios.CURRENT}":
+        f"rivers_sea_flooding_risk_{Scenarios.CURRENT}",
+        f"rivers_sea_flood_risk_{Scenarios.FORECAST}":
+        f"rivers_sea_flooding_risk_{Scenarios.FORECAST}",
+        f"surface_water_flood_risk_{Scenarios.CURRENT}":
+        f"surface_water_flooding_risk_{Scenarios.CURRENT}",
+        f"surface_water_flood_risk_{Scenarios.FORECAST}":
+        f"surface_water_flooding_risk_{Scenarios.FORECAST}",
+    })
 
     # Map original risk categories to numeric scores
     for col in [
@@ -1150,7 +1163,7 @@ def _flooding_index(
     _audit_index(
         flooding_risk,
         ["rivers_sea_flooding_risk", "surface_water_flooding_risk", "flooding_risk"],
-        audit_path / "Flooding" / "Flooding Risk Index (Direct Overlay)",
+        audit_path / "Flooding" / "Flooding Risk Index",
     )
 
     data_cleaning.write_to_file(
