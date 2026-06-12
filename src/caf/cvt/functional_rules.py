@@ -1075,7 +1075,6 @@ def _flooding_index(
     """Overlay all four flooding datasets using a tiled chunking method."""
     LOG.info("Combining all four flooding datasets...")
 
-
     # If the direct tiled overlay hasn't been done yet, do it
     if config.switches.compute_flooding_overlay:
         flooding_paths = []
@@ -1105,16 +1104,22 @@ def _flooding_index(
         layer="flood_overlay",
     )
     # Eventually want to rename columns to 'flooding' rather than 'flood'
-    flooding_risk = flooding_risk.rename(columns={
-        f"rivers_sea_flood_risk_{Scenarios.CURRENT}":
-        f"rivers_sea_flooding_risk_{Scenarios.CURRENT}",
-        f"rivers_sea_flood_risk_{Scenarios.FORECAST}":
-        f"rivers_sea_flooding_risk_{Scenarios.FORECAST}",
-        f"surface_water_flood_risk_{Scenarios.CURRENT}":
-        f"surface_water_flooding_risk_{Scenarios.CURRENT}",
-        f"surface_water_flood_risk_{Scenarios.FORECAST}":
-        f"surface_water_flooding_risk_{Scenarios.FORECAST}",
-    })
+    flooding_risk = flooding_risk.rename(
+        columns={
+            f"rivers_sea_flood_risk_{Scenarios.CURRENT}": (
+                f"rivers_sea_flooding_risk_{Scenarios.CURRENT}"
+            ),
+            f"rivers_sea_flood_risk_{Scenarios.FORECAST}": (
+                f"rivers_sea_flooding_risk_{Scenarios.FORECAST}"
+            ),
+            f"surface_water_flood_risk_{Scenarios.CURRENT}": (
+                f"surface_water_flooding_risk_{Scenarios.CURRENT}"
+            ),
+            f"surface_water_flood_risk_{Scenarios.FORECAST}": (
+                f"surface_water_flooding_risk_{Scenarios.FORECAST}"
+            ),
+        }
+    )
 
     # Map original risk categories to numeric scores
     for col in [
