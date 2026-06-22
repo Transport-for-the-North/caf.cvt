@@ -9,13 +9,9 @@ class Columns(enum.StrEnum):
     """Column definition base class."""
 
     @classmethod
-    def __contains__(cls, item: object) -> bool:
-        """Return True if object is defined within the enum, False otherwise."""
-        try:
-            cls(str(item))
-        except ValueError:
-            return False
-        return True
+    def all(cls) -> list:
+        """Return a list of all columns."""
+        return list(cls)
 
 
 class MainHazardCols(Columns):
@@ -26,20 +22,6 @@ class MainHazardCols(Columns):
     GROUND_STABILITY = "ground_stability"
     COASTAL_EROSION = "coastal_erosion"
 
-    @classmethod
-    def all(cls) -> list[MainHazardCols]:
-        """Return a list of all main hazard columns."""
-        return list(cls)
-
-    @classmethod
-    def all_risk_cols(cls) -> list[str]:
-        """Return a list of all main hazard risk columns."""
-        return [f"{col}_risk" for col in cls]
-
-    @classmethod
-    def add_risk_suffix(cls, col: str) -> str:
-        """Add _risk suffix to column if not already present."""
-        return f"{col}_risk"
 
     @classmethod
     def get_cmap(cls, col: MainHazardCols) -> str:
@@ -62,11 +44,6 @@ class ExtremeWeatherCols(Columns):
     STORM = "storm"
 
     @classmethod
-    def all(cls) -> list[ExtremeWeatherCols]:
-        """Return a list of all extreme weather subhazard columns."""
-        return list(cls)
-
-    @classmethod
     def get_cmap(cls, col: ExtremeWeatherCols) -> str:
         """Return the appropriate colormap for a given extreme weather subhazard column."""
         cmap_mapping = {
@@ -83,11 +60,6 @@ class FloodingCols(Columns):
 
     RIVERS_SEA = "rivers_sea_flooding"
     SURFACE_WATER = "surface_water_flooding"
-
-    @classmethod
-    def all(cls) -> list[FloodingCols]:
-        """Return a list of all flooding subhazard columns."""
-        return list(cls)
 
     @classmethod
     def get_cmap(cls, col: FloodingCols) -> str:
@@ -111,11 +83,6 @@ class GroundStabilityCols(Columns):
     SHRINK_SWELL_GEOCLIMATE = "shrink_swell_geoclimate"
 
     @classmethod
-    def all(cls) -> list[GroundStabilityCols]:
-        """Return a list of all ground stability subhazard columns."""
-        return list(cls)
-
-    @classmethod
     def get_cmap(cls, col: GroundStabilityCols) -> str:
         """Return the appropriate colormap for a given ground stability subhazard column."""
         cmap_mapping = {
@@ -137,11 +104,6 @@ class ExtremeHeatCols(Columns):
     HOT_SUMMER_DAYS = "hot_summer_days"
     EXTREME_SUMMER_DAYS = "extreme_summer_days"
 
-    @classmethod
-    def all(cls) -> list[ExtremeHeatCols]:
-        """Return a list of all extreme heat subhazard columns."""
-        return list(cls)
-
 
 class ExtremeColdCols(Columns):
     """Column definitions for extreme cold subhazard layers."""
@@ -150,22 +112,12 @@ class ExtremeColdCols(Columns):
     FROST_DAYS = "frost_days"
     ICING_DAYS = "icing_days"
 
-    @classmethod
-    def all(cls) -> list[ExtremeColdCols]:
-        """Return a list of all extreme cold subhazard columns."""
-        return list(cls)
-
 
 class DroughtCols(Columns):
     """Column definitions for drought subhazard layers."""
 
     DROUGHT_SEVERITY_INDEX = "drought_severity_index"
     PRECIP_SUMMER_RISK = "precip_summer_risk"
-
-    @classmethod
-    def all(cls) -> list[DroughtCols]:
-        """Return a list of all drought subhazard columns."""
-        return list(cls)
 
 
 class StormCols(Columns):
@@ -176,11 +128,6 @@ class StormCols(Columns):
     EXCEEDANCE_DAYS = "avg_exceedance_days"
     WIND_SPEED_RISK = "wind_speed_risk"
     WIND_DRIVEN_RAIN_INDEX = "wind_driven_rain_index"
-
-    @classmethod
-    def all(cls) -> list[StormCols]:
-        """Return a list of all storm subhazard columns."""
-        return list(cls)
 
 
 class NoHAMImpactCols(Columns):
@@ -193,22 +140,12 @@ class NoHAMImpactCols(Columns):
     UC5_IMPACT = "uc5_impact"
     IMPACT = "impact"
 
-    @classmethod
-    def all(cls) -> list[NoHAMImpactCols]:
-        """Return a list of all NoHAM impact columns."""
-        return list(cls)
-
 
 class Scenarios(Columns):
     """Column definitions for scenarios."""
 
     CURRENT = "current"
     FORECAST = "forecast"
-
-    @classmethod
-    def all(cls) -> list[Scenarios]:
-        """Return a list of all scenarios."""
-        return list(cls)
 
     @classmethod
     def scenario_or_column(cls) -> str:

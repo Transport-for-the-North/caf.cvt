@@ -142,4 +142,3 @@ dmypy.json
 
 # YML Files (avoid accidentially uploading config file)
 *.yml
-!config.yml

@@ -114,8 +114,8 @@ hazards:
     wdr_index: Hazards/Extreme Weather/Storm/Annual_Index_of_Wind_Driven_Rain_Projections_5km.gpkg
     precip_winter: Hazards/Extreme Weather/Storm/Winter_Precipitation_Change_Projections_12km.gpkg
   flooding:
-    rivers_sea: F:/1. Carbon Core/15. Climate Vulnerability/Phase 2/Data/raw inputs/Hazards/Flooding/RoFRS
-    surface_water: F:/1. Carbon Core/15. Climate Vulnerability/Phase 2/Data/raw inputs/Hazards/Flooding/RoFSW
+    rivers_sea: F:/4. Climate/Phase 2/Data/raw inputs/Hazards/Flooding/RoFRS
+    surface_water: F:/4. Climate/Phase 2/Data/raw inputs/Hazards/Flooding/RoFSW
   ground_stability:
     geo_shrink_swell:
       "2030": Hazards/Ground Stability/GeoClimateUKCP18OpenData/GeoclimateUKCP18_Open/GeoClimateUKCP18_ShrinkSwell_2030_Average_Open.shp

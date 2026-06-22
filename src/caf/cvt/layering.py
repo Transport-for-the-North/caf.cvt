@@ -421,7 +421,7 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
     # Calculate impact metric for each user class
     risk_cols = [
         col
-        for col in MainHazardCols.all_risk_cols()
+        for col in [f"{col}_risk" for col in MainHazardCols.all()]
         if f"{col}_{Scenarios.CURRENT}" in noham.columns
     ]
 
@@ -623,7 +623,7 @@ def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
     """Calculate composite impact score for current and forecast years."""
     risk_cols = [
         col
-        for col in MainHazardCols.all_risk_cols()
+        for col in [f"{col}_risk" for col in MainHazardCols.all()]
         if f"{col}_{Scenarios.CURRENT}" in freight_data.columns
     ]
 

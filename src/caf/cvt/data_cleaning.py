@@ -970,7 +970,7 @@ def _clean_hazard_grid(
     hazard_grid = clip_to_boundary(hazard_grid, boundary)
     filter_removed = len_before_filter - len(hazard_grid)
     LOG.info(
-        "Extreme weather grid filtered - % s of %s (%.1f percent) rows removed",
+        "Extreme weather grid filtered - %s of %s (%.1f percent) rows removed",
         filter_removed,
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
@@ -1498,10 +1498,15 @@ def _parse_flooding_metadata(zip_path: pathlib.Path) -> dict:
     name = zip_path.stem
     climate_change = "Climate_Change" in name
 
-    if climate_change:
-        flooding_type, _, _, _, tile, version = name.split("_")
-    else:
-        flooding_type, tile, version = name.split("_")
+    try:
+        if climate_change:
+            flooding_type, _, _, _, tile, version = name.split("_")
+        else:
+            flooding_type, tile, version = name.split("_")
+    except ValueError as exc:
+        raise ValueError(
+            f"Unexpected flooding zip filename format: '{name}'"
+        ) from exc
 
     return {
         "flooding_type": flooding_type,
