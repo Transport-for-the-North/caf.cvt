@@ -114,6 +114,8 @@ FREIGHT_DEMAND_MODEL_INPUT_PATH = pathlib.Path(
 )
 NOHAM_FLOWS_MODEL_INPUT_PATH = pathlib.Path("Impact/NoHAM Flows/noham_net_flows.gpkg")
 
+NOHAM_ZIP_EXTRACT_OUTPUT_PATH = pathlib.Path("Impact/NoHAM Link Flows/h5 files")
+
 # Model Interim Output Paths
 EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
     "Extreme Weather Risk/extreme_weather_risk.gpkg"

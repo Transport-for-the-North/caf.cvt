@@ -89,7 +89,7 @@ def _reshape_for_scenarios(
     melted[scenario_col] = (
         melted["variable"]
         .str.extract(scenario_pattern)[0]
-        .map({s: s.title() for s in Scenarios.all()})
+        .map({s: s.title() for s in list(Scenarios)})
     )
     melted["variable"] = melted["variable"].str.replace(scenario_pattern, "", regex=True)
 
@@ -352,7 +352,7 @@ def _noham_road_risk(
     feature_range = (config.constants.score_min, config.constants.score_max)
     noham_risk = _noham_impact_index(noham_risk, feature_range)
 
-    risk_impact_cols = [*risk_cols, *NoHAMImpactCols.all()]
+    risk_impact_cols = [*risk_cols, *list(NoHAMImpactCols)]
 
     _audit_infrastructure_risk(
         noham_risk,
@@ -432,14 +432,14 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
     # Calculate impact metric for each user class
     risk_cols = [
         col
-        for col in [f"{col}_risk" for col in MainHazardCols.all()]
+        for col in [f"{col}_risk" for col in list(MainHazardCols)]
         if f"{col}_{Scenarios.CURRENT}" in noham.columns
     ]
 
     hazards = [col.removesuffix("_risk") for col in risk_cols]
     impact_weights = _get_impact_weights(hazards)
 
-    for scenario in Scenarios.all():
+    for scenario in list(Scenarios):
         hazard_component = sum(
             noham[f"{risk_col}_{scenario}"] * impact_weights[risk_col.removesuffix("_risk")]
             for risk_col in risk_cols
@@ -641,14 +641,14 @@ def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
     """Calculate composite impact score for current and forecast years."""
     risk_cols = [
         col
-        for col in [f"{col}_risk" for col in MainHazardCols.all()]
+        for col in [f"{col}_risk" for col in list(MainHazardCols)]
         if f"{col}_{Scenarios.CURRENT}" in freight_data.columns
     ]
 
     hazards = [col.removesuffix("_risk") for col in risk_cols]
     impact_weights = _get_impact_weights(hazards)
 
-    for scenario in Scenarios.all():
+    for scenario in list(Scenarios):
         impact_component = freight_data[f"demand_{scenario}"] * impact_weights["demand"]
         hazard_component = sum(
             freight_data[f"{risk_col}_{scenario}"]

@@ -26,6 +26,7 @@ from caf.cvt.definitions import (
     FloodingCols,
     GroundStabilityCols,
     MainHazardCols,
+    PlottingColumn,
     Scenarios,
     StormCols,
 )
@@ -310,7 +311,7 @@ def _calculate_risk_threshold(
     invert: bool = False,
 ) -> pd.DataFrame:
     """Calculate risk level of a given column based on a threshold."""
-    for scenario in Scenarios.all():
+    for scenario in list(Scenarios):
         col_name = f"{base_col}_{scenario}"
         out_name = f"{output_col}_{scenario}"
 
@@ -330,7 +331,7 @@ def _calculate_composite_score(
     risk_data: pd.DataFrame, weights: dict[str, float], output_col: str
 ) -> pd.DataFrame:
     """Calculate composite score given a dataframe with variables and corresponding weights."""
-    for scenario in Scenarios.all():
+    for scenario in list(Scenarios):
         risk_data[f"{output_col}_{scenario}"] = sum(
             risk_data[f"{col}_{scenario}"] * weight for col, weight in weights.items()
         )
@@ -375,9 +376,9 @@ def _overlay_and_clean(
         ).sum()
         hazard_overlay = hazard_overlay[
             (geom_types.isin(["Polygon", "MultiPolygon", "GeometryCollection"]))
-            & (~hazard_overlay.geometry.is_empty)
-            & (hazard_overlay.geometry.notna())
-        ].reset_index(drop=True)
+        ]
+        hazard_overlay = data_cleaning.validate_geometries(hazard_overlay)
+        hazard_overlay = hazard_overlay.reset_index(drop=True)
         LOG.info(
             "Overlay dropped %s points and %s lines, and kept %s area geometries",
             int(num_points),
@@ -394,36 +395,10 @@ def _overlay_and_clean(
     return hazard_overlay
 
 
-def _get_cmap_for_column(col: str) -> str:
-    """Return the appropriate colormap for a given hazard column."""
-    base_col = col.replace("_risk", "")
-    cmap = None
-
-    if base_col in MainHazardCols.all():
-        cmap = MainHazardCols.get_cmap(MainHazardCols(base_col))
-
-    if base_col in ExtremeWeatherCols.all():
-        cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols(base_col))
-    if base_col in FloodingCols.all():
-        cmap = FloodingCols.get_cmap(FloodingCols(base_col))
-    if base_col in GroundStabilityCols.all():
-        cmap = GroundStabilityCols.get_cmap(GroundStabilityCols(base_col))
-
-    if base_col in ExtremeHeatCols.all():
-        cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.EXTREME_HEAT)
-    if base_col in ExtremeColdCols.all():
-        cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.EXTREME_COLD)
-    if base_col in DroughtCols.all():
-        cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.DROUGHT)
-    if base_col in StormCols.all():
-        cmap = ExtremeWeatherCols.get_cmap(ExtremeWeatherCols.STORM)
-
-    return cmap if cmap is not None else "Reds"  # Default colormap
-
 
 def plot_choropleth_current_and_forecast(
     risk_data: gpd.GeoDataFrame,
-    column: str,
+    column: PlottingColumn,
     title: str,
     out_path: pathlib.Path,
     *,
@@ -438,7 +413,7 @@ def plot_choropleth_current_and_forecast(
     if basemap_source is not None:
         risk_data = risk_data.to_crs(epsg=3857)
 
-    cmap = _get_cmap_for_column(column)
+    cmap = column.get_cmap()
 
     risk_data.plot(
         column=f"{column}_{Scenarios.CURRENT}",
@@ -479,14 +454,14 @@ def plot_choropleth_current_and_forecast(
 
 def _validate_index(
         index: gpd.GeoDataFrame,
-        index_vars: list[str],
+        index_vars: list[PlottingColumn],
         feature_range: tuple[int, int]
 ) -> None:
     """Validate a given index."""
     if index.isna().any().any():
         raise ValueError("Index contains NA values.")
 
-    for scenario in Scenarios.all():
+    for scenario in list(Scenarios):
         for var in index_vars:
             col = f"{var}_{scenario}"
             if col not in index.columns:
@@ -500,7 +475,7 @@ def _validate_index(
 
 def _audit_index(
     index: gpd.GeoDataFrame,
-    index_vars: list[str],
+    index_vars: list[PlottingColumn],
     out_path: pathlib.Path,
     feature_range: tuple[int, int]
 ) -> None:
@@ -568,16 +543,16 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
         [
             "grid_id",
             "part",
-            f"extreme_heat_risk_{Scenarios.CURRENT}",
-            f"extreme_heat_risk_{Scenarios.FORECAST}",
+            f"{ExtremeWeatherCols.EXTREME_HEAT}_risk_{Scenarios.CURRENT}",
+            f"{ExtremeWeatherCols.EXTREME_HEAT}_risk_{Scenarios.FORECAST}",
         ]
     ].merge(
         extreme_cold[
             [
                 "grid_id",
                 "part",
-                f"extreme_cold_risk_{Scenarios.CURRENT}",
-                f"extreme_cold_risk_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherCols.EXTREME_COLD}_risk_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherCols.EXTREME_COLD}_risk_{Scenarios.FORECAST}",
                 "geometry",
             ]
         ],
@@ -594,13 +569,14 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
         extreme_heat_cold,
         drought[
             [
-                f"drought_risk_{Scenarios.CURRENT}",
-                f"drought_risk_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherCols.DROUGHT}_risk_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherCols.DROUGHT}_risk_{Scenarios.FORECAST}",
                 "geometry",
             ]
         ],
         storm[
-            [f"storm_risk_{Scenarios.CURRENT}", f"storm_risk_{Scenarios.FORECAST}", "geometry"]
+            [f"{ExtremeWeatherCols.STORM}_risk_{Scenarios.CURRENT}",
+             f"{ExtremeWeatherCols.STORM}_risk_{Scenarios.FORECAST}", "geometry"]
         ],
         target_crs=data_cleaning.BNG_CRS,
     )
@@ -608,14 +584,14 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
     extreme_weather_risk = _iterative_spatial_infilling(
         extreme_weather_risk,
         [
-            f"extreme_heat_risk_{Scenarios.CURRENT}",
-            f"extreme_heat_risk_{Scenarios.FORECAST}",
-            f"extreme_cold_risk_{Scenarios.CURRENT}",
-            f"extreme_cold_risk_{Scenarios.FORECAST}",
-            f"drought_risk_{Scenarios.CURRENT}",
-            f"drought_risk_{Scenarios.FORECAST}",
-            f"storm_risk_{Scenarios.CURRENT}",
-            f"storm_risk_{Scenarios.FORECAST}",
+            f"{ExtremeWeatherCols.EXTREME_HEAT}_risk_{Scenarios.CURRENT}",
+            f"{ExtremeWeatherCols.EXTREME_HEAT}_risk_{Scenarios.FORECAST}",
+            f"{ExtremeWeatherCols.EXTREME_COLD}_risk_{Scenarios.CURRENT}",
+            f"{ExtremeWeatherCols.EXTREME_COLD}_risk_{Scenarios.FORECAST}",
+            f"{ExtremeWeatherCols.DROUGHT}_risk_{Scenarios.CURRENT}",
+            f"{ExtremeWeatherCols.DROUGHT}_risk_{Scenarios.FORECAST}",
+            f"{ExtremeWeatherCols.STORM}_risk_{Scenarios.CURRENT}",
+            f"{ExtremeWeatherCols.STORM}_risk_{Scenarios.FORECAST}",
         ],
         _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE,
     )
@@ -623,7 +599,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
     extreme_weather_risk = _calculate_composite_score(
         extreme_weather_risk,
         _EXTREME_WEATHER_WEIGHTS,
-        "extreme_weather_risk",
+        f"{MainHazardCols.EXTREME_WEATHER}_risk",
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -631,8 +607,8 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
         extreme_weather_risk,
         [
             (
-                f"extreme_weather_risk_{Scenarios.CURRENT}",
-                f"extreme_weather_risk_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherCols.EXTREME_WEATHER}_risk_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherCols.EXTREME_WEATHER}_risk_{Scenarios.FORECAST}",
             )
         ],
         feature_range
@@ -645,11 +621,11 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
     _validate_index(
         extreme_weather_risk,
         [
-            "extreme_heat_risk",
-            "extreme_cold_risk",
-            "drought_risk",
-            "storm_risk",
-            "extreme_weather_risk",
+            f"{ExtremeWeatherCols.EXTREME_HEAT}_risk",
+            f"{ExtremeWeatherCols.EXTREME_COLD}_risk",
+            f"{ExtremeWeatherCols.DROUGHT}_risk",
+            f"{ExtremeWeatherCols.STORM}_risk",
+            f"{ExtremeWeatherCols.EXTREME_WEATHER}_risk",
         ],
         feature_range
     )
@@ -657,11 +633,11 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
     _audit_index(
         extreme_weather_risk,
         [
-            "extreme_heat_risk",
-            "extreme_cold_risk",
-            "drought_risk",
-            "storm_risk",
-            "extreme_weather_risk",
+            f"{ExtremeWeatherCols.EXTREME_HEAT}_risk",
+            f"{ExtremeWeatherCols.EXTREME_COLD}_risk",
+            f"{ExtremeWeatherCols.DROUGHT}_risk",
+            f"{ExtremeWeatherCols.STORM}_risk",
+            f"{ExtremeWeatherCols.EXTREME_WEATHER}_risk",
         ],
         audit_path / "Extreme Weather" / "Extreme Weather Risk Index",
         feature_range
@@ -704,13 +680,14 @@ def _extreme_heat_index(
         extreme_heat,
         [
             (
-                f"max_temp_summer_risk_{Scenarios.CURRENT}",
-                f"max_temp_summer_risk_{Scenarios.FORECAST}",
+                f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_risk_{Scenarios.CURRENT}",
+                f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_risk_{Scenarios.FORECAST}",
             ),
-            (f"hot_summer_days_{Scenarios.CURRENT}", f"hot_summer_days_{Scenarios.FORECAST}"),
+            (f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.CURRENT}",
+             f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.FORECAST}"),
             (
-                f"extreme_summer_days_{Scenarios.CURRENT}",
-                f"extreme_summer_days_{Scenarios.FORECAST}",
+                f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.CURRENT}",
+                f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.FORECAST}",
             ),
         ],
         feature_range
@@ -719,7 +696,7 @@ def _extreme_heat_index(
     extreme_heat = _calculate_composite_score(
         extreme_heat,
         _EXTREME_HEAT_WEIGHTS,
-        "extreme_heat_risk",
+        f"{ExtremeWeatherCols.EXTREME_HEAT}_risk",
     )
 
     extreme_heat = min_max_scaling_pair(
@@ -1118,7 +1095,7 @@ def _flooding_index(
     if config.switches.compute_flooding_overlay:
         flooding_paths = []
         for flooding_type in config.hazards.flooding:
-            for scenario in Scenarios.all():
+            for scenario in list(Scenarios):
                 flooding_paths.append(
                     config.paths.model_input
                     / file_paths.FLOODING_MODEL_INPUT_PATH
@@ -1355,8 +1332,8 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
 
     risk_cols = [
         f"{hazard}_risk_{suffix}"
-        for hazard in GroundStabilityCols.all()
-        for suffix in Scenarios.all()
+        for hazard in list(GroundStabilityCols)
+        for suffix in list(Scenarios)
     ]
 
     for col in risk_cols:
@@ -1368,7 +1345,7 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
 
     gs_pairs = [
         (f"{col}_risk_{Scenarios.CURRENT}", f"{col}_risk_{Scenarios.FORECAST}")
-        for col in GroundStabilityCols.all()
+        for col in list(GroundStabilityCols)
     ]
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -1397,13 +1374,13 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
 
     _validate_index(
         ground_stability,
-        [f"{col}_risk" for col in GroundStabilityCols.all()] + ["ground_stability_risk"],
+        [f"{col}_risk" for col in list(GroundStabilityCols)] + ["ground_stability_risk"],
         feature_range
     )
 
     _audit_index(
         ground_stability,
-        [f"{col}_risk" for col in GroundStabilityCols.all()] + ["ground_stability_risk"],
+        [f"{col}_risk" for col in list(GroundStabilityCols)] + ["ground_stability_risk"],
         audit_path / "Ground Stability" / "Ground Stability Risk Index",
         feature_range
     )

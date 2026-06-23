@@ -26,9 +26,9 @@ class ZipFileEntry(ctk.BaseConfig):
 
     zip_path: pathlib.Path
     """Path to the zip file"""
-    file_path: Annotated[str | None, pydantic.BeforeValidator(_check_none)] = None
+    file_path: pathlib.Path | None = None
     """Path within the zip file."""
-    output_path: Annotated[pathlib.Path | None, pydantic.BeforeValidator(_check_none)] = None
+    output_path: pathlib.Path | None = None
     """Output path for the extracted file"""
 
 
@@ -92,17 +92,27 @@ class OtherInput(ctk.BaseConfig):
 
     Attributes
     ----------
-    boundary_path : pathlib.Path | None = None
-        Path to the specific boundary file of the region which the model is running for.
     stb_path : pathlib.Path
         Path to the boundary file of all STBs.
     ca_path : pathlib.Path
         Path to the boundary file of all CAs.
+    boundary_path : pathlib.Path | None = None
+        Path to the specific boundary file of the region which the model is running for.
     """
 
-    boundary_path: Annotated[pathlib.Path | None, pydantic.BeforeValidator(_check_none)] = None
     stb_path: pathlib.Path
     ca_path: pathlib.Path
+    boundary_path: pathlib.Path | None = None
+
+    @pydantic.model_validator(mode="after")
+    def _check_path_exists(self) -> Self:
+        if self.boundary_path is not None and not self.boundary_path.exists():
+            raise ValueError(f"Boundary path {self.boundary_path} does not exist.")
+        if not self.stb_path.exists():
+            raise ValueError(f"STB path {self.stb_path} does not exist.")
+        if not self.ca_path.exists():
+            raise ValueError(f"CA path {self.ca_path} does not exist.")
+        return self
 
 
 class NoHAMEntry(ctk.BaseConfig):

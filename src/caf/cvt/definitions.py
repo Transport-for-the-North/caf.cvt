@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import abc
 import enum
 
 
-class Columns(enum.StrEnum):
-    """Column definition base class."""
+class PlottingColumn(enum.StrEnum, abc.ABC):
+    """Plotting column definition base class."""
 
-    @classmethod
-    def all(cls) -> list:
-        """Return a list of all columns."""
-        return list(cls)
+    @abc.abstractmethod
+    def get_cmap(self) -> str:
+        """Return the appropriate colormap for a given plotting column."""
 
 
-class MainHazardCols(Columns):
+
+class MainHazardCols(PlottingColumn):
     """Column definitions for main hazard layers."""
 
     EXTREME_WEATHER = "extreme_weather"
@@ -22,20 +23,18 @@ class MainHazardCols(Columns):
     GROUND_STABILITY = "ground_stability"
     COASTAL_EROSION = "coastal_erosion"
 
-
-    @classmethod
-    def get_cmap(cls, col: MainHazardCols) -> str:
+    def get_cmap(self) -> str:
         """Return the appropriate colormap for a given hazard column."""
         cmap_mapping = {
-            cls.EXTREME_WEATHER: "Reds",
-            cls.FLOODING: "Blues",
-            cls.GROUND_STABILITY: "Oranges",
-            cls.COASTAL_EROSION: "Purples",
+            MainHazardCols.EXTREME_WEATHER: "Reds",
+            MainHazardCols.FLOODING: "Blues",
+            MainHazardCols.GROUND_STABILITY: "Oranges",
+            MainHazardCols.COASTAL_EROSION: "Purples",
         }
-        return cmap_mapping[col]
+        return cmap_mapping[self]
 
 
-class ExtremeWeatherCols(Columns):
+class ExtremeWeatherCols(PlottingColumn):
     """Column definitions for extreme weather subhazard layers."""
 
     EXTREME_HEAT = "extreme_heat"
@@ -43,35 +42,33 @@ class ExtremeWeatherCols(Columns):
     DROUGHT = "drought"
     STORM = "storm"
 
-    @classmethod
-    def get_cmap(cls, col: ExtremeWeatherCols) -> str:
+    def get_cmap(self) -> str:
         """Return the appropriate colormap for a given extreme weather subhazard column."""
         cmap_mapping = {
-            cls.EXTREME_HEAT: "Reds",
-            cls.EXTREME_COLD: "Blues",
-            cls.DROUGHT: "Oranges",
-            cls.STORM: "Blues",
+            ExtremeWeatherCols.EXTREME_HEAT: "Reds",
+            ExtremeWeatherCols.EXTREME_COLD: "Blues",
+            ExtremeWeatherCols.DROUGHT: "Oranges",
+            ExtremeWeatherCols.STORM: "Blues",
         }
-        return cmap_mapping[col]
+        return cmap_mapping[self]
 
 
-class FloodingCols(Columns):
+class FloodingCols(PlottingColumn):
     """Column definitions for flooding subhazard layers."""
 
     RIVERS_SEA = "rivers_sea_flooding"
     SURFACE_WATER = "surface_water_flooding"
 
-    @classmethod
-    def get_cmap(cls, col: FloodingCols) -> str:
+    def get_cmap(self) -> str:
         """Return the appropriate colormap for a given flooding subhazard column."""
         cmap_mapping = {
-            cls.RIVERS_SEA: "Blues",
-            cls.SURFACE_WATER: "Blues",
+            FloodingCols.RIVERS_SEA: "Blues",
+            FloodingCols.SURFACE_WATER: "Blues",
         }
-        return cmap_mapping[col]
+        return cmap_mapping[self]
 
 
-class GroundStabilityCols(Columns):
+class GroundStabilityCols(PlottingColumn):
     """Column definitions for ground stability subhazard layers."""
 
     COLLAPSIBLE_DEPOSITS = "collapsible_deposits"
@@ -82,45 +79,56 @@ class GroundStabilityCols(Columns):
     SOLUBLE_ROCKS = "soluble_rocks"
     SHRINK_SWELL_GEOCLIMATE = "shrink_swell_geoclimate"
 
-    @classmethod
-    def get_cmap(cls, col: GroundStabilityCols) -> str:
+    def get_cmap(self) -> str:
         """Return the appropriate colormap for a given ground stability subhazard column."""
         cmap_mapping = {
-            cls.COLLAPSIBLE_DEPOSITS: "Oranges",
-            cls.COMPRESSIBLE_GROUND: "Oranges",
-            cls.LANDSLIDES: "Oranges",
-            cls.RUNNING_SAND: "Oranges",
-            cls.SHRINK_SWELL: "Oranges",
-            cls.SOLUBLE_ROCKS: "Oranges",
-            cls.SHRINK_SWELL_GEOCLIMATE: "Oranges",
+            GroundStabilityCols.COLLAPSIBLE_DEPOSITS: "Oranges",
+            GroundStabilityCols.COMPRESSIBLE_GROUND: "Oranges",
+            GroundStabilityCols.LANDSLIDES: "Oranges",
+            GroundStabilityCols.RUNNING_SAND: "Oranges",
+            GroundStabilityCols.SHRINK_SWELL: "Oranges",
+            GroundStabilityCols.SOLUBLE_ROCKS: "Oranges",
+            GroundStabilityCols.SHRINK_SWELL_GEOCLIMATE: "Oranges",
         }
-        return cmap_mapping[col]
+        return cmap_mapping[self]
 
 
-class ExtremeHeatCols(Columns):
+class ExtremeHeatCols(PlottingColumn):
     """Column definitions for extreme heat subhazard layers."""
 
     MAX_TEMP_SUMMER = "max_temp_summer"
     HOT_SUMMER_DAYS = "hot_summer_days"
     EXTREME_SUMMER_DAYS = "extreme_summer_days"
 
+    def get_cmap(self) -> str:
+        """Return extreme heat colourmap."""
+        return "Reds"
 
-class ExtremeColdCols(Columns):
+
+class ExtremeColdCols(PlottingColumn):
     """Column definitions for extreme cold subhazard layers."""
 
     MIN_TEMP_WINTER = "min_temp_winter"
     FROST_DAYS = "frost_days"
     ICING_DAYS = "icing_days"
 
+    def get_cmap(self) -> str:
+        """Return extreme cold colourmap."""
+        return "Blues"
 
-class DroughtCols(Columns):
+
+class DroughtCols(PlottingColumn):
     """Column definitions for drought subhazard layers."""
 
     DROUGHT_SEVERITY_INDEX = "drought_severity_index"
     PRECIP_SUMMER_RISK = "precip_summer_risk"
 
+    def get_cmap(self) -> str:
+        """Return drought colourmap."""
+        return "Oranges"
 
-class StormCols(Columns):
+
+class StormCols(PlottingColumn):
     """Column definitions for storm subhazard layers."""
 
     RAIN_DAYS = "10mm_rain_days"
@@ -129,8 +137,12 @@ class StormCols(Columns):
     WIND_SPEED_RISK = "wind_speed_risk"
     WIND_DRIVEN_RAIN_INDEX = "wind_driven_rain_index"
 
+    def get_cmap(self) -> str:
+        """Return storm colourmap."""
+        return "Blues"
 
-class NoHAMImpactCols(Columns):
+
+class NoHAMImpactCols(enum.strEnum):
     """Column definitions for NoHAM impact layers."""
 
     UC1_IMPACT = "uc1_impact"
@@ -141,7 +153,7 @@ class NoHAMImpactCols(Columns):
     IMPACT = "impact"
 
 
-class Scenarios(Columns):
+class Scenarios(enum.strEnum):
     """Column definitions for scenarios."""
 
     CURRENT = "current"
@@ -153,7 +165,7 @@ class Scenarios(Columns):
         return f"{cls.CURRENT}_or_{cls.FORECAST}"
 
 
-class NoHAMUserClasses(Columns):
+class NoHAMUserClasses(enum.strEnum):
     """Definitions for NoHAM user classes."""
 
     USER_CLASS_1 = "uc1"
@@ -163,7 +175,7 @@ class NoHAMUserClasses(Columns):
     USER_CLASS_5 = "uc5"
 
 
-class NoHAMTimePeriods(Columns):
+class NoHAMTimePeriods(enum.strEnum):
     """Definitions for NoHAM time periods."""
 
     TIME_PERIOD_1 = "TS1"

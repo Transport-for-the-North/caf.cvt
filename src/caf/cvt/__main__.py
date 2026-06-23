@@ -15,18 +15,20 @@ from caf.cvt.model_config import Config
 
 LOG = logging.getLogger(__name__)
 
-warnings.filterwarnings(
-    "ignore",
-    message=r".*organizePolygons\(\) received a polygon with more than 100 parts.*",
-    category=RuntimeWarning,
-    module=r"pyogrio\.raw",
-)
+# TODO (DJ): Add a comment to explain why this warning is being ignored.
+#warnings.filterwarnings(
+#    "ignore",
+#    message=r".*organizePolygons\(\) received a polygon with more than 100 parts.*",
+#    category=RuntimeWarning,
+#    module=r"pyogrio\.raw",
+#)
 
-warnings.filterwarnings(
-    "ignore",
-    message="GeoSeries.notna",
-    category=UserWarning,
-)
+# TODO (DJ): Add a comment to explain why this warning is being ignored.
+#warnings.filterwarnings(
+#    "ignore",
+#    message="GeoSeries.notna",
+#    category=UserWarning,
+#)
 
 
 def _main() -> None:

@@ -313,6 +313,19 @@ def _get_bng_codes(boundary: gpd.GeoDataFrame) -> list[str]:
     return list(boundary_bng["bng_ref"])
 
 
+def validate_geometries(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Validate geometries in a GeoDataFrame, removing invalid ones."""
+    if gdf.geometry.is_empty.sum() > 0:
+        LOG.warning("Found %s empty geometries, removing them.", gdf.geometry.is_empty.sum())
+        gdf = gdf[~gdf.geometry.is_empty]
+    if gdf.geometry.notna().sum() < len(gdf):
+        LOG.warning(
+            "Found %s invalid geometries, removing them.",
+            len(gdf) - gdf.geometry.notna().sum()
+        )
+        gdf = gdf[gdf.geometry.notna()]
+    return gdf
+
 # DATA CLEANING
 
 
@@ -390,8 +403,7 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     os_road = os_road.drop_duplicates(subset=["id", "geometry"])
     os_road = os_road.rename(columns={"name_1": "name"})
     os_road = os_road.replace(0, "N/A")
-    os_road = os_road[~os_road.geometry.is_empty]
-    os_road = os_road[os_road.geometry.notna()]
+    os_road = validate_geometries(os_road)
     os_road = clip_to_boundary(os_road, boundary)
     filter_removed = len_before_filter - len(os_road)
     LOG.info(
@@ -425,8 +437,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         & (noham_network_clean["b"] >= NoHAM.NOHAM_ROAD_ID_THRESHOLD)
     ]
     noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
-    noham_network_clean = noham_network_clean[~noham_network_clean.geometry.is_empty]
-    noham_network_clean = noham_network_clean[noham_network_clean.geometry.notna()]
+    noham_network_clean = validate_geometries(noham_network_clean)
     noham_network_clipped = clip_to_boundary(noham_network_clean, boundary)
     noham_network_clipped = noham_network_clipped.reset_index(drop=True)
     filter_removed = len_before_filter - len(noham_network_clipped)
@@ -496,7 +507,7 @@ def _get_rail_links(
             "trackrepresentation": "track_rep",
         },
     )
-
+    rail_links = validate_geometries(rail_links)
     rail_links = clip_to_boundary(rail_links, boundary)
     filter_removed = len_before_filter - len(rail_links)
     LOG.info(
@@ -624,12 +635,13 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         [bus_stops_ne, bus_stops_nw, bus_stops_ys], ignore_index=True
     )  # Combine bus stops
     bus_stops = _df_to_gdf(bus_stops, "stop_lon", "stop_lat", "EPSG:4326")
-    bus_stops = bus_stops[["stop_id", "stop_name", "geometry"]]  # Filter out columns
+    bus_stops = bus_stops[["stop_id", "stop_name", "geometry"]]
     len_before_filter = len(bus_stops)
     bus_stops = bus_stops.drop_duplicates(
         subset=["stop_id", "geometry"]
     )  # Remove duplicate rows
-    bus_stops = clip_to_boundary(bus_stops, boundary)  # Clip to boundary
+    bus_stops = validate_geometries(bus_stops) 
+    bus_stops = clip_to_boundary(bus_stops, boundary)
     filter_removed = len_before_filter - len(bus_stops)
     LOG.info(
         "Bus stops filtered - %s of %s (%.1f percent) rows removed",
@@ -653,6 +665,7 @@ def _clean_petrol_stations(config: model_config.Config, boundary: gpd.GeoDataFra
     )
     len_before_filter = len(petrol_stations)
     petrol_stations = petrol_stations.drop_duplicates()
+    petrol_stations = validate_geometries(petrol_stations)
     petrol_stations = clip_to_boundary(petrol_stations, boundary)
     filter_removed = len_before_filter - len(petrol_stations)
     LOG.info(
@@ -681,6 +694,7 @@ def _clean_train_stations(config: model_config.Config, boundary: gpd.GeoDataFram
     ]
     train_stations = train_stations.drop(columns=["os_nodetype"])
     train_stations = train_stations.drop_duplicates()
+    train_stations = validate_geometries(train_stations)
     train_stations = clip_to_boundary(train_stations, boundary)
     filter_removed = len_before_filter - len(train_stations)
     LOG.info(
@@ -705,6 +719,7 @@ def _clean_tram_stations(config: model_config.Config, boundary: gpd.GeoDataFrame
     )
     len_before_filter = len(tram_stations)
     tram_stations = tram_stations.drop_duplicates()
+    tram_stations = validate_geometries(tram_stations)
     tram_stations = clip_to_boundary(tram_stations, boundary)
     filter_removed = len_before_filter - len(tram_stations)
     LOG.info(
@@ -731,6 +746,7 @@ def _clean_rapid_transport_stations(
     )
     len_before_filter = len(rapid_transport_stations)
     rapid_transport_stations = rapid_transport_stations.drop_duplicates()
+    rapid_transport_stations = validate_geometries(rapid_transport_stations)
     rapid_transport_stations = clip_to_boundary(rapid_transport_stations, boundary)
     filter_removed = len_before_filter - len(rapid_transport_stations)
     LOG.info(
@@ -755,6 +771,7 @@ def _clean_ferry_terminals(config: model_config.Config, boundary: gpd.GeoDataFra
     )
     len_before_filter = len(ferry_terminals)
     ferry_terminals = ferry_terminals.drop_duplicates()
+    ferry_terminals = validate_geometries(ferry_terminals)
     ferry_terminals = clip_to_boundary(ferry_terminals, boundary)
     filter_removed = len_before_filter - len(ferry_terminals)
     LOG.info(
@@ -779,6 +796,7 @@ def _clean_bus_coach_stations(config: model_config.Config, boundary: gpd.GeoData
     )
     len_before_filter = len(bus_coach_stations)
     bus_coach_stations = bus_coach_stations.drop_duplicates()
+    bus_coach_stations = validate_geometries(bus_coach_stations)
     bus_coach_stations = clip_to_boundary(bus_coach_stations, boundary)
     filter_removed = len_before_filter - len(bus_coach_stations)
     LOG.info(
@@ -855,8 +873,7 @@ def _clean_charging_sites(config: model_config.Config, boundary: gpd.GeoDataFram
     chg_sites = chg_sites.rename(columns={"identifier": "id", "value": "devices"})
     len_before_filter = len(chg_sites)
     chg_sites = chg_sites.drop_duplicates(subset=["geometry"])
-    chg_sites = chg_sites[~chg_sites.geometry.is_empty]
-    chg_sites = chg_sites[chg_sites.geometry.notna()]
+    chg_sites = validate_geometries(chg_sites)
     chg_sites = clip_to_boundary(chg_sites, boundary)
     filter_removed = len_before_filter - len(chg_sites)
     LOG.info(
@@ -902,6 +919,7 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
         "RoadClass",
     ]
     ncn[ncn_cols_replace] = ncn[ncn_cols_replace].replace(0, "N/A")
+    ncn = validate_geometries(ncn)
     ncn = clip_to_boundary(ncn, boundary)
     filter_removed = len_before_filter - len(ncn)
     LOG.info(
@@ -1419,7 +1437,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     bng_codes = _get_bng_codes(boundary)
 
     for flooding_type in config.hazards.flooding:
-        for scenario in Scenarios.all():
+        for scenario in list(Scenarios):
             LOG.info("Cleaning %s flooding data for %s scenario...", flooding_type, scenario)
             _clean_flooding_layer(
                 config=config,
@@ -1990,7 +2008,7 @@ def _process_single_noham_layer(
         time_period=time_period,
         user_class=user_class,
         noham_path=config.paths.raw_input / config.impact.noham_demand.zip_path,
-        output_path=config.paths.raw_input / config.impact.noham_demand.output_path,
+        output_path=config.paths.raw_input / file_paths.NOHAM_ZIP_EXTRACT_OUTPUT_PATH,
         extract=config.switches.noham_zip_extract,
     )
     noham_links["noham_link_id"] = (
