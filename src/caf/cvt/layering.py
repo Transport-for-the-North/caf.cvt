@@ -185,7 +185,7 @@ def _get_all_risk_cols(hazard_layers: dict[str, gpd.GeoDataFrame]) -> list[str]:
                 if "_risk" in col
             ]
         )
-    return list(set(risk_cols))
+    return list(dict.fromkeys(risk_cols))
 
 
 def _get_impact_weights(hazards: list[str]) -> dict[str, float]:

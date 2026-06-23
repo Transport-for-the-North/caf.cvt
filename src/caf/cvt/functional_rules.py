@@ -69,10 +69,10 @@ _EXTREME_WEATHER_WEIGHTS = {
 
 _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE = 1000
 _GROUND_STABILITY_RISK_SCORE_MAP = {  # Map risk scores to normalised values (0-100)
-    "Probable": 100,
-    "Possible": 66,
-    "Improbable": 33,
-    "Unavailable": 50,  # Assign neutral value
+    "Probable": 1,
+    "Possible": 0.66,
+    "Improbable": 0.33,
+    "Unavailable": 0.5,  # Assign neutral value
 }
 
 _GEOCLIMATE_YEAR_SCENARIO_MAP = {"2030": Scenarios.CURRENT, "2070": Scenarios.FORECAST}
@@ -122,7 +122,7 @@ def min_max_scaling_pair(
             List of 2-tuples of column names. Each tuple specifies a pair of
             columns that will share a single scaler.
         feature_range: Tuple[int, int], optional
-             Desired range of the transformed data. Defaults to ``(0, 100)``.
+             Desired range of the transformed data.
 
     Returns
     -------
@@ -461,7 +461,7 @@ def plot_choropleth_current_and_forecast(
         legend=True,
         vmin=feature_range[0],
         vmax=feature_range[1],
-        alpha=0.7 if basemap_source is not None else 1.0,
+        alpha=_PLOT_ALPHA_BASEMAP if basemap_source is not None else _PLOT_ALPHA_NO_BASEMAP,
     )
 
     if basemap_source is not None:
@@ -477,7 +477,11 @@ def plot_choropleth_current_and_forecast(
     plt.close()
 
 
-def _validate_index(index: gpd.GeoDataFrame, index_vars: list[str]) -> None:
+def _validate_index(
+        index: gpd.GeoDataFrame,
+        index_vars: list[str],
+        feature_range: tuple[int, int]
+) -> None:
     """Validate a given index."""
     if index.isna().any().any():
         raise ValueError("Index contains NA values.")
@@ -487,10 +491,10 @@ def _validate_index(index: gpd.GeoDataFrame, index_vars: list[str]) -> None:
             col = f"{var}_{scenario}"
             if col not in index.columns:
                 raise ValueError(f"Missing column: {col}")
-            if not index[col].between(0, 100).all():
+            if not index[col].between(feature_range[0], feature_range[1]).all():
                 raise ValueError(
                     f"{var.replace('_', ' ').title()} for {scenario} "
-                    f"contains values outside 0-100."
+                    f"contains values outside {feature_range[0]}-{feature_range[1]}."
                 )
 
 
@@ -622,6 +626,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
         "extreme_weather_risk",
     )
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
     extreme_weather_risk = min_max_scaling_pair(
         extreme_weather_risk,
         [
@@ -630,7 +635,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
                 f"extreme_weather_risk_{Scenarios.FORECAST}",
             )
         ],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     extreme_weather_risk = gpd.GeoDataFrame(
@@ -646,9 +651,9 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
             "storm_risk",
             "extreme_weather_risk",
         ],
+        feature_range
     )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
     _audit_index(
         extreme_weather_risk,
         [
@@ -694,6 +699,7 @@ def _extreme_heat_index(
         _EXTREME_HEAT_RISK_THRESHOLD,
     )
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
     extreme_heat = min_max_scaling_pair(
         extreme_heat,
         [
@@ -707,7 +713,7 @@ def _extreme_heat_index(
                 f"extreme_summer_days_{Scenarios.FORECAST}",
             ),
         ],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     extreme_heat = _calculate_composite_score(
@@ -724,7 +730,7 @@ def _extreme_heat_index(
                 f"extreme_heat_risk_{Scenarios.FORECAST}",
             )
         ],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     LOG.info("Extreme heat index calculation complete.")
@@ -738,6 +744,7 @@ def _extreme_heat_index(
             "extreme_summer_days",
             "extreme_heat_risk",
         ],
+        feature_range
     )
 
     _audit_index(
@@ -749,6 +756,7 @@ def _extreme_heat_index(
             "extreme_heat_risk",
         ],
         audit_path / "Extreme Weather" / "Extreme Heat Risk Index",
+        feature_range
     )
 
     return extreme_heat
@@ -776,6 +784,7 @@ def _extreme_cold_index(
         invert=True,
     )
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
     extreme_cold = min_max_scaling_pair(
         extreme_cold,
         [
@@ -786,7 +795,7 @@ def _extreme_cold_index(
             (f"frost_days_{Scenarios.CURRENT}", f"frost_days_{Scenarios.FORECAST}"),
             (f"icing_days_{Scenarios.CURRENT}", f"icing_days_{Scenarios.FORECAST}"),
         ],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     extreme_cold = _calculate_composite_score(
@@ -803,7 +812,7 @@ def _extreme_cold_index(
                 f"extreme_cold_risk_{Scenarios.FORECAST}",
             )
         ],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     extreme_cold = gpd.GeoDataFrame(extreme_cold, geometry="geometry", crs=hazard_grid.crs)
@@ -811,12 +820,14 @@ def _extreme_cold_index(
     _validate_index(
         extreme_cold,
         ["min_temp_winter_risk", "frost_days", "icing_days", "extreme_cold_risk"],
+        feature_range
     )
 
     _audit_index(
         extreme_cold,
         ["min_temp_winter_risk", "frost_days", "icing_days", "extreme_cold_risk"],
         audit_path / "Extreme Weather" / "Extreme Cold Risk Index",
+        feature_range
     )
 
     LOG.info("Extreme cold index calculation complete.")
@@ -875,6 +886,7 @@ def _drought_index(
         ]
     ]
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
     drought_risk = min_max_scaling_pair(
         drought_risk,
         [
@@ -884,15 +896,15 @@ def _drought_index(
             ),
             (f"precip_summer_{Scenarios.CURRENT}", f"precip_summer_{Scenarios.FORECAST}"),
         ],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     # Reverse the polarity for precipitation
     drought_risk[f"precip_summer_risk_{Scenarios.CURRENT}"] = (
-        100 - drought_risk[f"precip_summer_{Scenarios.CURRENT}"]
+        config.constants.score_max - drought_risk[f"precip_summer_{Scenarios.CURRENT}"]
     )
     drought_risk[f"precip_summer_risk_{Scenarios.FORECAST}"] = (
-        100 - drought_risk[f"precip_summer_{Scenarios.FORECAST}"]
+        config.constants.score_max - drought_risk[f"precip_summer_{Scenarios.FORECAST}"]
     )
 
     drought_risk = _calculate_composite_score(
@@ -904,22 +916,25 @@ def _drought_index(
     drought_risk = min_max_scaling_pair(
         drought_risk,
         [(f"drought_risk_{Scenarios.CURRENT}", f"drought_risk_{Scenarios.FORECAST}")],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     drought_risk = gpd.GeoDataFrame(
         drought_risk, geometry="geometry", crs=data_cleaning.BNG_CRS
     )
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
     _validate_index(
         drought_risk,
         ["drought_severity_index", "precip_summer_risk", "drought_risk"],
+        feature_range
     )
 
     _audit_index(
         drought_risk,
         ["drought_severity_index", "precip_summer_risk", "drought_risk"],
         audit_path / "Extreme Weather" / "Drought Risk Index",
+        feature_range
     )
 
     LOG.info("Drought index calculation complete.")
@@ -1003,6 +1018,7 @@ def _storm_index(
         f"wind_speed_99th_percentile_{Scenarios.FORECAST}"
     ].apply(_wind_risk_scaled)
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
     storm_risk = min_max_scaling_pair(
         storm_risk,
         [
@@ -1017,12 +1033,12 @@ def _storm_index(
                 f"wind_driven_rain_index_{Scenarios.FORECAST}",
             ),
         ],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     # Scale rain days on its own, then duplicate
     scaler = sklearn.preprocessing.MinMaxScaler(
-        feature_range=(config.constants.score_min, config.constants.score_max)
+        feature_range=feature_range
     )
     storm_risk[f"10mm_rain_days_{Scenarios.CURRENT}"] = scaler.fit_transform(
         storm_risk[[f"10mm_rain_days_{Scenarios.CURRENT}"]]
@@ -1040,6 +1056,7 @@ def _storm_index(
     storm_risk = min_max_scaling_pair(
         storm_risk,
         [(f"storm_risk_{Scenarios.CURRENT}", f"storm_risk_{Scenarios.FORECAST}")],
+        feature_range
     )
 
     storm_risk = gpd.GeoDataFrame(storm_risk, geometry="geometry", crs=data_cleaning.BNG_CRS)
@@ -1054,6 +1071,7 @@ def _storm_index(
             "wind_speed_risk",
             "storm_risk",
         ],
+        feature_range
     )
 
     _audit_index(
@@ -1067,6 +1085,7 @@ def _storm_index(
             "storm_risk",
         ],
         audit_path / "Extreme Weather" / "Storm Risk Index",
+        feature_range
     )
 
     LOG.info("Storm index calculation complete.")
@@ -1101,7 +1120,8 @@ def _flooding_index(
         for flooding_type in config.hazards.flooding:
             for scenario in Scenarios.all():
                 flooding_paths.append(
-                    file_paths.FLOODING_MODEL_INPUT_PATH
+                    config.paths.model_input
+                    / file_paths.FLOODING_MODEL_INPUT_PATH
                     / flooding_type
                     / scenario
                     / f"{flooding_type}_{scenario}.gpkg"
@@ -1153,6 +1173,7 @@ def _flooding_index(
     # Fill NA values with 0 (no risk) since no data means no risk in the underlying data
     flooding_risk = flooding_risk.fillna(0)
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
     flooding_risk = min_max_scaling_pair(
         flooding_risk,
         [
@@ -1165,7 +1186,7 @@ def _flooding_index(
                 f"surface_water_flooding_risk_{Scenarios.FORECAST}",
             ),
         ],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     flooding_risk = _calculate_composite_score(
@@ -1179,18 +1200,21 @@ def _flooding_index(
         [
             (f"flooding_risk_{Scenarios.CURRENT}", f"flooding_risk_{Scenarios.FORECAST}"),
         ],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     _validate_index(
         flooding_risk,
         ["rivers_sea_flooding_risk", "surface_water_flooding_risk", "flooding_risk"],
+        feature_range
     )
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
     _audit_index(
         flooding_risk,
         ["rivers_sea_flooding_risk", "surface_water_flooding_risk", "flooding_risk"],
         audit_path / "Flooding" / "Flooding Risk Index",
+        feature_range
     )
 
     data_cleaning.write_to_file(
@@ -1208,7 +1232,7 @@ def _tile_polygon_flooding_overlay(
     layer_paths: list[pathlib.Path],
     crs: str,
     tile_size_m: int = 5000,
-) -> gpd.GeoDataFrame:
+) -> None:
     """Chunked polygon-polygon overlay using a tile grid."""
     # Create tiles
     tiles = _create_flooding_tiles(config, boundary, tile_size_m)
@@ -1347,10 +1371,11 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
         for col in GroundStabilityCols.all()
     ]
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
     ground_stability = min_max_scaling_pair(
         ground_stability,
         gs_pairs,
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     ground_stability = _calculate_composite_score(
@@ -1367,18 +1392,20 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
                 f"ground_stability_risk_{Scenarios.FORECAST}",
             )
         ],
-        (config.constants.score_min, config.constants.score_max)
+        feature_range
     )
 
     _validate_index(
         ground_stability,
         [f"{col}_risk" for col in GroundStabilityCols.all()] + ["ground_stability_risk"],
+        feature_range
     )
 
     _audit_index(
         ground_stability,
         [f"{col}_risk" for col in GroundStabilityCols.all()] + ["ground_stability_risk"],
         audit_path / "Ground Stability" / "Ground Stability Risk Index",
+        feature_range
     )
 
     data_cleaning.write_to_file(
@@ -1399,7 +1426,7 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
     ncerm_giz = gpd.read_file(
         config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH
     )
-    ncerm_giz["giz_risk"] = 100
+    ncerm_giz["giz_risk"] = config.constants.score_max
 
     ncerm = {}
     erosion_risk = {}
@@ -1432,7 +1459,7 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
             )
             return
 
-        ncerm[year]["erosion_risk"] = 100
+        ncerm[year]["erosion_risk"] = config.constants.score_max
 
         erosion_risk[scenario] = _overlay_and_clean(
             ncerm_giz, ncerm[year], target_crs=data_cleaning.BNG_CRS
@@ -1471,15 +1498,18 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
         ]
     ]
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
     _validate_index(
         coastal_erosion_risk,
         ["coastal_erosion_risk"],
+        feature_range
     )
 
     _audit_index(
         coastal_erosion_risk,
         ["coastal_erosion_risk"],
         audit_path / "Coastal Erosion" / "Coastal Erosion Risk Index",
+        feature_range
     )
 
     data_cleaning.write_to_file(

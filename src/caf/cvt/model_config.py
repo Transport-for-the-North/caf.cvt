@@ -10,6 +10,8 @@ import pydantic
 
 
 def _check_none(value: str) -> str | None:
+    if value is None:
+        return value
     value = value.strip()
     if value in ("", "null"):
         return None
