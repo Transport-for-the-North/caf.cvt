@@ -293,13 +293,13 @@ class ImpactConfig(ctk.BaseConfig):
         Path to the freight demand data.
     noham_demand : ZipFileEntry
         Configuration for NoHAM demand zip file entry.
-    noham_years: list[int]
-        List of years for NoHAM demand scenarios.
+    noham_years: dict[str, int]
+        Dictionary of years for NoHAM demand scenarios.
     """
 
     freight_demand: pathlib.Path
     noham_demand: ZipFileEntry
-    noham_years: list[str]
+    noham_years: dict[str, int]
 
 
 class SwitchConfig(ctk.BaseConfig):
@@ -450,6 +450,18 @@ class ParameterConfig(ctk.BaseConfig):
         return self
 
 
+class ConstantConfig(ctk.BaseConfig):
+    """Configuration for model constants.
+
+    Attributes
+    ----------
+    noham_road_id_threshold : int
+        Threshold for NoHAM road IDs.
+    """
+
+    noham_road_id_threshold: int
+
+
 # -------------------------
 # MAIN CONFIG
 # -------------------------
@@ -472,6 +484,8 @@ class Config(ctk.BaseConfig):
         Configuration for hazards data.
     impact : ImpactConfig
         Configuration for impact data.
+    constants: ConstantConfig
+        Configuration for model constants.
     """
 
     switches: SwitchConfig
@@ -481,3 +495,4 @@ class Config(ctk.BaseConfig):
     infrastructure: InfrastructureConfig
     hazards: HazardsConfig
     impact: ImpactConfig
+    constants: ConstantConfig

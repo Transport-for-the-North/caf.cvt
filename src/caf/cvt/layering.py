@@ -349,7 +349,8 @@ def _noham_road_risk(
 
     noham_risk = _infrastructure_risk_intersect(noham_net_flows, hazard_layers)
 
-    noham_risk = _noham_impact_index(noham_risk)
+    feature_range = (config.constants.score_min, config.constants.score_max)
+    noham_risk = _noham_impact_index(noham_risk, feature_range)
 
     risk_impact_cols = [*risk_cols, *NoHAMImpactCols.all()]
 
@@ -379,22 +380,29 @@ def _noham_road_risk(
     LOG.info("Finished layering NoHAM with hazard risk and calculating impact index.")
 
 
-def _noham_impact_index(noham: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _noham_impact_index(
+        noham: gpd.GeoDataFrame,
+        feature_range: tuple[int, int]
+) -> gpd.GeoDataFrame:
     """Normalise NoHAM demand, then calculate impact index."""
-    noham = _normalise_uc_demand(noham)
-    noham = _normalise_total_demand(noham)
+    noham = _normalise_uc_demand(noham, feature_range)
+    noham = _normalise_total_demand(noham, feature_range)
     noham = _calculate_noham_impact(noham)
-    return _normalise_noham_impact(noham)
+    return _normalise_noham_impact(noham, feature_range)
 
 
-def _normalise_uc_demand(noham: pd.DataFrame) -> pd.DataFrame:
+def _normalise_uc_demand(noham: pd.DataFrame, feature_range: tuple[int, int]) -> pd.DataFrame:
     """Normalise NoHAM demand for each user class individually."""
     pairs = [
         (f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}")
         for uc in NoHAM.all_user_classes()
     ]
 
-    noham = functional_rules.min_max_scaling_pair(noham, pairs)
+    noham = functional_rules.min_max_scaling_pair(
+        noham,
+        pairs,
+        feature_range
+    )
 
     rename_map = {
         col: col.replace("total", "demand")
@@ -404,10 +412,13 @@ def _normalise_uc_demand(noham: pd.DataFrame) -> pd.DataFrame:
     return noham.rename(columns=rename_map)
 
 
-def _normalise_total_demand(noham: pd.DataFrame) -> pd.DataFrame:
+def _normalise_total_demand(
+        noham: pd.DataFrame,
+        feature_range: tuple[int, int]
+) -> pd.DataFrame:
     """Normalise NoHAM demand across all user classes combined."""
     pairs = [(f"all_vehs_total_{Scenarios.CURRENT}", f"all_vehs_total_{Scenarios.FORECAST}")]
-    noham = functional_rules.min_max_scaling_pair(noham, pairs)
+    noham = functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
     return noham.rename(
         columns={
             f"all_vehs_total_{Scenarios.CURRENT}": f"demand_{Scenarios.CURRENT}",
@@ -446,6 +457,7 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
 
 def _normalise_noham_impact(
     noham: pd.DataFrame,
+    feature_range: tuple[int, int]
 ) -> pd.DataFrame:
     """Normalise NoHAM impact scores across all user classes combined."""
     pairs = [
@@ -453,7 +465,7 @@ def _normalise_noham_impact(
         for uc in NoHAM.all_user_classes()
     ] + [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")]
 
-    return functional_rules.min_max_scaling_pair(noham, pairs)
+    return functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
 
 
 ### RAIL
@@ -555,7 +567,8 @@ def _freight_rail_risk(
         freight_rail_network, hazard_layers
     )
 
-    freight_rail_network_risk = _freight_impact_index(freight_rail_network_risk)
+    feature_range = (config.constants.score_min, config.constants.score_max)
+    freight_rail_network_risk = _freight_impact_index(freight_rail_network_risk, feature_range)
 
     # Set the correct CRS
     freight_rail_network_risk = freight_rail_network_risk.set_crs(
@@ -602,11 +615,15 @@ def _freight_rail_risk(
     )
 
 
-def _freight_impact_index(freight_rail_network_risk: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _freight_impact_index(
+        freight_rail_network_risk: gpd.GeoDataFrame,
+        feature_range: tuple[int, int]
+) -> gpd.GeoDataFrame:
     """Calculate impact index using freight demand data and hazard risk."""
     freight_rail_network_risk = functional_rules.min_max_scaling_pair(
         freight_rail_network_risk,
         [(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")],
+        feature_range
     )
 
     freight_rail_network_risk = _calculate_freight_impact(freight_rail_network_risk)
@@ -614,6 +631,7 @@ def _freight_impact_index(freight_rail_network_risk: gpd.GeoDataFrame) -> gpd.Ge
     freight_rail_network_risk = functional_rules.min_max_scaling_pair(
         freight_rail_network_risk,
         [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")],
+        feature_range
     )
 
     return gpd.GeoDataFrame(freight_rail_network_risk, geometry="geometry", crs="EPSG:4326")

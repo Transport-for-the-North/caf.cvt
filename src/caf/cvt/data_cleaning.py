@@ -1863,8 +1863,15 @@ def _clean_noham_flows(config: model_config.Config) -> None:
     network_link_ids = set(noham_network["link_id"])
 
     scenario_flows = {}
-    for year in config.impact.noham_years:
-        scenario = NoHAM.get_scenario(year)
+    for year_label, year in config.impact.noham_years.items():
+        if year_label == "baseline":
+            scenario = Scenarios.CURRENT
+        elif year_label == "future":
+            scenario = Scenarios.FORECAST
+        else:
+            raise ValueError(
+                f"Unexpected year label: {year_label}, expects 'baseline' or 'future'."
+            )
         flows = _aggregate_link_flows_year(config, year, network_link_ids)
 
         flows = flows.rename(

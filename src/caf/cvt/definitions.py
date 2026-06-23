@@ -153,8 +153,8 @@ class Scenarios(Columns):
         return f"{cls.CURRENT}_or_{cls.FORECAST}"
 
 
-class NoHAM:
-    """Definitions for NoHAM data."""
+class NoHAMUserClasses(Columns):
+    """Definitions for NoHAM user classes."""
 
     USER_CLASS_1 = "uc1"
     USER_CLASS_2 = "uc2"
@@ -162,33 +162,10 @@ class NoHAM:
     USER_CLASS_4 = "uc4"
     USER_CLASS_5 = "uc5"
 
+
+class NoHAMTimePeriods(Columns):
+    """Definitions for NoHAM time periods."""
+
     TIME_PERIOD_1 = "TS1"
     TIME_PERIOD_2 = "TS2"
     TIME_PERIOD_3 = "TS3"
-
-    NOHAM_ROAD_ID_THRESHOLD = 10000
-
-    @classmethod
-    def all_user_classes(cls) -> list[str]:
-        """Return a list of all NoHAM user classes."""
-        return [
-            cls.USER_CLASS_1,
-            cls.USER_CLASS_2,
-            cls.USER_CLASS_3,
-            cls.USER_CLASS_4,
-            cls.USER_CLASS_5,
-        ]
-
-    @classmethod
-    def all_time_periods(cls) -> list[str]:
-        """Return a list of all NoHAM time periods."""
-        return [cls.TIME_PERIOD_1, cls.TIME_PERIOD_2, cls.TIME_PERIOD_3]
-
-    @classmethod
-    def get_scenario(cls, year: str) -> str:
-        """Return the scenario corresponding to a given year."""
-        mapping = {
-            2023: Scenarios.CURRENT,
-            2048: Scenarios.FORECAST,
-        }
-        return mapping[int(year)]

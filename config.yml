@@ -132,10 +132,14 @@ impact:
     file_path: 
     output_path: Impact/NoHAM Link Flows/h5 files
   noham_years:
-    - 2023
-    - 2048
+    baseline: 2023
+    future: 2048
 
 
+##### CONSTANTS #####
+constants:
+  noham_road_id_threshold: 10000
 
-
+  score_min: 0
+  score_max: 100
 
