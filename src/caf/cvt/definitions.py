@@ -134,7 +134,7 @@ class StormCols(PlottingColumn):
     RAIN_DAYS = "10mm_rain_days"
     PRECIP_WINTER = "precip_winter"
     EXCEEDANCE_DAYS = "avg_exceedance_days"
-    WIND_SPEED_RISK = "wind_speed_risk"
+    WIND_SPEED = "wind_speed"
     WIND_DRIVEN_RAIN_INDEX = "wind_driven_rain_index"
 
     def get_cmap(self) -> str:
