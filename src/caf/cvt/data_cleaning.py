@@ -640,7 +640,7 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     bus_stops = bus_stops.drop_duplicates(
         subset=["stop_id", "geometry"]
     )  # Remove duplicate rows
-    bus_stops = validate_geometries(bus_stops) 
+    bus_stops = validate_geometries(bus_stops)
     bus_stops = clip_to_boundary(bus_stops, boundary)
     filter_removed = len_before_filter - len(bus_stops)
     LOG.info(
