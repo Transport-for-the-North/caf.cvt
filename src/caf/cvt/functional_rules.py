@@ -19,6 +19,7 @@ from shapely.geometry import Polygon, box
 
 from caf.cvt import data_cleaning, file_paths, model_config
 from caf.cvt.definitions import (
+    CoastalErosionRiskCols,
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
@@ -36,36 +37,42 @@ LOG = logging.getLogger(__name__)
 
 _EXTREME_HEAT_RISK_THRESHOLD = 30
 _EXTREME_HEAT_WEIGHTS = {
-    "max_temp_summer_risk": 0.5,
-    "hot_summer_days": 0.25,
-    "extreme_summer_days": 0.25,
+    ExtremeHeatCols.MAX_TEMP_SUMMER: 0.5,
+    ExtremeHeatCols.HOT_SUMMER_DAYS: 0.25,
+    ExtremeHeatCols.EXTREME_SUMMER_DAYS: 0.25,
 }
 
 _EXTREME_COLD_RISK_THRESHOLD = 0
-_EXTREME_COLD_WEIGHTS = {"min_temp_winter_risk": 0.5, "frost_days": 0.25, "icing_days": 0.25}
+_EXTREME_COLD_WEIGHTS = {
+    ExtremeColdCols.MIN_TEMP_WINTER: 0.5,
+    ExtremeColdCols.FROST_DAYS: 0.25,
+    ExtremeColdCols.ICING_DAYS: 0.25
+}
 
 _WIND_SPEED_RISK_THRESHOLD_LOWER = 13.4  # 30 mph in m/s (should not exceed upper threshold)
 _WIND_SPEED_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s (should not exceed 25)
 _EXTREME_WIND_MAX = 25
 
 _DROUGHT_NEAREST_JOIN_MAX_DISTANCE = 10000
-_DROUGHT_WEIGHTS = {"drought_severity_index": 0.75, "precip_summer": 0.25}
+_DROUGHT_WEIGHTS = {
+    DroughtCols.DROUGHT_SEVERITY_INDEX: 0.75,
+    DroughtCols.PRECIP_SUMMER: 0.25}
 
 _STORM_NEAREST_JOIN_MAX_DISTANCE = 5000
 _STORM_WEIGHTS = {
-    "wind_speed_risk": 0.3,
-    "avg_exceedance_days": 0.2,
-    "precip_winter": 0.15,
-    "10mm_rain_days": 0.15,
-    "wind_driven_rain_index": 0.2,
+    StormCols.WIND_SPEED: 0.3,
+    StormCols.EXCEEDANCE_DAYS: 0.2,
+    StormCols.PRECIP_WINTER: 0.15,
+    StormCols.RAIN_DAYS: 0.15,
+    StormCols.WIND_DRIVEN_RAIN_INDEX: 0.2,
 }
 
 _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE = 10000
 _EXTREME_WEATHER_WEIGHTS = {
-    "extreme_heat_risk": 0.25,
-    "extreme_cold_risk": 0.25,
-    "drought_risk": 0.25,
-    "storm_risk": 0.25,
+    ExtremeWeatherRiskCols.EXTREME_HEAT: 0.25,
+    ExtremeWeatherRiskCols.EXTREME_COLD: 0.25,
+    ExtremeWeatherRiskCols.DROUGHT: 0.25,
+    ExtremeWeatherRiskCols.STORM: 0.25,
 }
 
 _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE = 1000
@@ -78,22 +85,28 @@ _GROUND_STABILITY_RISK_SCORE_MAP = {  # Map risk scores to normalised values (0-
 
 _GEOCLIMATE_YEAR_SCENARIO_MAP = {"2030": Scenarios.CURRENT, "2070": Scenarios.FORECAST}
 _GROUND_STABILITY_WEIGHTS = {
-    "shrink_swell_geoclimate_risk": 0.40,
-    "landslides_risk": 0.10,
-    "shrink_swell_risk": 0.10,
-    "compressible_ground_risk": 0.10,
-    "collapsible_deposits_risk": 0.10,
-    "running_sand_risk": 0.10,
-    "soluble_rocks_risk": 0.10,
+    GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE: 0.40,
+    GroundStabilityRiskCols.LANDSLIDES: 0.10,
+    GroundStabilityRiskCols.SHRINK_SWELL: 0.10,
+    GroundStabilityRiskCols.COMPRESSIBLE_GROUND: 0.10,
+    GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: 0.10,
+    GroundStabilityRiskCols.RUNNING_SAND: 0.10,
+    GroundStabilityRiskCols.SOLUBLE_ROCKS: 0.10,
 }
 
 _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
-_COASTAL_EROSION_WEIGHTS = {"erosion_risk": 0.9, "giz_risk": 0.1}
+_COASTAL_EROSION_WEIGHTS = {
+    CoastalErosionRiskCols.EROSION: 0.9,
+    CoastalErosionRiskCols.GIZ: 0.1
+}
 
 _FLOODING_TILE_SIZE_M = 10000
 _FLOODING_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
-_FLOODING_WEIGHTS = {"rivers_sea_flooding_risk": 0.5, "surface_water_flooding_risk": 0.5}
+_FLOODING_WEIGHTS = {
+    FloodingRiskCols.RIVERS_SEA: 0.5,
+    FloodingRiskCols.SURFACE_WATER: 0.5
+}
 
 _PLOT_ALPHA_BASEMAP = 0.7
 _PLOT_ALPHA_NO_BASEMAP = 1.0
@@ -619,25 +632,13 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
 
     _validate_index(
         extreme_weather_risk,
-        [
-            ExtremeWeatherRiskCols.EXTREME_HEAT,
-            ExtremeWeatherRiskCols.EXTREME_COLD,
-            ExtremeWeatherRiskCols.DROUGHT,
-            ExtremeWeatherRiskCols.STORM,
-            ExtremeWeatherRiskCols.EXTREME_WEATHER,
-        ],
+        [*list(ExtremeWeatherRiskCols), MainHazardRiskCols.EXTREME_WEATHER],
         feature_range
     )
 
     _audit_index(
         extreme_weather_risk,
-        [
-            ExtremeWeatherRiskCols.EXTREME_HEAT,
-            ExtremeWeatherRiskCols.EXTREME_COLD,
-            ExtremeWeatherRiskCols.DROUGHT,
-            ExtremeWeatherRiskCols.STORM,
-            ExtremeWeatherRiskCols.EXTREME_WEATHER,
-        ],
+        [*list(ExtremeWeatherRiskCols), MainHazardRiskCols.EXTREME_WEATHER],
         audit_path / "Extreme Weather" / "Extreme Weather Risk Index",
         feature_range
     )
@@ -714,23 +715,13 @@ def _extreme_heat_index(
 
     _validate_index(
         extreme_heat,
-        [
-            ExtremeHeatCols.MAX_TEMP_SUMMER,
-            ExtremeHeatCols.HOT_SUMMER_DAYS,
-            ExtremeHeatCols.EXTREME_SUMMER_DAYS,
-            ExtremeWeatherRiskCols.EXTREME_HEAT,
-        ],
+        [*list(ExtremeHeatCols), ExtremeWeatherRiskCols.EXTREME_HEAT],
         feature_range
     )
 
     _audit_index(
         extreme_heat,
-        [
-            ExtremeHeatCols.MAX_TEMP_SUMMER,
-            ExtremeHeatCols.HOT_SUMMER_DAYS,
-            ExtremeHeatCols.EXTREME_SUMMER_DAYS,
-            ExtremeWeatherRiskCols.EXTREME_HEAT,
-        ],
+        [*list(ExtremeHeatCols), ExtremeWeatherRiskCols.EXTREME_HEAT],
         audit_path / "Extreme Weather" / "Extreme Heat Risk Index",
         feature_range
     )
@@ -795,15 +786,13 @@ def _extreme_cold_index(
 
     _validate_index(
         extreme_cold,
-        [ExtremeColdCols.MIN_TEMP_WINTER, ExtremeColdCols.FROST_DAYS,
-         ExtremeColdCols.ICING_DAYS, ExtremeWeatherRiskCols.EXTREME_COLD],
+        [*list(ExtremeColdCols), ExtremeWeatherRiskCols.EXTREME_COLD],
         feature_range
     )
 
     _audit_index(
         extreme_cold,
-        [ExtremeColdCols.MIN_TEMP_WINTER, ExtremeColdCols.FROST_DAYS,
-         ExtremeColdCols.ICING_DAYS, ExtremeWeatherRiskCols.EXTREME_COLD],
+        [*list(ExtremeColdCols), ExtremeWeatherRiskCols.EXTREME_COLD],
         audit_path / "Extreme Weather" / "Extreme Cold Risk Index",
         feature_range
     )
@@ -908,15 +897,13 @@ def _drought_index(
     feature_range = (config.constants.score_min, config.constants.score_max)
     _validate_index(
         drought_risk,
-        [DroughtCols.DROUGHT_SEVERITY_INDEX,
-         DroughtCols.PRECIP_SUMMER, DroughtCols.DROUGHT_RISK],
+        [*list(DroughtCols), ExtremeWeatherRiskCols.DROUGHT],
         feature_range
     )
 
     _audit_index(
         drought_risk,
-        [DroughtCols.DROUGHT_SEVERITY_INDEX,
-         DroughtCols.PRECIP_SUMMER, DroughtCols.DROUGHT_RISK],
+        [*list(DroughtCols), ExtremeWeatherRiskCols.DROUGHT],
         audit_path / "Extreme Weather" / "Drought Risk Index",
         feature_range
     )
@@ -1050,27 +1037,13 @@ def _storm_index(
 
     _validate_index(
         storm_risk,
-        [
-            StormCols.RAIN_DAYS_10MM,
-            StormCols.PRECIP_WINTER,
-            StormCols.AVG_EXCEEDANCE_DAYS,
-            StormCols.WIND_DRIVEN_RAIN_INDEX,
-            StormCols.WIND_SPEED,
-            ExtremeWeatherRiskCols.STORM,
-        ],
+        [*list(StormCols), ExtremeWeatherRiskCols.STORM],
         feature_range
     )
 
     _audit_index(
         storm_risk,
-        [
-            StormCols.RAIN_DAYS_10MM,
-            StormCols.PRECIP_WINTER,
-            StormCols.AVG_EXCEEDANCE_DAYS,
-            StormCols.WIND_DRIVEN_RAIN_INDEX,
-            StormCols.WIND_SPEED,
-            ExtremeWeatherRiskCols.STORM,
-        ],
+        [*list(StormCols), ExtremeWeatherRiskCols.STORM],
         audit_path / "Extreme Weather" / "Storm Risk Index",
         feature_range
     )
@@ -1193,16 +1166,14 @@ def _flooding_index(
 
     _validate_index(
         flooding_risk,
-        [FloodingRiskCols.RIVERS_SEA, FloodingRiskCols.SURFACE_WATER,
-         MainHazardRiskCols.FLOODING],
+       [*list(FloodingRiskCols), MainHazardRiskCols.FLOODING],
         feature_range
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
     _audit_index(
         flooding_risk,
-        [FloodingRiskCols.RIVERS_SEA, FloodingRiskCols.SURFACE_WATER,
-         MainHazardRiskCols.FLOODING],
+        [*list(FloodingRiskCols), MainHazardRiskCols.FLOODING],
         audit_path / "Flooding" / "Flooding Risk Index",
         feature_range
     )
@@ -1420,7 +1391,7 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
     ncerm_giz = gpd.read_file(
         config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH
     )
-    ncerm_giz["giz_risk"] = config.constants.score_max
+    ncerm_giz[CoastalErosionRiskCols.GIZ] = config.constants.score_max
 
     ncerm = {}
     erosion_risk = {}
@@ -1453,7 +1424,7 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
             )
             return
 
-        ncerm[year]["erosion_risk"] = config.constants.score_max
+        ncerm[year][CoastalErosionRiskCols.EROSION] = config.constants.score_max
 
         erosion_risk[scenario] = _overlay_and_clean(
             ncerm_giz, ncerm[year], target_crs=data_cleaning.BNG_CRS
@@ -1461,8 +1432,10 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
 
         # Compute composite risk score
         erosion_risk[scenario][f"{MainHazardRiskCols.COASTAL_EROSION}"] = (
-            erosion_risk[scenario]["erosion_risk"] * _COASTAL_EROSION_WEIGHTS["erosion_risk"]
-            + erosion_risk[scenario]["giz_risk"] * _COASTAL_EROSION_WEIGHTS["giz_risk"]
+            erosion_risk[scenario][CoastalErosionRiskCols.EROSION] *
+            _COASTAL_EROSION_WEIGHTS[CoastalErosionRiskCols.EROSION]
+            + erosion_risk[scenario][CoastalErosionRiskCols.GIZ] *
+            _COASTAL_EROSION_WEIGHTS[CoastalErosionRiskCols.GIZ]
         )
 
         erosion_risk[scenario] = erosion_risk[scenario].rename(

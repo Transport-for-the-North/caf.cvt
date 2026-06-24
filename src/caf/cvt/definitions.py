@@ -12,6 +12,11 @@ class PlottingColumn(enum.StrEnum):
         """Return the appropriate colormap for a given plotting column."""
         raise NotImplementedError("Subclasses must implement the get_cmap method.")
 
+    @property
+    def base_name(self) -> str:
+        """Return the base name of the plotting column."""
+        return self.removesuffix("_risk")
+
 
 
 class MainHazardRiskCols(PlottingColumn):
@@ -80,6 +85,16 @@ class GroundStabilityRiskCols(PlottingColumn):
         """Return the appropriate colormap for a given ground stability subhazard column."""
         return "Oranges"
 
+class CoastalErosionRiskCols(PlottingColumn):
+    """Column definitions for coastal erosion subhazard layers."""
+
+    EROSION = "erosion_risk"
+    GIZ = "giz_risk"
+
+    @classmethod
+    def get_cmap(cls) -> str:
+        """Return the appropriate colormap for a given coastal erosion subhazard column."""
+        return "Purples"
 
 class ExtremeHeatCols(PlottingColumn):
     """Column definitions for extreme heat subhazard layers."""

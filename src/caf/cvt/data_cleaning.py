@@ -15,7 +15,7 @@ import xarray as xr
 from shapely import geometry
 
 from caf.cvt import file_paths, model_config
-from caf.cvt.definitions import NoHAM, Scenarios
+from caf.cvt.definitions import DroughtCols, ExtremeColdCols, ExtremeHeatCols, GroundStabilityRiskCols, NoHAM, Scenarios, StormCols
 
 LOG = logging.getLogger(__name__)
 
@@ -1011,13 +1011,15 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     temp_max = temp_max.drop(columns=["geometry"])
     temp_max = temp_max.rename(
         columns={
-            "tasmax_summer_01_20_median": f"max_temp_summer_{Scenarios.CURRENT}",
-            "tasmax_summer_change_40_median": f"max_temp_summer_{Scenarios.FORECAST}",
+            "tasmax_summer_01_20_median":
+            f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.CURRENT}",
+            "tasmax_summer_change_40_median":
+            f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.FORECAST}",
         }
     )
-    temp_max[f"max_temp_summer_{Scenarios.FORECAST}"] = (
-        temp_max[f"max_temp_summer_{Scenarios.CURRENT}"]
-        + temp_max[f"max_temp_summer_{Scenarios.FORECAST}"]
+    temp_max[f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.FORECAST}"] = (
+        temp_max[f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.CURRENT}"]
+        + temp_max[f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.FORECAST}"]
     )
     len_before_filter = len(temp_max)
     temp_max = temp_max[temp_max["grid_id"].isin(grid["grid_id"])]
@@ -1042,13 +1044,15 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     temp_min = temp_min.drop(columns=["geometry"])
     temp_min = temp_min.rename(
         columns={
-            "tasmin_winter_01_20_median": f"min_temp_winter_{Scenarios.CURRENT}",
-            "tasmin_winter_change_40_median": f"min_temp_winter_{Scenarios.FORECAST}",
+            "tasmin_winter_01_20_median":
+            f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.CURRENT}",
+            "tasmin_winter_change_40_median":
+            f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.FORECAST}",
         }
     )
-    temp_min[f"min_temp_winter_{Scenarios.FORECAST}"] = (
-        temp_min[f"min_temp_winter_{Scenarios.CURRENT}"]
-        + temp_min[f"min_temp_winter_{Scenarios.FORECAST}"]
+    temp_min[f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.FORECAST}"] = (
+        temp_min[f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.CURRENT}"]
+        + temp_min[f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.FORECAST}"]
     )
     len_before_filter = len(temp_min)
     temp_min = temp_min[temp_min["grid_id"].isin(grid["grid_id"])]
@@ -1076,14 +1080,18 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     precip_sum = precip_sum.drop(columns=["geometry"])
     precip_sum = precip_sum.rename(
         columns={
-            "pr_summer_01_20_median": f"precip_summer_{Scenarios.CURRENT}",
-            "pr_summer_change_40_median": f"precip_summer_pct_chg_{Scenarios.FORECAST}",
+            "pr_summer_01_20_median":
+            f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}",
+            "pr_summer_change_40_median":
+            f"{DroughtCols.PRECIP_SUMMER}_pct_chg_{Scenarios.FORECAST}",
         }
     )
-    precip_sum[f"precip_summer_{Scenarios.FORECAST}"] = precip_sum[
-        f"precip_summer_{Scenarios.CURRENT}"
-    ] * (1 + (precip_sum[f"precip_summer_pct_chg_{Scenarios.FORECAST}"] / 100))
-    precip_sum = precip_sum.drop(columns=[f"precip_summer_pct_chg_{Scenarios.FORECAST}"])
+    precip_sum[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}"] = precip_sum[
+        f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}"
+    ] * (1 + (precip_sum[f"{DroughtCols.PRECIP_SUMMER}_pct_chg_{Scenarios.FORECAST}"] / 100))
+    precip_sum = precip_sum.drop(
+        columns=[f"{DroughtCols.PRECIP_SUMMER}_pct_chg_{Scenarios.FORECAST}"]
+    )
     len_before_filter = len(precip_sum)
     precip_sum = precip_sum[precip_sum["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(precip_sum)
@@ -1109,14 +1117,18 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     precip_win = precip_win.drop(columns=["geometry"])
     precip_win = precip_win.rename(
         columns={
-            "pr_winter_01_20_median": f"precip_winter_{Scenarios.CURRENT}",
-            "pr_winter_change_40_median": f"precip_winter_pct_chg_{Scenarios.FORECAST}",
+            "pr_winter_01_20_median":
+            f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",
+            "pr_winter_change_40_median":
+            f"{StormCols.PRECIP_WINTER}_pct_chg_{Scenarios.FORECAST}",
         },
     )
-    precip_win[f"precip_winter_{Scenarios.FORECAST}"] = precip_win[
-        f"precip_winter_{Scenarios.CURRENT}"
-    ] * (1 + (precip_win[f"precip_winter_pct_chg_{Scenarios.FORECAST}"] / 100))
-    precip_win = precip_win.drop(columns=[f"precip_winter_pct_chg_{Scenarios.FORECAST}"])
+    precip_win[f"{StormCols.PRECIP_WINTER}_{Scenarios.FORECAST}"] = precip_win[
+        f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}"
+    ] * (1 + (precip_win[f"{StormCols.PRECIP_WINTER}_pct_chg_{Scenarios.FORECAST}"] / 100))
+    precip_win = precip_win.drop(
+        columns=[f"{StormCols.PRECIP_WINTER}_pct_chg_{Scenarios.FORECAST}"]
+    )
     len_before_filter = len(precip_win)
     precip_win = precip_win[precip_win["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(precip_win)
@@ -1141,7 +1153,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     len_before_filter = len(rain_days)
     rain_days = clip_to_boundary(rain_days, boundary)
     rain_days = rain_days.rename(
-        columns={"Rain10mmDays": f"10mm_rain_days_{Scenarios.CURRENT}"}
+        columns={"Rain10mmDays": f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}"}
     )
     filter_removed = len_before_filter - len(rain_days)
     LOG.info(
@@ -1163,8 +1175,10 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
     )
     drought_index = drought_index.rename(
         columns={
-            "DSI12_baseline_00_17_median": f"drought_severity_index_{Scenarios.CURRENT}",
-            "DSI12_40_median": f"drought_severity_index_{Scenarios.FORECAST}",
+            "DSI12_baseline_00_17_median":
+            f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.CURRENT}",
+            "DSI12_40_median":
+            f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(drought_index)
@@ -1192,8 +1206,10 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
     hot_days = hot_days.drop(columns=["geometry"])
     hot_days = hot_days.rename(
         columns={
-            "HSD_baseline_01_20_median": f"hot_summer_days_{Scenarios.CURRENT}",
-            "HSD_40_median": f"hot_summer_days_{Scenarios.FORECAST}",
+            "HSD_baseline_01_20_median":
+            f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.CURRENT}",
+            "HSD_40_median":
+            f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(hot_days)
@@ -1220,15 +1236,17 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
     extr_days = extr_days.drop(columns=["geometry"])
     extr_days = extr_days.rename(
         columns={
-            "ESD_baseline_01_20_median": f"extreme_summer_days_{Scenarios.CURRENT}",
-            "ESD_40_median": f"extreme_summer_days_{Scenarios.FORECAST}",
+            "ESD_baseline_01_20_median":
+            f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.CURRENT}",
+            "ESD_40_median":
+            f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(extr_days)
     extr_days = extr_days[extr_days["grid_id"].isin(grid["grid_id"])]
     filter_removed = len_before_filter - len(extr_days)
     LOG.info(
-        "Extreme summer days projections - %s of %s (%.1f percent) rows removed",
+        "Extreme summer days projections filtered - %s of %s (%.1f percent) rows removed",
         filter_removed,
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
@@ -1249,8 +1267,10 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     frost_days = frost_days.drop(columns=["geometry"])
     frost_days = frost_days.rename(
         columns={
-            "FrostDays_baseline_01_20_median": f"frost_days_{Scenarios.CURRENT}",
-            "FrostDays_40_median": f"frost_days_{Scenarios.FORECAST}",
+            "FrostDays_baseline_01_20_median":
+            f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.CURRENT}",
+            "FrostDays_40_median":
+            f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(frost_days)
@@ -1277,8 +1297,10 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     ice_days = ice_days.drop(columns=["geometry"])
     ice_days = ice_days.rename(
         columns={
-            "IcingDays_baseline_01_20_median": f"icing_days_{Scenarios.CURRENT}",
-            "IcingDays_40_median": f"icing_days_{Scenarios.FORECAST}",
+            "IcingDays_baseline_01_20_median":
+            f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.CURRENT}",
+            "IcingDays_40_median":
+            f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.FORECAST}",
         }
     )
     len_before_filter = len(ice_days)
@@ -1305,10 +1327,10 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     )
 
     metric_cols = [
-        f"wind_speed_99th_percentile_{Scenarios.CURRENT}",
-        f"avg_exceedance_days_{Scenarios.CURRENT}",
-        f"wind_speed_99th_percentile_{Scenarios.FORECAST}",
-        f"avg_exceedance_days_{Scenarios.FORECAST}",
+        f"{StormCols.WIND_SPEED}_99th_percentile_{Scenarios.CURRENT}",
+        f"{StormCols.AVG_EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
+        f"{StormCols.WIND_SPEED}_99th_percentile_{Scenarios.FORECAST}",
+        f"{StormCols.AVG_EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
     ]
 
     len_before_filter = len_before_filter_current + len_before_filter_forecast
@@ -1379,7 +1401,7 @@ def _calculate_windspd_exceedance(
     avg_exc = exceedance_per_year.mean(dim="year")
 
     # store in a Dataset with a named variable
-    return avg_exc.to_dataset(name=f"avg_exceedance_days_{scenario}")
+    return avg_exc.to_dataset(name=f"{StormCols.AVG_EXCEEDANCE_DAYS}_{scenario}")
 
 
 def _calculate_windspd_percentile(
@@ -1387,7 +1409,7 @@ def _calculate_windspd_percentile(
 ) -> xr.Dataset:
     """Calculate the wind speed percentiles per geometry for a given variable."""
     pct = windspd_data[variable].quantile(quantile, dim="time")
-    return pct.to_dataset(name=f"wind_speed_{int(quantile * 100)}th_percentile_{scenario}")
+    return pct.to_dataset(name=f"{StormCols.WIND_SPEED}_{int(quantile * 100)}th_percentile_{scenario}")
 
 
 def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -1408,8 +1430,8 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
     wind_driven_rain = wind_driven_rain.drop(columns=["x_coord", "y_coord"])
     wind_driven_rain = wind_driven_rain.rename(
         columns={
-            "WDR_baseline_Median": f"wind_driven_rain_index_{Scenarios.CURRENT}",
-            "WDR_40_Median": f"wind_driven_rain_index_{Scenarios.FORECAST}",
+            "WDR_baseline_Median": f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.CURRENT}",
+            "WDR_40_Median": f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FORECAST}",
         }
     )
     wind_driven_rain = gpd.GeoDataFrame(wind_driven_rain, geometry="geometry", crs="EPSG:3857")
@@ -1569,7 +1591,7 @@ def _clean_ground_stability(config: model_config.Config, boundary: gpd.GeoDataFr
 def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean GeoSureHexGrids data, merge by nearest centroids, then write to file."""
     geosure_layers = {
-        "collapsible_deposits": gpd.read_file(
+        GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
             f"{config.hazards.ground_stability.geosure.file_path}",
@@ -1577,7 +1599,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
             mask=boundary,
             columns=["CLASS"],
         ),
-        "compressible_ground": gpd.read_file(
+        GroundStabilityRiskCols.COMPRESSIBLE_GROUND: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
             f"{config.hazards.ground_stability.geosure.file_path}",
@@ -1585,7 +1607,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
             mask=boundary,
             columns=["CLASS"],
         ),
-        "landslides": gpd.read_file(
+        GroundStabilityRiskCols.LANDSLIDES: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
             f"{config.hazards.ground_stability.geosure.file_path}",
@@ -1593,7 +1615,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
             mask=boundary,
             columns=["CLASS"],
         ),
-        "running_sand": gpd.read_file(
+        GroundStabilityRiskCols.RUNNING_SAND: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
             f"{config.hazards.ground_stability.geosure.file_path}",
@@ -1601,7 +1623,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
             mask=boundary,
             columns=["CLASS"],
         ),
-        "shrink_swell": gpd.read_file(
+        GroundStabilityRiskCols.SHRINK_SWELL: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
             f"{config.hazards.ground_stability.geosure.file_path}",
@@ -1609,7 +1631,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
             mask=boundary,
             columns=["CLASS"],
         ),
-        "soluble_rocks": gpd.read_file(
+        GroundStabilityRiskCols.SOLUBLE_ROCKS: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
             f"{config.hazards.ground_stability.geosure.file_path}",
@@ -1626,7 +1648,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
                 f"Check the source file and boundary."
             )
         len_before_filter = len(geosure_data)
-        geosure_data_clean = geosure_data.rename(columns={"CLASS": f"{code}_risk"})
+        geosure_data_clean = geosure_data.rename(columns={"CLASS": code})
         geosure_layers[code] = clip_to_boundary(geosure_data_clean, boundary)
         filter_removed = len_before_filter - len(geosure_layers[code])
         LOG.info(
@@ -1640,17 +1662,15 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
 
     # Merge layers based on nearest centroids
     base_code = next(iter(geosure_layers.keys()))
-    geosure = geosure_layers[base_code][[f"{base_code}_risk", "geometry"]].copy()
+    geosure = geosure_layers[base_code][[base_code, "geometry"]].copy()
     for code, layer in geosure_layers.items():
         if code == base_code:
             continue  # skip the base layer
         layer_subset = layer[
-            [f"{code}_risk", "geometry"]
+            [code, "geometry"]
         ]  # Select only the relevant class and geometry columns
         matched = _nearest_centroids(geosure, layer_subset)  # Apply nearest centroid matching
-        geosure[f"{code}_risk"] = matched[
-            f"{code}_risk"
-        ]  # Add the matched CLASS column to the base dataframe
+        geosure[code] = matched[code]  # Add the matched CLASS column to the base dataframe
 
     geosure_risk_cols = [col for col in geosure.columns if col.endswith("_risk")]
     geosure = geosure[[*geosure_risk_cols, "geometry"]]
@@ -1670,7 +1690,7 @@ def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -
             LOG.info("GeoClimate shrink-swell %s layer empty. Continuing.", year)
             continue
         geoclimate_data = geoclimate_data.rename(
-            columns={"CLASS": "shrink_swell_geoclimate_risk"}
+            columns={"CLASS": GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE}
         )
         len_before_filter = len(geoclimate_data)
         geoclimate_data = clip_to_boundary(geoclimate_data, boundary)
