@@ -15,7 +15,16 @@ import xarray as xr
 from shapely import geometry
 
 from caf.cvt import file_paths, model_config
-from caf.cvt.definitions import DroughtCols, ExtremeColdCols, ExtremeHeatCols, GroundStabilityRiskCols, NoHAM, Scenarios, StormCols
+from caf.cvt.definitions import (
+    DroughtCols,
+    ExtremeColdCols,
+    ExtremeHeatCols,
+    GroundStabilityRiskCols,
+    NoHAMTimePeriods,
+    NoHAMUserClasses,
+    Scenarios,
+    StormCols,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -433,8 +442,8 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     )
     # Filter out links with a or b less than 10,000 (zone connectors)
     noham_network_clean = noham_network_clean[
-        (noham_network_clean["a"] >= NoHAM.NOHAM_ROAD_ID_THRESHOLD)
-        & (noham_network_clean["b"] >= NoHAM.NOHAM_ROAD_ID_THRESHOLD)
+        (noham_network_clean["a"] >= config.constants.noham_road_id_threshold)
+        & (noham_network_clean["b"] >= config.constants.noham_road_id_threshold)
     ]
     noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
     noham_network_clean = validate_geometries(noham_network_clean)
@@ -1409,7 +1418,9 @@ def _calculate_windspd_percentile(
 ) -> xr.Dataset:
     """Calculate the wind speed percentiles per geometry for a given variable."""
     pct = windspd_data[variable].quantile(quantile, dim="time")
-    return pct.to_dataset(name=f"{StormCols.WIND_SPEED}_{int(quantile * 100)}th_percentile_{scenario}")
+    return pct.to_dataset(
+        name=f"{StormCols.WIND_SPEED}_{int(quantile * 100)}th_percentile_{scenario}"
+    )
 
 
 def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -2068,9 +2079,9 @@ def _aggregate_link_flows_year(
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}
 
     ts_dfs = []
-    for time_period in NoHAM.all_time_periods():
+    for time_period in list(NoHAMTimePeriods):
         uc_dfs = []
-        for user_class in NoHAM.all_user_classes():
+        for user_class in list(NoHAMUserClasses):
             uc_dfs.append(
                 _process_single_noham_layer(
                     config,
@@ -2089,7 +2100,7 @@ def _aggregate_link_flows_year(
 
         # Compute total demand for all vehicles for each time period
         combined_uc_df[f"all_vehs_{time_period}"] = combined_uc_df[
-            [f"{uc}_{time_period}" for uc in NoHAM.all_user_classes()]
+            [f"{uc}_{time_period}" for uc in list(NoHAMUserClasses)]
         ].sum(axis=1)
 
         # Store result
@@ -2101,16 +2112,16 @@ def _aggregate_link_flows_year(
         combined_ts_df = combined_ts_df.merge(df_ts, on="link_id", how="outer")
 
     # Compute totals for each user class across all time periods
-    for uc in NoHAM.all_user_classes():
+    for uc in list(NoHAMUserClasses):
         combined_ts_df[f"{uc}_total"] = combined_ts_df[
-            [f"{uc}_{tp}" for tp in NoHAM.all_time_periods()]
+            [f"{uc}_{tp}" for tp in list(NoHAMTimePeriods)]
         ].sum(axis=1)
 
     # Compute total of each user class across all time periods
     combined_ts_df["all_vehs_total"] = combined_ts_df[
-        [f"all_vehs_{tp}" for tp in NoHAM.all_time_periods()]
+        [f"all_vehs_{tp}" for tp in list(NoHAMTimePeriods)]
     ].sum(axis=1)
 
     return combined_ts_df[
-        ["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in NoHAM.all_user_classes()]
+        ["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in list(NoHAMUserClasses)]
     ]

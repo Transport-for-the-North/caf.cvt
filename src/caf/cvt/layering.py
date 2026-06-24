@@ -7,7 +7,12 @@ import geopandas as gpd
 import pandas as pd
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
-from caf.cvt.definitions import MainHazardCols, NoHAM, NoHAMImpactCols, Scenarios
+from caf.cvt.definitions import (
+    MainHazardRiskCols,
+    NoHAMImpactCols,
+    NoHAMUserClasses,
+    Scenarios,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -394,14 +399,14 @@ def _normalise_uc_demand(noham: pd.DataFrame, feature_range: tuple[int, int]) ->
     """Normalise NoHAM demand for each user class individually."""
     pairs = [
         (f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}")
-        for uc in NoHAM.all_user_classes()
+        for uc in list(NoHAMUserClasses)
     ]
 
     noham = functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
 
     rename_map = {
         col: col.replace("total", "demand")
-        for uc in NoHAM.all_user_classes()
+        for uc in list(NoHAMUserClasses)
         for col in [f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}"]
     }
     return noham.rename(columns=rename_map)
@@ -426,7 +431,7 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
     # Calculate impact metric for each user class
     risk_cols = [
         col
-        for col in [f"{col}_risk" for col in list(MainHazardCols)]
+        for col in list(MainHazardRiskCols)
         if f"{col}_{Scenarios.CURRENT}" in noham.columns
     ]
 
@@ -438,7 +443,7 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
             noham[f"{risk_col}_{scenario}"] * impact_weights[risk_col.removesuffix("_risk")]
             for risk_col in risk_cols
         )
-        for uc in NoHAM.all_user_classes():
+        for uc in list(NoHAMUserClasses):
             impact_component = noham[f"{uc}_demand_{scenario}"] * impact_weights["demand"]
             noham[f"{uc}_impact_{scenario}"] = impact_component + hazard_component
 
@@ -455,7 +460,7 @@ def _normalise_noham_impact(
     """Normalise NoHAM impact scores across all user classes combined."""
     pairs = [
         (f"{uc}_impact_{Scenarios.CURRENT}", f"{uc}_impact_{Scenarios.FORECAST}")
-        for uc in NoHAM.all_user_classes()
+        for uc in list(NoHAMUserClasses)
     ] + [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")]
 
     return functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
@@ -633,7 +638,7 @@ def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
     """Calculate composite impact score for current and forecast years."""
     risk_cols = [
         col
-        for col in [f"{col}_risk" for col in list(MainHazardCols)]
+        for col in list(MainHazardRiskCols)
         if f"{col}_{Scenarios.CURRENT}" in freight_data.columns
     ]
 

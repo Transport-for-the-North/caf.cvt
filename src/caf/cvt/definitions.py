@@ -18,7 +18,6 @@ class PlottingColumn(enum.StrEnum):
         return self.removesuffix("_risk")
 
 
-
 class MainHazardRiskCols(PlottingColumn):
     """Column definitions for main hazard layers."""
 
@@ -85,6 +84,7 @@ class GroundStabilityRiskCols(PlottingColumn):
         """Return the appropriate colormap for a given ground stability subhazard column."""
         return "Oranges"
 
+
 class CoastalErosionRiskCols(PlottingColumn):
     """Column definitions for coastal erosion subhazard layers."""
 
@@ -95,6 +95,7 @@ class CoastalErosionRiskCols(PlottingColumn):
     def get_cmap(cls) -> str:
         """Return the appropriate colormap for a given coastal erosion subhazard column."""
         return "Purples"
+
 
 class ExtremeHeatCols(PlottingColumn):
     """Column definitions for extreme heat subhazard layers."""
