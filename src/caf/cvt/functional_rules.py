@@ -615,8 +615,8 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
         extreme_weather_risk,
         [
             (
-                f"{ExtremeWeatherRiskCols.EXTREME_WEATHER}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.EXTREME_WEATHER}_{Scenarios.FORECAST}",
+                f"{MainHazardRiskCols.EXTREME_WEATHER}_{Scenarios.CURRENT}",
+                f"{MainHazardRiskCols.EXTREME_WEATHER}_{Scenarios.FORECAST}",
             )
         ],
         feature_range,
@@ -886,15 +886,15 @@ def _drought_index(
     drought_risk = _calculate_composite_score(
         drought_risk,
         _DROUGHT_WEIGHTS,
-        DroughtCols.DROUGHT_RISK,
+        ExtremeWeatherRiskCols.DROUGHT,
     )
 
     drought_risk = min_max_scaling_pair(
         drought_risk,
         [
             (
-                f"{DroughtCols.DROUGHT_RISK}_{Scenarios.CURRENT}",
-                f"{DroughtCols.DROUGHT_RISK}_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FORECAST}",
             )
         ],
         feature_range,
@@ -961,13 +961,13 @@ def _storm_index(
 
     storm_risk = storm_risk[
         [
-            f"{StormCols.RAIN_DAYS_10MM}_{Scenarios.CURRENT}",
+            f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}",
             f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",
             f"{StormCols.PRECIP_WINTER}_{Scenarios.FORECAST}",
-            f"{StormCols.WIND_SPEED_99TH_PERCENTILE}_{Scenarios.CURRENT}",
-            f"{StormCols.WIND_SPEED_99TH_PERCENTILE}_{Scenarios.FORECAST}",
-            f"{StormCols.AVG_EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
-            f"{StormCols.AVG_EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
+            f"{StormCols.WIND_SPEED}_{Scenarios.CURRENT}",
+            f"{StormCols.WIND_SPEED}_{Scenarios.FORECAST}",
+            f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
+            f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
             f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.CURRENT}",
             f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FORECAST}",
             "geometry",
@@ -977,13 +977,13 @@ def _storm_index(
     storm_risk = _iterative_spatial_infilling(
         storm_risk,
         [
-            f"{StormCols.RAIN_DAYS_10MM}_{Scenarios.CURRENT}",
+            f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}",
             f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",
             f"{StormCols.PRECIP_WINTER}_{Scenarios.FORECAST}",
-            f"{StormCols.WIND_SPEED_99TH_PERCENTILE}_{Scenarios.CURRENT}",
-            f"{StormCols.WIND_SPEED_99TH_PERCENTILE}_{Scenarios.FORECAST}",
-            f"{StormCols.AVG_EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
-            f"{StormCols.AVG_EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
+            f"{StormCols.WIND_SPEED}_{Scenarios.CURRENT}",
+            f"{StormCols.WIND_SPEED}_{Scenarios.FORECAST}",
+            f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
+            f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
             f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.CURRENT}",
             f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FORECAST}",
         ],
@@ -991,10 +991,10 @@ def _storm_index(
     )
 
     storm_risk[f"{StormCols.WIND_SPEED}_{Scenarios.CURRENT}"] = storm_risk[
-        f"{StormCols.WIND_SPEED_99TH_PERCENTILE}_{Scenarios.CURRENT}"
+        f"{StormCols.WIND_SPEED}_{Scenarios.CURRENT}"
     ].apply(_wind_risk_scaled)
     storm_risk[f"{StormCols.WIND_SPEED}_{Scenarios.FORECAST}"] = storm_risk[
-        f"{StormCols.WIND_SPEED_99TH_PERCENTILE}_{Scenarios.FORECAST}"
+        f"{StormCols.WIND_SPEED}_{Scenarios.FORECAST}"
     ].apply(_wind_risk_scaled)
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -1010,8 +1010,8 @@ def _storm_index(
                 f"{StormCols.PRECIP_WINTER}_{Scenarios.FORECAST}",
             ),
             (
-                f"{StormCols.AVG_EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
-                f"{StormCols.AVG_EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
+                f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
+                f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
             ),
             (
                 f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.CURRENT}",
@@ -1023,12 +1023,12 @@ def _storm_index(
 
     # Scale rain days on its own, then duplicate
     scaler = sklearn.preprocessing.MinMaxScaler(feature_range=feature_range)
-    storm_risk[f"{StormCols.RAIN_DAYS_10MM}_{Scenarios.CURRENT}"] = scaler.fit_transform(
-        storm_risk[[f"{StormCols.RAIN_DAYS_10MM}_{Scenarios.CURRENT}"]]
-    )
-    storm_risk[f"{StormCols.RAIN_DAYS_10MM}_{Scenarios.FORECAST}"] = storm_risk[
-        f"{StormCols.RAIN_DAYS_10MM}_{Scenarios.CURRENT}"
-    ]
+    storm_risk[f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}"] = scaler.fit_transform(
+        storm_risk[[f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}"]]
+    ).clip(*feature_range)
+    storm_risk[f"{StormCols.RAIN_DAYS}_{Scenarios.FORECAST}"] = storm_risk[
+        f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}"
+    ].clip(*feature_range)
 
     storm_risk = _calculate_composite_score(
         storm_risk,
@@ -1040,8 +1040,8 @@ def _storm_index(
         storm_risk,
         [
             (
-                f"{StormCols.STORM_RISK}_{Scenarios.CURRENT}",
-                f"{StormCols.STORM_RISK}_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FORECAST}",
             )
         ],
         feature_range,
@@ -1115,7 +1115,7 @@ def _flooding_index(
         mask=boundary,
         layer="flood_overlay",
     )
-    # Eventually want to rename columns to 'flooding' rather than 'flood'
+    # Eventually want to rename columns in input data to 'flooding' rather than 'flood'
     flooding_risk = flooding_risk.rename(
         columns={
             f"rivers_sea_flood_risk_{Scenarios.CURRENT}": (

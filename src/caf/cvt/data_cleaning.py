@@ -202,7 +202,7 @@ def explode_to_polygons(gdf: gpd.GeoDataFrame, track_part: bool = False) -> gpd.
 
 def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
     """Get the boundary to use for clipping and filtering datasets based on the config."""
-    if config.other_input.boundary_path is not None:
+    if config.other_input.boundary_path is not None and config.other_input.boundary_path != "":
         LOG.info("Using specific boundary file: %s", config.other_input.boundary_path)
         return gpd.read_file(config.paths.raw_input / config.other_input.boundary_path)
 
@@ -391,8 +391,8 @@ def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
 def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean OS Open Roads dataset, then write to file."""
     os_road = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.infrastructure.road.os_road.zip_path}"
-        f"!{config.infrastructure.road.os_road.file_path}",
+        f"zip://{config.paths.raw_input / config.infrastructure.road.os_road.zip_path}!"
+        f"{config.infrastructure.road.os_road.file_path.as_posix()}",
         mask=boundary,
         columns=[
             "id",
@@ -667,8 +667,8 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
 def _clean_petrol_stations(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean POI data, filter for petrol stations, and write to file."""
     petrol_stations = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.infrastructure.other.poi_uk.zip_path}"
-        f"!{config.infrastructure.other.poi_uk.file_path}",
+        f"zip://{config.paths.raw_input / config.infrastructure.other.poi_uk.zip_path}!"
+        f"{config.infrastructure.other.poi_uk.file_path}",
         columns=["id"],
         where="main_category = 'gas_station'",
     )
@@ -1336,10 +1336,10 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     )
 
     metric_cols = [
-        f"{StormCols.WIND_SPEED}_99th_percentile_{Scenarios.CURRENT}",
-        f"{StormCols.AVG_EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
-        f"{StormCols.WIND_SPEED}_99th_percentile_{Scenarios.FORECAST}",
-        f"{StormCols.AVG_EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
+        f"{StormCols.WIND_SPEED}_{Scenarios.CURRENT}",
+        f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
+        f"{StormCols.WIND_SPEED}_{Scenarios.FORECAST}",
+        f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
     ]
 
     len_before_filter = len_before_filter_current + len_before_filter_forecast
@@ -1410,7 +1410,7 @@ def _calculate_windspd_exceedance(
     avg_exc = exceedance_per_year.mean(dim="year")
 
     # store in a Dataset with a named variable
-    return avg_exc.to_dataset(name=f"{StormCols.AVG_EXCEEDANCE_DAYS}_{scenario}")
+    return avg_exc.to_dataset(name=f"{StormCols.EXCEEDANCE_DAYS}_{scenario}")
 
 
 def _calculate_windspd_percentile(
@@ -1419,7 +1419,7 @@ def _calculate_windspd_percentile(
     """Calculate the wind speed percentiles per geometry for a given variable."""
     pct = windspd_data[variable].quantile(quantile, dim="time")
     return pct.to_dataset(
-        name=f"{StormCols.WIND_SPEED}_{int(quantile * 100)}th_percentile_{scenario}"
+        name=f"{StormCols.WIND_SPEED}_{scenario}"
     )
 
 
@@ -2029,9 +2029,6 @@ def _process_single_noham_layer(
     link_ids: set[str],
 ) -> pd.DataFrame:
     LOG.info("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
-
-    if config.impact.noham_demand.output_path is None:
-        raise ValueError("NoHAM output path must be provided.")
 
     noham_ods, noham_routes, noham_links = _read_noham_h5(
         route_links_store=route_links_store,

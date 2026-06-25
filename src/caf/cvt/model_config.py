@@ -1,35 +1,29 @@
 """Module for setting up the model configuration."""
 
 import pathlib
-from typing import Annotated, Self
+from typing import Self
 
 import caf.toolkit as ctk
 import pydantic
-
-### FUNCTIONS
-
-
-def _check_none(value: str) -> str | None:
-    if value is None:
-        return value
-    value = value.strip()
-    if value in ("", "null"):
-        return None
-    return value
-
 
 ### CONFIG SET UP
 
 
 class ZipFileEntry(ctk.BaseConfig):
-    """Configuration for a file within a zip archive."""
+    """Configuration for a file within a zip archive.
+
+    Attributes
+    ----------
+    zip_path : pathlib.Path
+        Path to the zip file.
+    file_path : pathlib.Path | None
+        Path within the zip file.
+    """
 
     zip_path: pathlib.Path
     """Path to the zip file"""
     file_path: pathlib.Path | None = None
     """Path within the zip file."""
-    output_path: pathlib.Path | None = None
-    """Output path for the extracted file"""
 
 
 # -------------------------
@@ -42,14 +36,14 @@ class PathConfig(ctk.BaseConfig):
 
     Attributes
     ----------
-    root : pathlib.Path
+    root : pydantic.DirectoryPath
         Root directory for the project.
-    raw_input : pathlib.Path
+    raw_input : pydantic.DirectoryPath
         Directory for raw input data.
     """
 
-    root: pathlib.Path
-    raw_input: pathlib.Path
+    root: pydantic.DirectoryPath
+    raw_input: pydantic.DirectoryPath
 
     @property
     def model_input(self) -> pathlib.Path:
@@ -108,10 +102,6 @@ class OtherInput(ctk.BaseConfig):
     def _check_path_exists(self) -> Self:
         if self.boundary_path is not None and not self.boundary_path.exists():
             raise ValueError(f"Boundary path {self.boundary_path} does not exist.")
-        if not self.stb_path.exists():
-            raise ValueError(f"STB path {self.stb_path} does not exist.")
-        if not self.ca_path.exists():
-            raise ValueError(f"CA path {self.ca_path} does not exist.")
         return self
 
 
@@ -311,7 +301,7 @@ class ImpactConfig(ctk.BaseConfig):
 
     freight_demand: pathlib.Path
     noham_demand: ZipFileEntry
-    noham_years: dict[str, int]
+    noham_years: dict[str, str]
 
 
 class SwitchConfig(ctk.BaseConfig):
@@ -452,12 +442,12 @@ class ParameterConfig(ctk.BaseConfig):
         boundary data). Should be empty if running for a STB rather than CA.
     """
 
-    stb: Annotated[str | None, pydantic.BeforeValidator(_check_none)] = None
-    ca: Annotated[str | None, pydantic.BeforeValidator(_check_none)] = None
+    stb: str | None = None
+    ca: str | None = None
 
     @pydantic.model_validator(mode="after")
     def _check(self) -> Self:
-        if not (self.stb is None) ^ (self.ca is None):
+        if not (self.stb is None or self.stb == "") ^ (self.ca is None or self.ca == ""):
             raise ValueError("Exactly one of 'stb' or 'ca' must be provided, but not both.")
         return self
 
@@ -469,9 +459,16 @@ class ConstantConfig(ctk.BaseConfig):
     ----------
     noham_road_id_threshold : int
         Threshold for NoHAM road IDs.
+    score_min : float
+        Minimum score for risk calculations.
+    score_max : float
+        Maximum score for risk calculations.
     """
 
     noham_road_id_threshold: int
+
+    score_min: float
+    score_max: float
 
 
 # -------------------------

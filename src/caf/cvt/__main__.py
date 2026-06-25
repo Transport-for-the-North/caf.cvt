@@ -15,13 +15,15 @@ from caf.cvt.model_config import Config
 
 LOG = logging.getLogger(__name__)
 
-# TODO (DJ): Add a comment to explain why this warning is being ignored.
-# warnings.filterwarnings(
-#    "ignore",
-#    message=r".*organizePolygons\(\) received a polygon with more than 100 parts.*",
-#    category=RuntimeWarning,
-#    module=r"pyogrio\.raw",
-# )
+# This warning is raised in this model where geopandas overlays take place with large spatial
+# datasets. Since the model is designed to handle large datasets, and overlays are expected to
+# be complex and time-consuming, we can safely ignore this warning. If the processing time
+# becomes unreasonably long, it may be worth investigating an alternative approach.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*organizePolygons\(\) received a polygon with more than 100 parts.*",
+    category=RuntimeWarning,
+)
 
 # TODO (DJ): Add a comment to explain why this warning is being ignored.
 # warnings.filterwarnings(
@@ -30,6 +32,14 @@ LOG = logging.getLogger(__name__)
 #    category=UserWarning,
 # )
 
+# This warning is raised by xarray when reading the .nc wind speed files. It does not change
+# the data at all, so we can safely ignore it. It is likely caused by a numpy version mismatch.
+# Eventually this warning should be addressed, but for now it is safe to ignore.
+warnings.filterwarnings(
+    "ignore",
+    message="numpy.ndarray size changed, may indicate binary incompatibility.*",
+    category=RuntimeWarning,
+)
 
 def _main() -> None:
     """Run Climate Vulnerability Tool."""
