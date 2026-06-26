@@ -330,10 +330,11 @@ def validate_geometries(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     if gdf.geometry.notna().sum() < len(gdf):
         LOG.warning(
             "Found %s invalid geometries, removing them.",
-            len(gdf) - gdf.geometry.notna().sum()
+            len(gdf) - gdf.geometry.notna().sum(),
         )
         gdf = gdf[gdf.geometry.notna()]
     return gdf
+
 
 # DATA CLEANING
 
@@ -1020,10 +1021,12 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     temp_max = temp_max.drop(columns=["geometry"])
     temp_max = temp_max.rename(
         columns={
-            "tasmax_summer_01_20_median":
-            f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.CURRENT}",
-            "tasmax_summer_change_40_median":
-            f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.FORECAST}",
+            "tasmax_summer_01_20_median": (
+                f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.CURRENT}",
+            ),
+            "tasmax_summer_change_40_median": (
+                f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.FORECAST}",
+            ),
         }
     )
     temp_max[f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.FORECAST}"] = (
@@ -1053,10 +1056,12 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     temp_min = temp_min.drop(columns=["geometry"])
     temp_min = temp_min.rename(
         columns={
-            "tasmin_winter_01_20_median":
-            f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.CURRENT}",
-            "tasmin_winter_change_40_median":
-            f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.FORECAST}",
+            "tasmin_winter_01_20_median": (
+                f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.CURRENT}",
+            ),
+            "tasmin_winter_change_40_median": (
+                f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.FORECAST}",
+            ),
         }
     )
     temp_min[f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.FORECAST}"] = (
@@ -1089,10 +1094,10 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     precip_sum = precip_sum.drop(columns=["geometry"])
     precip_sum = precip_sum.rename(
         columns={
-            "pr_summer_01_20_median":
-            f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}",
-            "pr_summer_change_40_median":
-            f"{DroughtCols.PRECIP_SUMMER}_pct_chg_{Scenarios.FORECAST}",
+            "pr_summer_01_20_median": (f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}",),
+            "pr_summer_change_40_median": (
+                f"{DroughtCols.PRECIP_SUMMER}_pct_chg_{Scenarios.FORECAST}",
+            ),
         }
     )
     precip_sum[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}"] = precip_sum[
@@ -1126,10 +1131,10 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     precip_win = precip_win.drop(columns=["geometry"])
     precip_win = precip_win.rename(
         columns={
-            "pr_winter_01_20_median":
-            f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",
-            "pr_winter_change_40_median":
-            f"{StormCols.PRECIP_WINTER}_pct_chg_{Scenarios.FORECAST}",
+            "pr_winter_01_20_median": (f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",),
+            "pr_winter_change_40_median": (
+                f"{StormCols.PRECIP_WINTER}_pct_chg_{Scenarios.FORECAST}",
+            ),
         },
     )
     precip_win[f"{StormCols.PRECIP_WINTER}_{Scenarios.FORECAST}"] = precip_win[
@@ -1184,10 +1189,10 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
     )
     drought_index = drought_index.rename(
         columns={
-            "DSI12_baseline_00_17_median":
-            f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.CURRENT}",
-            "DSI12_40_median":
-            f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FORECAST}",
+            "DSI12_baseline_00_17_median": (
+                f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.CURRENT}",
+            ),
+            "DSI12_40_median": (f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FORECAST}",),
         }
     )
     len_before_filter = len(drought_index)
@@ -1215,10 +1220,10 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
     hot_days = hot_days.drop(columns=["geometry"])
     hot_days = hot_days.rename(
         columns={
-            "HSD_baseline_01_20_median":
-            f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.CURRENT}",
-            "HSD_40_median":
-            f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.FORECAST}",
+            "HSD_baseline_01_20_median": (
+                f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.CURRENT}",
+            ),
+            "HSD_40_median": (f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.FORECAST}",),
         }
     )
     len_before_filter = len(hot_days)
@@ -1245,10 +1250,10 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
     extr_days = extr_days.drop(columns=["geometry"])
     extr_days = extr_days.rename(
         columns={
-            "ESD_baseline_01_20_median":
-            f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.CURRENT}",
-            "ESD_40_median":
-            f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.FORECAST}",
+            "ESD_baseline_01_20_median": (
+                f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.CURRENT}",
+            ),
+            "ESD_40_median": (f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.FORECAST}",),
         }
     )
     len_before_filter = len(extr_days)
@@ -1276,10 +1281,10 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     frost_days = frost_days.drop(columns=["geometry"])
     frost_days = frost_days.rename(
         columns={
-            "FrostDays_baseline_01_20_median":
-            f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.CURRENT}",
-            "FrostDays_40_median":
-            f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.FORECAST}",
+            "FrostDays_baseline_01_20_median": (
+                f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.CURRENT}",
+            ),
+            "FrostDays_40_median": (f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.FORECAST}",),
         }
     )
     len_before_filter = len(frost_days)
@@ -1306,10 +1311,10 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     ice_days = ice_days.drop(columns=["geometry"])
     ice_days = ice_days.rename(
         columns={
-            "IcingDays_baseline_01_20_median":
-            f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.CURRENT}",
-            "IcingDays_40_median":
-            f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.FORECAST}",
+            "IcingDays_baseline_01_20_median": (
+                f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.CURRENT}",
+            ),
+            "IcingDays_40_median": (f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.FORECAST}",),
         }
     )
     len_before_filter = len(ice_days)
@@ -1418,9 +1423,7 @@ def _calculate_windspd_percentile(
 ) -> xr.Dataset:
     """Calculate the wind speed percentiles per geometry for a given variable."""
     pct = windspd_data[variable].quantile(quantile, dim="time")
-    return pct.to_dataset(
-        name=f"{StormCols.WIND_SPEED}_{scenario}"
-    )
+    return pct.to_dataset(name=f"{StormCols.WIND_SPEED}_{scenario}")
 
 
 def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -1470,7 +1473,7 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     bng_codes = _get_bng_codes(boundary)
 
     for flooding_type in config.hazards.flooding:
-        for scenario in list(Scenarios):
+        for scenario in Scenarios:
             LOG.info("Cleaning %s flooding data for %s scenario...", flooding_type, scenario)
             _clean_flooding_layer(
                 config=config,
@@ -1555,9 +1558,7 @@ def _parse_flooding_metadata(zip_path: pathlib.Path) -> dict:
         else:
             flooding_type, tile, version = name.split("_")
     except ValueError as exc:
-        raise ValueError(
-            f"Unexpected flooding zip filename format: '{name}'"
-        ) from exc
+        raise ValueError(f"Unexpected flooding zip filename format: '{name}'") from exc
 
     return {
         "flooding_type": flooding_type,
@@ -1903,11 +1904,10 @@ def _map_freight_networks(
 
 def _clean_noham_flows(config: model_config.Config) -> None:
     """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
-    network_year = config.infrastructure.road.noham.year
     noham_network = gpd.read_file(
         config.paths.model_input
         / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-        / f"noham_{network_year}.gpkg"
+        / f"noham_{config.infrastructure.road.noham.year}.gpkg"
     )
     network_link_ids = set(noham_network["link_id"])
 
@@ -2035,7 +2035,7 @@ def _process_single_noham_layer(
         year=year,
         time_period=time_period,
         user_class=user_class,
-        noham_path=config.paths.raw_input / config.impact.noham_demand.zip_path,
+        noham_path=config.paths.raw_input / config.impact.noham_demand,
         output_path=config.paths.raw_input / file_paths.NOHAM_ZIP_EXTRACT_OUTPUT_PATH,
         extract=config.switches.noham_zip_extract,
     )
@@ -2076,9 +2076,9 @@ def _aggregate_link_flows_year(
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}
 
     ts_dfs = []
-    for time_period in list(NoHAMTimePeriods):
+    for time_period in NoHAMTimePeriods:
         uc_dfs = []
-        for user_class in list(NoHAMUserClasses):
+        for user_class in NoHAMUserClasses:
             uc_dfs.append(
                 _process_single_noham_layer(
                     config,
@@ -2097,7 +2097,7 @@ def _aggregate_link_flows_year(
 
         # Compute total demand for all vehicles for each time period
         combined_uc_df[f"all_vehs_{time_period}"] = combined_uc_df[
-            [f"{uc}_{time_period}" for uc in list(NoHAMUserClasses)]
+            [f"{uc}_{time_period}" for uc in NoHAMUserClasses]
         ].sum(axis=1)
 
         # Store result
@@ -2109,16 +2109,16 @@ def _aggregate_link_flows_year(
         combined_ts_df = combined_ts_df.merge(df_ts, on="link_id", how="outer")
 
     # Compute totals for each user class across all time periods
-    for uc in list(NoHAMUserClasses):
+    for uc in NoHAMUserClasses:
         combined_ts_df[f"{uc}_total"] = combined_ts_df[
-            [f"{uc}_{tp}" for tp in list(NoHAMTimePeriods)]
+            [f"{uc}_{tp}" for tp in NoHAMTimePeriods]
         ].sum(axis=1)
 
     # Compute total of each user class across all time periods
     combined_ts_df["all_vehs_total"] = combined_ts_df[
-        [f"all_vehs_{tp}" for tp in list(NoHAMTimePeriods)]
+        [f"all_vehs_{tp}" for tp in NoHAMTimePeriods]
     ].sum(axis=1)
 
     return combined_ts_df[
-        ["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in list(NoHAMUserClasses)]
+        ["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in NoHAMUserClasses]
     ]

@@ -16,13 +16,13 @@ class ZipFileEntry(ctk.BaseConfig):
     ----------
     zip_path : pathlib.Path
         Path to the zip file.
-    file_path : pathlib.Path | None
+    file_path : pathlib.Path
         Path within the zip file.
     """
 
     zip_path: pathlib.Path
     """Path to the zip file"""
-    file_path: pathlib.Path | None = None
+    file_path: pathlib.Path
     """Path within the zip file."""
 
 
@@ -293,14 +293,14 @@ class ImpactConfig(ctk.BaseConfig):
     ----------
     freight_demand : pathlib.Path
         Path to the freight demand data.
-    noham_demand : ZipFileEntry
-        Configuration for NoHAM demand zip file entry.
+    noham_demand : pathlib.Path
+        Path to the NoHAM demand data.
     noham_years: dict[str, int]
         Dictionary of years for NoHAM demand scenarios.
     """
 
     freight_demand: pathlib.Path
-    noham_demand: ZipFileEntry
+    noham_demand: pathlib.Path
     noham_years: dict[str, str]
 
 
@@ -467,8 +467,8 @@ class ConstantConfig(ctk.BaseConfig):
 
     noham_road_id_threshold: int
 
-    score_min: float
-    score_max: float
+    score_min: int
+    score_max: int
 
 
 # -------------------------

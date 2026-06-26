@@ -25,13 +25,6 @@ warnings.filterwarnings(
     category=RuntimeWarning,
 )
 
-# TODO (DJ): Add a comment to explain why this warning is being ignored.
-# warnings.filterwarnings(
-#    "ignore",
-#    message="GeoSeries.notna",
-#    category=UserWarning,
-# )
-
 # This warning is raised by xarray when reading the .nc wind speed files. It does not change
 # the data at all, so we can safely ignore it. It is likely caused by a numpy version mismatch.
 # Eventually this warning should be addressed, but for now it is safe to ignore.
@@ -40,6 +33,7 @@ warnings.filterwarnings(
     message="numpy.ndarray size changed, may indicate binary incompatibility.*",
     category=RuntimeWarning,
 )
+
 
 def _main() -> None:
     """Run Climate Vulnerability Tool."""
