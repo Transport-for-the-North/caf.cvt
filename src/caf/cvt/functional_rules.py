@@ -75,9 +75,7 @@ _EXTREME_WEATHER_WEIGHTS: dict[str, float] = {
 }
 
 _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE = 1000
-_GROUND_STABILITY_RISK_SCORE_MAP: dict[
-    str, float
-] = {
+_GROUND_STABILITY_RISK_SCORE_MAP = {
     "Probable": 1,
     "Possible": 0.66,
     "Improbable": 0.33,
