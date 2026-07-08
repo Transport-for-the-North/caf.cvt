@@ -1964,7 +1964,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
 def _read_noham_h5(
     *,
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
-    year: str,
+    year: int,
     time_period: str,
     user_class: str,
     noham_path: pathlib.Path,
@@ -1988,18 +1988,18 @@ def _read_noham_h5(
     noham_demand_path = (
         output_path
         / "input h5s"
-        / year
+        / str(year)
         / f"NoHAM_Decarb_DM_Core_{year!s}_{time_period}_v107_SatPig_{user_class}.h5"
     )
 
-    if (year, time_period) not in route_links_store:
+    if (str(year), time_period) not in route_links_store:
         noham_routes = pd.read_hdf(noham_demand_path, key="/data/Route")
         noham_routes = noham_routes.reset_index()[["route", "link_id"]]
         noham_links = pd.read_hdf(noham_demand_path, key="/data/link")
         noham_links = noham_links[["a", "b"]]
-        route_links_store[(year, time_period)] = (noham_routes, noham_links)
+        route_links_store[(str(year), time_period)] = (noham_routes, noham_links)
     else:
-        noham_routes, noham_links = route_links_store[(year, time_period)]
+        noham_routes, noham_links = route_links_store[(str(year), time_period)]
 
     noham_ods = pd.read_hdf(noham_demand_path, key="/data/OD")
     noham_ods = noham_ods.reset_index()[["route", "abs_demand"]]
@@ -2022,7 +2022,7 @@ def _aggregate_link_flows(
 def _process_single_noham_layer(
     config: model_config.Config,
     *,
-    year: str,
+    year: int,
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
     time_period: str,
     user_class: str,
@@ -2070,7 +2070,7 @@ def _process_single_noham_layer(
 
 
 def _aggregate_link_flows_year(
-    config: model_config.Config, year: str, network_link_ids: set[str]
+    config: model_config.Config, year: int, network_link_ids: set[str]
 ) -> pd.DataFrame:
     """Aggregate link flows for each year, time period, and user class."""
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}

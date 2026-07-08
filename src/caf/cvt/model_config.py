@@ -96,13 +96,7 @@ class OtherInput(ctk.BaseConfig):
 
     stb_path: pathlib.Path
     ca_path: pathlib.Path
-    boundary_path: pathlib.Path | None = None
-
-    @pydantic.model_validator(mode="after")
-    def _check_path_exists(self) -> Self:
-        if self.boundary_path is not None and not self.boundary_path.exists():
-            raise ValueError(f"Boundary path {self.boundary_path} does not exist.")
-        return self
+    boundary_path: pydantic.FilePath | None = None
 
 
 class NoHAMEntry(ctk.BaseConfig):
@@ -301,7 +295,7 @@ class ImpactConfig(ctk.BaseConfig):
 
     freight_demand: pathlib.Path
     noham_demand: pathlib.Path
-    noham_years: dict[str, str]
+    noham_years: dict[str, int]
 
 
 class SwitchConfig(ctk.BaseConfig):

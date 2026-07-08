@@ -7,10 +7,7 @@ from functools import reduce
 
 import contextily as ctx
 import geopandas as gpd
-import matplotlib as mpl
 import matplotlib.pyplot as plt
-
-mpl.use("Agg")  # Use non-interactive backend for plotting
 import numpy as np
 import pandas as pd
 import sklearn
@@ -34,6 +31,7 @@ from caf.cvt.definitions import (
 
 LOG = logging.getLogger(__name__)
 
+plt.switch_backend("Agg")  # Use non-interactive backend for plotting
 
 _EXTREME_HEAT_RISK_THRESHOLD = 30
 _EXTREME_HEAT_WEIGHTS: dict[str, float] = {
@@ -79,7 +77,7 @@ _EXTREME_WEATHER_WEIGHTS: dict[str, float] = {
 _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE = 1000
 _GROUND_STABILITY_RISK_SCORE_MAP: dict[
     str, float
-] = {  # Map risk scores to normalised values (0-100)
+] = {
     "Probable": 1,
     "Possible": 0.66,
     "Improbable": 0.33,
@@ -420,9 +418,36 @@ def plot_choropleth_current_and_forecast(
     feature_range: tuple[int, int],
     linewidth: float = 0.1,
     edgecolor: str | None = "black",
-    basemap_source: xyzservices.TileProvider | None = ctx.providers.CartoDB.Positron,
+    basemap_source: xyzservices.TileProvider | None = None,
 ) -> None:
-    """Plot a choropleth map of the given column in the risk data."""
+    """Plot a choropleth map of the given column in the risk data.
+
+    For a given column, this function plots two choropleth maps side by side: one for each
+    scenario. The maps are saved to the specified output path.
+
+    Parameters
+    ----------
+    risk_data : gpd.GeoDataFrame
+        GeoDataFrame containing the risk data to plot.
+    column : RiskColumn
+        The column to plot, which should be a subclass of RiskColumn.
+    title : str
+        The title for the plots.
+    out_path : pathlib.Path
+        The path to save the output plot.
+    feature_range : tuple[int, int]
+        The range of values to use for the color scale.
+    linewidth : float, optional
+        The width of the lines between polygons, by default 0.1.
+    edgecolor : str | None, optional
+        The color of the edges of the polygons, by default "black".
+    basemap_source : xyzservices.TileProvider | None, optional
+        The source for the basemap tiles. If none, no basemap is added. By default None.
+
+    Returns
+    -------
+    None
+    """
     _fig, ax = plt.subplots(1, 2, figsize=(16, 8))
 
     if basemap_source is not None:
@@ -503,6 +528,7 @@ def _audit_index(
             title=f"{var.replace('_', ' ').title()}",
             out_path=out_path / f"{var}_choropleth.png",
             feature_range=feature_range,
+            basemap_source=xyzservices.providers.CartoDB.Positron,
         )
 
 
@@ -1113,14 +1139,29 @@ def _flooding_index(
             tile_size_m=_FLOODING_TILE_SIZE_M,
         )
 
+    overlay_path = (
+        config.paths.model_interim_output
+        / file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH
+    )
+
     # Read the direct overlay result, and filter to region
     # Eventually want to rename the layer to 'flooding_overlay'
-    flooding_risk = gpd.read_file(
-        config.paths.model_interim_output
-        / file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH,
-        mask=boundary,
-        layer="flood_overlay",
-    )
+    try:
+        flooding_risk = gpd.read_file(
+            overlay_path,
+            mask=boundary,
+            layer="flooding_overlay",
+        )
+    except ValueError:
+        LOG.warning(
+            "Layer 'flooding_overlay' not found, falling back to 'flood_overlay' layer."
+        )
+        flooding_risk = gpd.read_file(
+            overlay_path,
+            mask=boundary,
+            layer="flood_overlay",
+        )
+
     # Eventually want to rename columns in input data to 'flooding' rather than 'flood'
     flooding_risk = flooding_risk.rename(
         columns={

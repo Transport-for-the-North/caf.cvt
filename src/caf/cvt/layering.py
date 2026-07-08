@@ -5,6 +5,7 @@ import pathlib
 
 import geopandas as gpd
 import pandas as pd
+import xyzservices
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 from caf.cvt.definitions import (
@@ -181,6 +182,7 @@ def _audit_infrastructure_risk(
             linewidth=linewidth,
             edgecolor=None,
             feature_range=feature_range,
+            basemap_source=xyzservices.providers.CartoDB.Positron,
         )
 
 
@@ -212,12 +214,21 @@ def layering(config: model_config.Config) -> None:
         Main config for the model, containing paths and settings.
     """
     hazard_layers = _read_hazard_layers(config)
-    risk_cols = [
-        *MainHazardRiskCols,
-        *ExtremeWeatherRiskCols,
-        *FloodingRiskCols,
-        *GroundStabilityRiskCols,
-    ]
+
+    risk_cols = []
+
+    if config.switches.extreme_weather:
+        risk_cols.extend([MainHazardRiskCols.EXTREME_WEATHER, *ExtremeWeatherRiskCols])
+
+    if config.switches.flooding:
+        risk_cols.extend([MainHazardRiskCols.FLOODING, *FloodingRiskCols])
+
+    if config.switches.ground_stability:
+        risk_cols.extend([MainHazardRiskCols.GROUND_STABILITY, *GroundStabilityRiskCols])
+
+    if config.switches.coastal_erosion:
+        risk_cols.extend([MainHazardRiskCols.COASTAL_EROSION])
+
     audit_path = config.paths.audit_path / "Layering"
 
     _infrastructure_layering(config, hazard_layers, risk_cols, audit_path)
