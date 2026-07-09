@@ -1,21 +1,29 @@
 """Module for setting up the model configuration."""
 
 import pathlib
+from typing import Self
 
 import caf.toolkit as ctk
+import pydantic
 
 ### CONFIG SET UP
 
 
 class ZipFileEntry(ctk.BaseConfig):
-    """Configuration for a file within a zip archive."""
+    """Configuration for a file within a zip archive.
+
+    Attributes
+    ----------
+    zip_path : pathlib.Path
+        Path to the zip file.
+    file_path : pathlib.Path
+        Path within the zip file.
+    """
 
     zip_path: pathlib.Path
     """Path to the zip file"""
-    file_path: str | None = None
+    file_path: pathlib.Path
     """Path within the zip file."""
-    output_path: pathlib.Path | None = None
-    """Output path for the extracted file"""
 
 
 # -------------------------
@@ -28,14 +36,14 @@ class PathConfig(ctk.BaseConfig):
 
     Attributes
     ----------
-    root : pathlib.Path
+    root : pydantic.DirectoryPath
         Root directory for the project.
-    raw_input : pathlib.Path
+    raw_input : pydantic.DirectoryPath
         Directory for raw input data.
     """
 
-    root: pathlib.Path
-    raw_input: pathlib.Path
+    root: pydantic.DirectoryPath
+    raw_input: pydantic.DirectoryPath
 
     @property
     def model_input(self) -> pathlib.Path:
@@ -65,31 +73,43 @@ class PathConfig(ctk.BaseConfig):
         log_path.mkdir(parents=True, exist_ok=True)
         return log_path
 
+    @property
+    def audit_path(self) -> pathlib.Path:
+        """Create model audit directory and return path."""
+        audit_path = self.root / "audit"
+        audit_path.mkdir(parents=True, exist_ok=True)
+        return audit_path
+
 
 class OtherInput(ctk.BaseConfig):
     """Configuration for other raw input data.
 
     Attributes
     ----------
-    boundary_path : pathlib.Path
-        Path to the STB boundary which the model is running for.
+    stb_path : pathlib.Path
+        Path to the boundary file of all STBs.
+    ca_path : pathlib.Path
+        Path to the boundary file of all CAs.
+    boundary_path : pathlib.Path | None = None
+        Path to the specific boundary file of the region which the model is running for.
     """
 
-    boundary_path: pathlib.Path
+    stb_path: pathlib.Path
+    ca_path: pathlib.Path
+    boundary_path: pydantic.FilePath | None = None
 
 
 class NoHAMEntry(ctk.BaseConfig):
-    """Configuration for a NoHAM data entry.
+    """Configuration for NoHAM road network data.
 
     Attributes
     ----------
-    year: str
-        The year which the NoHAM entry comes from.
+    year: int
+        Year of the NoHAM network.
     file_path: pathlib.Path
-        Path to the NoHAM data.
     """
 
-    year: str
+    year: int
     file_path: pathlib.Path
 
 
@@ -98,14 +118,14 @@ class Road(ctk.BaseConfig):
 
     Attributes
     ----------
-    os_road : pathlib.Path
-        Path to the OS road data.
-    noham: dict[str, NoHAMEntry]
-        Dictionary containing scenario linked to year and file path in a NoHAM entry class.
+    os_road : ZipFileEntry
+        Configuration for the OS road zip file entry.
+    noham: NoHAMEntry
+        Configuration for the NoHAM road network data.
     """
 
-    os_road: pathlib.Path
-    noham: dict[str, NoHAMEntry]
+    os_road: ZipFileEntry
+    noham: NoHAMEntry
 
 
 class Rail(ctk.BaseConfig):
@@ -113,11 +133,11 @@ class Rail(ctk.BaseConfig):
 
     Attributes
     ----------
-    tfn_rail_links : pathlib.Path
-        Path to the TfN rail links data.
+    rail_links : pathlib.Path
+        Path to the rail links data.
     """
 
-    tfn_rail_links: pathlib.Path
+    rail_links: pathlib.Path
 
 
 class Other(ctk.BaseConfig):
@@ -126,7 +146,7 @@ class Other(ctk.BaseConfig):
     Attributes
     ----------
     bus_stops : dict[str, pathlib.Path]
-        Mapping of region name to bus stips data path.
+        Mapping of region name to bus stops data path.
     ncn_sustrans : pathlib.Path
         Path to the NCN Sustrans data.
     os_mmrn : pathlib.Path
@@ -165,24 +185,6 @@ class InfrastructureConfig(ctk.BaseConfig):
     other: Other
 
 
-class CoastalErosion(ctk.BaseConfig):
-    """Configuration for coastal erosion data.
-
-    Attributes
-    ----------
-    zip_path : pathlib.Path
-        Path to the zip file.
-    giz : str
-        Internal path to the GIZ file.
-    smp : dict
-        Dictionary of SMP files.
-    """
-
-    zip_path: pathlib.Path
-    giz: str
-    smp: dict
-
-
 class ExtremeWeather(ctk.BaseConfig):
     """Configuration for extreme weather data.
 
@@ -216,19 +218,18 @@ class ExtremeWeather(ctk.BaseConfig):
         Configuration for precipitation winter zip file entry.
     """
 
-    wind_spd_current: pathlib.Path
-    wind_spd_forecast: pathlib.Path
-    rain_days: ZipFileEntry
-    extreme_summer_days: ZipFileEntry
-    frost_days: ZipFileEntry
-    hot_days: ZipFileEntry
-    icing_days: ZipFileEntry
-    wdr_index: ZipFileEntry
-    drought_index: ZipFileEntry
-    max_temp_summer: ZipFileEntry
-    precip_summer: ZipFileEntry
-    min_temp_winter: ZipFileEntry
-    precip_winter: ZipFileEntry
+    wind_speed: dict[str, pathlib.Path]
+    rain_days: pathlib.Path
+    extreme_summer_days: pathlib.Path
+    frost_days: pathlib.Path
+    hot_days: pathlib.Path
+    icing_days: pathlib.Path
+    wdr_index: pathlib.Path
+    drought_index: pathlib.Path
+    max_temp_summer: pathlib.Path
+    precip_summer: pathlib.Path
+    min_temp_winter: pathlib.Path
+    precip_winter: pathlib.Path
 
 
 class Flooding(ctk.BaseConfig):
@@ -236,41 +237,11 @@ class Flooding(ctk.BaseConfig):
 
     Attributes
     ----------
-    flood_path : pathlib.Path
-        Path to the flood data.
+    flooding_path : pathlib.Path
+        Path to the flooding data.
     """
 
-    flood_path: pathlib.Path
-
-
-class GeoSure(ctk.BaseConfig):
-    """Configuration for GeoSure data.
-
-    Attributes
-    ----------
-    zip_path : pathlib.Path
-        Path to the GeoSure zip file.
-    collapsible_deposits : str
-        Internal path to the collapsible deposits file.
-    compressible_ground : str
-        Internal path to the compressible ground file.
-    landslides : str
-        Internal path to the landslides file.
-    running_sand : str
-        Internal path to the running sand file.
-    shrink_swell : str
-        Internal path to the shrink swell file.
-    soluble_rocks : str
-        Internal path to the soluble rocks file.
-    """
-
-    zip_path: pathlib.Path
-    collapsible_deposits: str
-    compressible_ground: str
-    landslides: str
-    running_sand: str
-    shrink_swell: str
-    soluble_rocks: str
+    flooding_path: pathlib.Path
 
 
 class GroundStability(ctk.BaseConfig):
@@ -284,8 +255,8 @@ class GroundStability(ctk.BaseConfig):
         Configuration for GeoSure data.
     """
 
-    geo_shrink_swell: dict
-    geosure: GeoSure
+    geo_shrink_swell: dict[str, pathlib.Path]
+    geosure: ZipFileEntry
 
 
 class HazardsConfig(ctk.BaseConfig):
@@ -293,19 +264,19 @@ class HazardsConfig(ctk.BaseConfig):
 
     Attributes
     ----------
-    coastal_erosion : CoastalErosion
-        Configuration for coastal erosion data.
+    coastal_erosion : ZipFileEntry
+        Configuration for coastal erosion zip file entry.
     extreme_weather : ExtremeWeather
         Configuration for extreme weather data.
-    flooding : Flooding
+    flooding : dict[str, pathlib.Path]
         Configuration for flooding data.
     ground_stability : GroundStability
         Configuration for ground stability data.
     """
 
-    coastal_erosion: CoastalErosion
+    coastal_erosion: ZipFileEntry
     extreme_weather: ExtremeWeather
-    flooding: Flooding
+    flooding: dict[str, pathlib.Path]
     ground_stability: GroundStability
 
 
@@ -316,12 +287,15 @@ class ImpactConfig(ctk.BaseConfig):
     ----------
     freight_demand : pathlib.Path
         Path to the freight demand data.
-    noham_demand : ZipFileEntry
-        Configuration for NoHAM demand zip file entry.
+    noham_demand : pathlib.Path
+        Path to the NoHAM demand data.
+    noham_years: dict[str, int]
+        Dictionary of years for NoHAM demand scenarios.
     """
 
     freight_demand: pathlib.Path
-    noham_demand: ZipFileEntry
+    noham_demand: pathlib.Path
+    noham_years: dict[str, int]
 
 
 class SwitchConfig(ctk.BaseConfig):
@@ -335,26 +309,160 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to run functional rules.
     run_layering : bool
         Whether to run layering.
-    flood_overlay_direct: bool
-        Whether to use a direct overlay of flood data.
-    flood_zip_extract : bool
-        Whether to extract flood zip files.
+    all_roads : bool
+        Whether to include all roads in the analysis.
+    noham_roads : bool
+        Whether to include NoHAM roads in the analysis.
+    passenger_rail : bool
+        Whether to include passenger rail in the analysis.
+    freight_rail : bool
+        Whether to include freight rail in the analysis.
+    airports : bool
+        Whether to include airports in the analysis.
+    bus_stops : bool
+        Whether to include bus stops in the analysis.
+    petrol_stations : bool
+        Whether to include petrol stations in the analysis.
+    charging_sites : bool
+        Whether to include EV charging sites in the analysis.
+    national_cycle_network : bool
+        Whether to include the national cycle network in the analysis.
+    train_stations : bool
+        Whether to include train stations in the analysis.
+    tram_stations : bool
+        Whether to include tram stations in the analysis.
+    rapid_transport_stations : bool
+        Whether to include rapid transport stations in the analysis.
+    ferry_terminals : bool
+        Whether to include ferry terminals in the analysis.
+    bus_coach_stations : bool
+        Whether to include bus coach stations in the analysis.
+    tram_network : bool
+        Whether to include the tram network in the analysis.
+    rapid_transport_network : bool
+        Whether to include the rapid transport network in the analysis.
+    extreme_weather : bool
+        Whether to include extreme weather hazards in the analysis.
+    flooding : bool
+        Whether to include flooding hazards in the analysis.
+    ground_stability : bool
+        Whether to include ground stability hazards in the analysis.
+    coastal_erosion : bool
+        Whether to include coastal erosion hazards in the analysis.
+    compute_flooding_overlay: bool
+        Whether to compute the direct flooding overlay.
     noham_zip_extract : bool
         Whether to extract NoHAM zip files.
-    create_flood_grid : bool
-        Whether to create flood grid.
-    create_flood_tiles: bool
-        Whether to create flood tiles.
     """
 
-    run_data_cleaning: bool = False
-    run_functional_rules: bool = False
-    run_layering: bool = False
-    flood_overlay_direct: bool = False
-    flood_zip_extract: bool = False
+    run_data_cleaning: bool
+    run_functional_rules: bool
+    run_layering: bool
+
+    all_roads: bool
+    noham_roads: bool
+    passenger_rail: bool
+    freight_rail: bool
+    airports: bool
+    bus_stops: bool
+    petrol_stations: bool
+    charging_sites: bool
+    national_cycle_network: bool
+    train_stations: bool
+    tram_stations: bool
+    rapid_transport_stations: bool
+    ferry_terminals: bool
+    bus_coach_stations: bool
+    tram_network: bool
+    rapid_transport_network: bool
+
+    extreme_weather: bool
+    flooding: bool
+    ground_stability: bool
+    coastal_erosion: bool
+
+    compute_flooding_overlay: bool = False
+
     noham_zip_extract: bool = False
-    create_flood_grid: bool = False
-    create_flood_tiles: bool = False
+
+    @pydantic.model_validator(mode="after")
+    def _check(self) -> Self:
+        if not any([self.run_data_cleaning, self.run_functional_rules, self.run_layering]):
+            raise ValueError(
+                "At least one of 'run_data_cleaning', 'run_functional_rules' "
+                "or 'run_layering' must be True."
+            )
+
+        if not any(
+            [
+                self.all_roads,
+                self.noham_roads,
+                self.passenger_rail,
+                self.freight_rail,
+                self.airports,
+                self.bus_stops,
+                self.petrol_stations,
+                self.charging_sites,
+                self.national_cycle_network,
+                self.train_stations,
+                self.tram_stations,
+                self.rapid_transport_stations,
+                self.ferry_terminals,
+                self.bus_coach_stations,
+                self.tram_network,
+                self.rapid_transport_network,
+            ]
+        ):
+            raise ValueError("At least one infrastructure switch must be True.")
+
+        if not any(
+            [self.extreme_weather, self.flooding, self.ground_stability, self.coastal_erosion]
+        ):
+            raise ValueError("At least one hazard switch must be True.")
+
+        return self
+
+
+class ParameterConfig(ctk.BaseConfig):
+    """Configuration for model parameters.
+
+    Attributes
+    ----------
+    stb : str | None = None
+        Name of Sub-National Transport Body to run the tool for (this must exactly match the
+        name in the boundary data). Should be empty if running for a CA rather than STB.
+    ca : str | None = None
+        Name of Combined Authority to run the tool for (this must exactly match the name in the
+        boundary data). Should be empty if running for a STB rather than CA.
+    """
+
+    stb: str | None = None
+    ca: str | None = None
+
+    @pydantic.model_validator(mode="after")
+    def _check(self) -> Self:
+        if not (self.stb is None or self.stb == "") ^ (self.ca is None or self.ca == ""):
+            raise ValueError("Exactly one of 'stb' or 'ca' must be provided, but not both.")
+        return self
+
+
+class ConstantConfig(ctk.BaseConfig):
+    """Configuration for model constants.
+
+    Attributes
+    ----------
+    noham_road_id_threshold : int
+        Threshold for NoHAM road IDs.
+    score_min : float
+        Minimum score for risk calculations.
+    score_max : float
+        Maximum score for risk calculations.
+    """
+
+    noham_road_id_threshold: int
+
+    score_min: int
+    score_max: int
 
 
 # -------------------------
@@ -369,6 +477,8 @@ class Config(ctk.BaseConfig):
     ----------
     switches : SwitchConfig
         Configuration for model switches.
+    parameters: ParameterConfig
+        Configuration for model parameters.
     paths : PathConfig
         Configuration for base paths.
     infrastructure : InfrastructureConfig
@@ -377,11 +487,15 @@ class Config(ctk.BaseConfig):
         Configuration for hazards data.
     impact : ImpactConfig
         Configuration for impact data.
+    constants: ConstantConfig
+        Configuration for model constants.
     """
 
     switches: SwitchConfig
+    parameters: ParameterConfig
     paths: PathConfig
     other_input: OtherInput
     infrastructure: InfrastructureConfig
     hazards: HazardsConfig
     impact: ImpactConfig
+    constants: ConstantConfig
