@@ -99,18 +99,19 @@ class OtherInput(ctk.BaseConfig):
     boundary_path: pydantic.FilePath | None = None
 
 
-class NoHAMEntry(ctk.BaseConfig):
-    """Configuration for NoHAM road network data.
+class ModelRoadsEntry(ctk.BaseConfig):
+    """Configuration for the transport model road network data.
 
     Attributes
     ----------
-    year: int
-        Year of the NoHAM network.
-    file_path: pathlib.Path
+    nodes: pathlib.Path
+        Path to the nodes CSV file.
+    links: pathlib.Path
+        Path to the links CSV file.
     """
 
-    year: int
-    file_path: pathlib.Path
+    nodes: pathlib.Path
+    links: pathlib.Path
 
 
 class Road(ctk.BaseConfig):
@@ -125,7 +126,7 @@ class Road(ctk.BaseConfig):
     """
 
     os_road: ZipFileEntry
-    noham: NoHAMEntry
+    model_roads: ModelRoadsEntry
 
 
 class Rail(ctk.BaseConfig):
@@ -311,8 +312,8 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to run layering.
     all_roads : bool
         Whether to include all roads in the analysis.
-    noham_roads : bool
-        Whether to include NoHAM roads in the analysis.
+    model_roads : bool
+        Whether to include transport model roads in the analysis.
     passenger_rail : bool
         Whether to include passenger rail in the analysis.
     freight_rail : bool
@@ -351,8 +352,6 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include coastal erosion hazards in the analysis.
     compute_flooding_overlay: bool
         Whether to compute the direct flooding overlay.
-    noham_zip_extract : bool
-        Whether to extract NoHAM zip files.
     """
 
     run_data_cleaning: bool
@@ -360,7 +359,7 @@ class SwitchConfig(ctk.BaseConfig):
     run_layering: bool
 
     all_roads: bool
-    noham_roads: bool
+    model_roads: bool
     passenger_rail: bool
     freight_rail: bool
     airports: bool
@@ -383,8 +382,6 @@ class SwitchConfig(ctk.BaseConfig):
 
     compute_flooding_overlay: bool = False
 
-    noham_zip_extract: bool = False
-
     @pydantic.model_validator(mode="after")
     def _check(self) -> Self:
         if not any([self.run_data_cleaning, self.run_functional_rules, self.run_layering]):
@@ -396,7 +393,7 @@ class SwitchConfig(ctk.BaseConfig):
         if not any(
             [
                 self.all_roads,
-                self.noham_roads,
+                self.model_roads,
                 self.passenger_rail,
                 self.freight_rail,
                 self.airports,
@@ -451,15 +448,15 @@ class ConstantConfig(ctk.BaseConfig):
 
     Attributes
     ----------
-    noham_road_id_threshold : int
-        Threshold for NoHAM road IDs.
+    model_road_id_threshold : int
+        Threshold for transport model road IDs.
     score_min : float
         Minimum score for risk calculations.
     score_max : float
         Maximum score for risk calculations.
     """
 
-    noham_road_id_threshold: int
+    model_road_id_threshold: int
 
     score_min: int
     score_max: int

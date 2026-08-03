@@ -12,7 +12,7 @@ import osbng
 import pandas as pd
 import py7zr
 import xarray as xr
-from shapely import geometry
+from shapely import LineString, geometry
 
 from caf.cvt import file_paths, model_config
 from caf.cvt.definitions import (
@@ -383,9 +383,9 @@ def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
     if config.switches.all_roads:
         LOG.info("Cleaning all roads data...")
         _clean_os_roads(config, boundary)
-    if config.switches.noham_roads:
-        LOG.info("Cleaning NoHAM roads data...")
-        _clean_noham_roads(config, boundary)
+    if config.switches.model_roads:
+        LOG.info("Cleaning transport model roads data...")
+        _clean_model_roads(config, boundary)
     LOG.info("Finished cleaning roads data.")
 
 
@@ -428,41 +428,58 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     )
 
 
-def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Read and clean NoHAM network dataset, then write to file."""
-    year = config.infrastructure.road.noham.year
-    noham_network = gpd.read_file(
-        config.paths.raw_input / config.infrastructure.road.noham.file_path,
-        mask=boundary,
-        columns=["link_id"],
-    )
-    len_before_filter = len(noham_network)
-    noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
-    noham_network_clean[["a", "b"]] = (
-        noham_network_clean["link_id"].str.split("_", expand=True).astype(int)
-    )
-    # Filter out links with a or b less than 10,000 (zone connectors)
-    noham_network_clean = noham_network_clean[
-        (noham_network_clean["a"] >= config.constants.noham_road_id_threshold)
-        & (noham_network_clean["b"] >= config.constants.noham_road_id_threshold)
+def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+    """Read and clean transport model road network dataset, then write to file."""
+    # TODO (DJ): Replace with shaped links dataset when available
+    nodes = pd.read_csv(config.infrastructure.road.model_roads.nodes)
+    links = pd.read_csv(config.infrastructure.road.model_roads.links)
+
+    links = links.rename(columns={"id": "link_id"})
+    zone_nodes = nodes.loc[nodes["is_zone"] == 1, "id"]
+
+    links = links[
+        ~links["a_node"].isin(zone_nodes) & ~links["b_node"].isin(zone_nodes)
     ]
-    noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
-    noham_network_clean = validate_geometries(noham_network_clean)
-    noham_network_clipped = clip_to_boundary(noham_network_clean, boundary)
-    noham_network_clipped = noham_network_clipped.reset_index(drop=True)
-    filter_removed = len_before_filter - len(noham_network_clipped)
-    LOG.info(
-        "NoHAM network filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
+
+    links = links.merge(
+        nodes[["id", "easting", "northing"]].rename(columns={
+            "id": "a_node",
+            "easting": "start_x",
+            "northing": "start_y",
+        }),
+        on="a_node",
     )
+
+    links = links.merge(
+        nodes[["id", "easting", "northing"]].rename(columns={
+            "id": "b_node",
+            "easting": "end_x",
+            "northing": "end_y",
+        }),
+        on="b_node",
+    )
+
+    links["geometry"] = links.apply(
+        lambda r: LineString([
+            (r.start_x, r.start_y),
+            (r.end_x, r.end_y)
+        ]),
+        axis=1
+    )
+
+    model_roads = gpd.GeoDataFrame(
+        links[["link_id", "a_node", "b_node", "geometry"]],
+        geometry="geometry",
+        crs=BNG_CRS
+    )
+
+    model_roads = clip_to_boundary(model_roads, boundary)
+
     write_to_file(
-        noham_network_clipped,
-        config.paths.model_input
-        / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-        / f"noham_{year}.gpkg",
+        model_roads,
+        config.paths.model_input / file_paths.MODEL_ROADS_MODEL_INPUT_PATH,
     )
+
 
 
 ### RAIL
