@@ -10,7 +10,6 @@ import fiona
 import geopandas as gpd
 import osbng
 import pandas as pd
-import py7zr
 import xarray as xr
 from shapely import LineString, geometry
 
@@ -20,8 +19,6 @@ from caf.cvt.definitions import (
     ExtremeColdCols,
     ExtremeHeatCols,
     GroundStabilityRiskCols,
-    NoHAMTimePeriods,
-    NoHAMUserClasses,
     Scenarios,
     StormCols,
 )
@@ -437,9 +434,12 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     links = links.rename(columns={"id": "link_id"})
     zone_nodes = nodes.loc[nodes["is_zone"] == 1, "id"]
 
+    links_before_filter = len(links)
     links = links[
         ~links["a_node"].isin(zone_nodes) & ~links["b_node"].isin(zone_nodes)
     ]
+
+    LOG.info("Removed %s zone connectors.", links_before_filter - len(links))
 
     links = links.merge(
         nodes[["id", "easting", "northing"]].rename(columns={
@@ -473,7 +473,14 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         crs=BNG_CRS
     )
 
+    len_before_filter = len(model_roads)
     model_roads = clip_to_boundary(model_roads, boundary)
+    LOG.info(
+        "Model roads filtered - %s of %s (%.1f percent) rows removed",
+        len_before_filter - len(model_roads),
+        len_before_filter,
+        ((len_before_filter - len(model_roads)) / len_before_filter) * 100,
+    )
 
     write_to_file(
         model_roads,
@@ -1039,10 +1046,10 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     temp_max = temp_max.rename(
         columns={
             "tasmax_summer_01_20_median": (
-                f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.CURRENT}",
+                f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.CURRENT}"
             ),
             "tasmax_summer_change_40_median": (
-                f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.FORECAST}",
+                f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.FORECAST}"
             ),
         }
     )
@@ -1074,10 +1081,10 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
     temp_min = temp_min.rename(
         columns={
             "tasmin_winter_01_20_median": (
-                f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.CURRENT}",
+                f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.CURRENT}"
             ),
             "tasmin_winter_change_40_median": (
-                f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.FORECAST}",
+                f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.FORECAST}"
             ),
         }
     )
@@ -1111,9 +1118,9 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     precip_sum = precip_sum.drop(columns=["geometry"])
     precip_sum = precip_sum.rename(
         columns={
-            "pr_summer_01_20_median": (f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}",),
+            "pr_summer_01_20_median": (f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}"),
             "pr_summer_change_40_median": (
-                f"{DroughtCols.PRECIP_SUMMER}_pct_chg_{Scenarios.FORECAST}",
+                f"{DroughtCols.PRECIP_SUMMER}_pct_chg_{Scenarios.FORECAST}"
             ),
         }
     )
@@ -1148,9 +1155,9 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
     precip_win = precip_win.drop(columns=["geometry"])
     precip_win = precip_win.rename(
         columns={
-            "pr_winter_01_20_median": (f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",),
+            "pr_winter_01_20_median": (f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}"),
             "pr_winter_change_40_median": (
-                f"{StormCols.PRECIP_WINTER}_pct_chg_{Scenarios.FORECAST}",
+                f"{StormCols.PRECIP_WINTER}_pct_chg_{Scenarios.FORECAST}"
             ),
         },
     )
@@ -1207,9 +1214,9 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
     drought_index = drought_index.rename(
         columns={
             "DSI12_baseline_00_17_median": (
-                f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.CURRENT}",
+                f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.CURRENT}"
             ),
-            "DSI12_40_median": (f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FORECAST}",),
+            "DSI12_40_median": (f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FORECAST}"),
         }
     )
     len_before_filter = len(drought_index)
@@ -1238,9 +1245,9 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
     hot_days = hot_days.rename(
         columns={
             "HSD_baseline_01_20_median": (
-                f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.CURRENT}",
+                f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.CURRENT}"
             ),
-            "HSD_40_median": (f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.FORECAST}",),
+            "HSD_40_median": (f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.FORECAST}"),
         }
     )
     len_before_filter = len(hot_days)
@@ -1268,9 +1275,9 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
     extr_days = extr_days.rename(
         columns={
             "ESD_baseline_01_20_median": (
-                f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.CURRENT}",
+                f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.CURRENT}"
             ),
-            "ESD_40_median": (f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.FORECAST}",),
+            "ESD_40_median": (f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.FORECAST}"),
         }
     )
     len_before_filter = len(extr_days)
@@ -1299,9 +1306,9 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     frost_days = frost_days.rename(
         columns={
             "FrostDays_baseline_01_20_median": (
-                f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.CURRENT}",
+                f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.CURRENT}"
             ),
-            "FrostDays_40_median": (f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.FORECAST}",),
+            "FrostDays_40_median": (f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.FORECAST}"),
         }
     )
     len_before_filter = len(frost_days)
@@ -1329,9 +1336,9 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
     ice_days = ice_days.rename(
         columns={
             "IcingDays_baseline_01_20_median": (
-                f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.CURRENT}",
+                f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.CURRENT}"
             ),
-            "IcingDays_40_median": (f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.FORECAST}",),
+            "IcingDays_40_median": (f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.FORECAST}")
         }
     )
     len_before_filter = len(ice_days)
@@ -1838,8 +1845,8 @@ def _clean_impact(config: model_config.Config, boundary: gpd.GeoDataFrame) -> No
     LOG.info("Cleaning impact data...")
     if config.switches.freight_rail:
         _clean_freight_demand(config, boundary)
-    if config.switches.noham_roads:
-        _clean_noham_flows(config)
+    if config.switches.model_roads:
+        _clean_model_road_flows(config)
     LOG.info("Finished cleaning impact data.")
 
 
@@ -1919,223 +1926,59 @@ def _map_freight_networks(
 ### NoHAM
 
 
-def _clean_noham_flows(config: model_config.Config) -> None:
+def _clean_model_road_flows(config: model_config.Config) -> None:
     """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
-    noham_network = gpd.read_file(
-        config.paths.model_input
-        / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-        / f"noham_{config.infrastructure.road.noham.year}.gpkg"
-    )
-    network_link_ids = set(noham_network["link_id"])
+    uc_link_flows = pd.read_csv(config.impact.model_road_flows.link_flows)
+    ufs = pd.read_csv(config.impact.model_road_flows.ufs)
+    annualisation_factors = pd.read_csv(config.impact.model_road_flows.annualisation_factors)
 
-    scenario_flows = {}
-    for year_label, year in config.impact.noham_years.items():
-        if year_label == "baseline":
-            scenario = Scenarios.CURRENT
-        elif year_label == "future":
-            scenario = Scenarios.FORECAST
-        else:
-            raise ValueError(
-                f"Unexpected year label: {year_label}, expects 'baseline' or 'future'."
-            )
-        flows = _aggregate_link_flows_year(config, year, network_link_ids)
-
-        flows = flows.rename(
-            columns={col: f"{col}_{scenario}" for col in flows.columns if col != "link_id"}
-        )
-
-        scenario_flows[scenario] = flows
-
-    current_ids = set(scenario_flows[Scenarios.CURRENT]["link_id"])
-    forecast_ids = set(scenario_flows[Scenarios.FORECAST]["link_id"])
-    common_ids = current_ids & forecast_ids
-    current_only_ids = current_ids - forecast_ids
-    forecast_only_ids = forecast_ids - current_ids
-
-    noham_flows = scenario_flows[Scenarios.CURRENT].merge(
-        scenario_flows[Scenarios.FORECAST], on="link_id", how="inner"
+    symca_links = gpd.read_file(
+        config.paths.model_input / file_paths.MODEL_ROADS_MODEL_INPUT_PATH
     )
 
-    LOG.info(
-        "NoHAM flows merged: \n"
-        "Current links: %s, Forecast links: %s \n"
-        "Common links: %s, Current only links: %s, Forecast only links: %s",
-        len(current_ids),
-        len(forecast_ids),
-        len(common_ids),
-        len(current_only_ids),
-        len(forecast_only_ids),
+    uc_link_flows = uc_link_flows.drop(columns=["id"])
+    symca_uc_link_flows = uc_link_flows.loc[
+        uc_link_flows["link_id"].isin(symca_links["link_id"])
+    ]
+
+    symca_uc_link_flows = symca_uc_link_flows.merge(
+        ufs,
+        left_on="ufs_id",
+        right_on="id",
+        how="left",
     )
 
-    noham_net_flows = noham_network.merge(noham_flows, on="link_id", how="left")
+    annualisation_factors = annualisation_factors.drop(columns=["id"])
 
-    noham_net_flows = gpd.GeoDataFrame(
-        noham_net_flows, geometry="geometry", crs=noham_network.crs
+    symca_uc_link_flows = symca_uc_link_flows.merge(
+        annualisation_factors,
+        on=["time_period", "userclass"],
+        how="left",
+    )
+
+    symca_uc_link_flows["annual_flow"] = (
+        symca_uc_link_flows["actual_flow"] * symca_uc_link_flows["factor"]
+    )
+
+    symca_uc_link_flows = symca_uc_link_flows.drop(
+        columns=["ufs_id", "id", "factor", "actual_flow"]
+    )
+
+    symca_uc_link_flows = symca_uc_link_flows.groupby(
+        ["link_id", "userclass", "year", "scenario"]
+    ).agg({"annual_flow": "sum"}).reset_index()
+
+    symca_uc_link_flows = symca_uc_link_flows.merge(
+        symca_links[["link_id", "geometry"]],
+        on="link_id",
+        how="left",
+    )
+
+    symca_uc_link_flows = gpd.GeoDataFrame(
+        symca_uc_link_flows, geometry="geometry", crs=BNG_CRS
     )
 
     write_to_file(
-        noham_net_flows, config.paths.model_input / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
+        symca_uc_link_flows,
+        config.paths.model_input / file_paths.MODEL_ROAD_FLOWS_MODEL_INPUT_PATH,
     )
-
-
-def _read_noham_h5(
-    *,
-    route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
-    year: int,
-    time_period: str,
-    user_class: str,
-    noham_path: pathlib.Path,
-    output_path: pathlib.Path,
-    extract: bool,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Read and clean NoHAM h5 files and extract the link, routes, and od's DataFrames."""
-    if extract:
-        with py7zr.SevenZipFile(noham_path, mode="r") as archive:
-            archive.extract(
-                path=output_path,
-                targets=[
-                    (
-                        f"input h5s/"
-                        f"{year}/"
-                        f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
-                    )
-                ],
-            )
-
-    noham_demand_path = (
-        output_path
-        / "input h5s"
-        / str(year)
-        / f"NoHAM_Decarb_DM_Core_{year!s}_{time_period}_v107_SatPig_{user_class}.h5"
-    )
-
-    if (str(year), time_period) not in route_links_store:
-        noham_routes = pd.read_hdf(noham_demand_path, key="/data/Route")
-        noham_routes = noham_routes.reset_index()[["route", "link_id"]]
-        noham_links = pd.read_hdf(noham_demand_path, key="/data/link")
-        noham_links = noham_links[["a", "b"]]
-        route_links_store[(str(year), time_period)] = (noham_routes, noham_links)
-    else:
-        noham_routes, noham_links = route_links_store[(str(year), time_period)]
-
-    noham_ods = pd.read_hdf(noham_demand_path, key="/data/OD")
-    noham_ods = noham_ods.reset_index()[["route", "abs_demand"]]
-
-    return noham_ods, noham_routes, noham_links
-
-
-def _aggregate_link_flows(
-    ods: pd.DataFrame, routes: pd.DataFrame, links: pd.DataFrame
-) -> pd.DataFrame:
-    """Take NoHAM od's, routes, and link to create aggregated link flows DataFrame."""
-    # Merge OD demand onto routes
-    od_routes = routes.merge(ods[["route", "abs_demand"]], on="route", how="inner")
-
-    link_demand = od_routes.groupby("link_id")["abs_demand"].sum().reset_index()
-
-    return link_demand.merge(links[["a", "b"]], left_on="link_id", right_index=True)
-
-
-def _process_single_noham_layer(
-    config: model_config.Config,
-    *,
-    year: int,
-    route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
-    time_period: str,
-    user_class: str,
-    link_ids: set[str],
-) -> pd.DataFrame:
-    LOG.info("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
-
-    noham_ods, noham_routes, noham_links = _read_noham_h5(
-        route_links_store=route_links_store,
-        year=year,
-        time_period=time_period,
-        user_class=user_class,
-        noham_path=config.paths.raw_input / config.impact.noham_demand,
-        output_path=config.paths.raw_input / file_paths.NOHAM_ZIP_EXTRACT_OUTPUT_PATH,
-        extract=config.switches.noham_zip_extract,
-    )
-    noham_links["noham_link_id"] = (
-        noham_links["a"].astype(str) + "_" + noham_links["b"].astype(str)
-    )
-    noham_links = noham_links[noham_links["noham_link_id"].isin(link_ids)]
-    noham_routes = noham_routes[noham_routes["link_id"].isin(noham_links.index)]
-
-    link_demand = _aggregate_link_flows(
-        noham_ods,
-        noham_routes,
-        noham_links,
-    )
-
-    link_demand["link_id"] = link_demand["a"].astype(str) + "_" + link_demand["b"].astype(str)
-
-    link_demand = link_demand[["link_id", "abs_demand"]]
-    link_demand = link_demand.rename(
-        columns={"abs_demand": f"{user_class}_{time_period}"}
-    )  # Rename demand column
-
-    LOG.info(
-        "%s ODs, %s Routes and %s Links aggregated to %s link flows",
-        len(noham_ods),
-        len(noham_routes),
-        len(noham_links),
-        len(link_demand),
-    )
-
-    return link_demand
-
-
-def _aggregate_link_flows_year(
-    config: model_config.Config, year: int, network_link_ids: set[str]
-) -> pd.DataFrame:
-    """Aggregate link flows for each year, time period, and user class."""
-    route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}
-
-    ts_dfs = []
-    for time_period in NoHAMTimePeriods:
-        uc_dfs = []
-        for user_class in NoHAMUserClasses:
-            uc_dfs.append(
-                _process_single_noham_layer(
-                    config,
-                    year=year,
-                    route_links_store=route_links_store,
-                    time_period=time_period,
-                    user_class=user_class,
-                    link_ids=network_link_ids,
-                )
-            )
-
-        # Merge all user class dataframes
-        combined_uc_df = uc_dfs[0]
-        for df_uc in uc_dfs[1:]:
-            combined_uc_df = combined_uc_df.merge(df_uc, on="link_id", how="outer")
-
-        # Compute total demand for all vehicles for each time period
-        combined_uc_df[f"all_vehs_{time_period}"] = combined_uc_df[
-            [f"{uc}_{time_period}" for uc in NoHAMUserClasses]
-        ].sum(axis=1)
-
-        # Store result
-        ts_dfs.append(combined_uc_df)
-
-    # Merge all time period dataframes
-    combined_ts_df = ts_dfs[0]
-    for df_ts in ts_dfs[1:]:
-        combined_ts_df = combined_ts_df.merge(df_ts, on="link_id", how="outer")
-
-    # Compute totals for each user class across all time periods
-    for uc in NoHAMUserClasses:
-        combined_ts_df[f"{uc}_total"] = combined_ts_df[
-            [f"{uc}_{tp}" for tp in NoHAMTimePeriods]
-        ].sum(axis=1)
-
-    # Compute total of each user class across all time periods
-    combined_ts_df["all_vehs_total"] = combined_ts_df[
-        [f"all_vehs_{tp}" for tp in NoHAMTimePeriods]
-    ].sum(axis=1)
-
-    return combined_ts_df[
-        ["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in NoHAMUserClasses]
-    ]

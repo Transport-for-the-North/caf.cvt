@@ -99,6 +99,14 @@ class OtherInput(ctk.BaseConfig):
     boundary_path: pydantic.FilePath | None = None
 
 
+    # Empty yaml values are loaded as strings, so need to convert to None
+    @pydantic.field_validator("boundary_path", mode="before")
+    @classmethod
+    def _empty_to_none(cls, v) -> pydantic.FilePath | None:
+        if v == "":
+            return None
+        return v
+
 class ModelRoadsEntry(ctk.BaseConfig):
     """Configuration for the transport model road network data.
 
@@ -281,6 +289,25 @@ class HazardsConfig(ctk.BaseConfig):
     ground_stability: GroundStability
 
 
+class ModelRoadFlowsEntry(ctk.BaseConfig):
+    """Configuration for the transport model road flows data.
+
+    Attributes
+    ----------
+    link_flows: pathlib.Path
+        Path to the link flows CSV file.
+    ufs: pathlib.Path
+        Path to the UFS CSV file.
+    annualisation_factors: pathlib.Path
+        Path to the annualisation factors CSV file.
+    """
+
+    link_flows: pathlib.Path
+    ufs: pathlib.Path
+    annualisation_factors: pathlib.Path
+
+
+
 class ImpactConfig(ctk.BaseConfig):
     """Configuration for impact data.
 
@@ -288,15 +315,13 @@ class ImpactConfig(ctk.BaseConfig):
     ----------
     freight_demand : pathlib.Path
         Path to the freight demand data.
-    noham_demand : pathlib.Path
-        Path to the NoHAM demand data.
-    noham_years: dict[str, int]
-        Dictionary of years for NoHAM demand scenarios.
+    model_road_flows : ModelRoadFlowsEntry
+        Configuration for the transport model road flows data.
     """
 
     freight_demand: pathlib.Path
-    noham_demand: pathlib.Path
-    noham_years: dict[str, int]
+    model_road_flows: ModelRoadFlowsEntry
+
 
 
 class SwitchConfig(ctk.BaseConfig):
@@ -436,11 +461,20 @@ class ParameterConfig(ctk.BaseConfig):
     stb: str | None = None
     ca: str | None = None
 
+    # Empty yaml values are loaded as strings, so need to convert to None
+    @pydantic.field_validator("stb", "ca", mode="before")
+    @classmethod
+    def _empty_to_none(cls, v) -> str | None:
+        if v == "":
+            return None
+        return v
+
     @pydantic.model_validator(mode="after")
     def _check(self) -> Self:
-        if not (self.stb is None or self.stb == "") ^ (self.ca is None or self.ca == ""):
+        if not (self.stb is None) ^ (self.ca is None):
             raise ValueError("Exactly one of 'stb' or 'ca' must be provided, but not both.")
         return self
+
 
 
 class ConstantConfig(ctk.BaseConfig):
@@ -448,15 +482,11 @@ class ConstantConfig(ctk.BaseConfig):
 
     Attributes
     ----------
-    model_road_id_threshold : int
-        Threshold for transport model road IDs.
     score_min : float
         Minimum score for risk calculations.
     score_max : float
         Maximum score for risk calculations.
     """
-
-    model_road_id_threshold: int
 
     score_min: int
     score_max: int
