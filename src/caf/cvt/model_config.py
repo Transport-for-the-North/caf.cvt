@@ -102,7 +102,7 @@ class OtherInput(ctk.BaseConfig):
     # Empty yaml values are loaded as strings, so need to convert to None
     @pydantic.field_validator("boundary_path", mode="before")
     @classmethod
-    def _empty_to_none(cls, v) -> pydantic.FilePath | None:
+    def _empty_to_none(cls, v: str) -> pydantic.FilePath | None:
         if v == "":
             return None
         return v
@@ -129,8 +129,8 @@ class Road(ctk.BaseConfig):
     ----------
     os_road : ZipFileEntry
         Configuration for the OS road zip file entry.
-    noham: NoHAMEntry
-        Configuration for the NoHAM road network data.
+    model_roads: ModelRoadsEntry
+        Configuration for the transport model road network data.
     """
 
     os_road: ZipFileEntry
@@ -464,7 +464,7 @@ class ParameterConfig(ctk.BaseConfig):
     # Empty yaml values are loaded as strings, so need to convert to None
     @pydantic.field_validator("stb", "ca", mode="before")
     @classmethod
-    def _empty_to_none(cls, v) -> str | None:
+    def _empty_to_none(cls, v: str) -> str | None:
         if v == "":
             return None
         return v

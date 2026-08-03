@@ -14,9 +14,9 @@ from caf.cvt.definitions import (
     GroundStabilityRiskCols,
     ImpactCols,
     MainHazardRiskCols,
-    NoHAMUserClasses,
     RiskColumn,
     Scenarios,
+    UserClasses,
 )
 
 LOG = logging.getLogger(__name__)
@@ -206,7 +206,7 @@ def layering(config: model_config.Config) -> None:
 
     Read in hazard layers from functional rules output, then spatially intersect with
     infrastructure layers to assign risk to each piece of infrastructure. Calculate impact
-    indices for NoHAM and freight rail.
+    indices for transport model roads and freight rail.
 
     Parameters
     ----------
@@ -291,12 +291,12 @@ def _get_road_risk(
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
-    """Layer OS Open Roads and NoHAM with hazards to assign risk."""
+    """Layer OS Open Roads and Transport Model roads with hazards to assign risk."""
     LOG.info("Calculating road risk...")
     if config.switches.all_roads:
         _os_open_road_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.noham_roads:
-        _noham_road_risk(config, hazard_layers, risk_cols, audit_path)
+    if config.switches.model_roads:
+        _model_road_risk(config, hazard_layers, risk_cols, audit_path)
     LOG.info("Road risk calculation complete.")
 
 
@@ -345,109 +345,101 @@ def _os_open_road_risk(
     LOG.info("Finished layering OS Open Roads with hazard risk.")
 
 
-#### NoHAM
+#### TRANSPORT MODEL ROADS
 
 
-def _noham_road_risk(
+def _model_road_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
-    """Get NoHAM road risk and write to file.
+    """Get transport model road risk and write to file.
 
-    Intersect NoHAM with hazards, calculate impact index, clean output, and write
-    to file.
+    Intersect transport model roads with hazards, calculate impact index, clean output, and
+    write to file.
     """
-    LOG.info("Layering NoHAM with hazard risk and calculating impact index...")
-    noham_net_flows = gpd.read_file(
-        config.paths.model_input / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
+    LOG.info("Layering transport model roads with hazard risk and calculating impact index...")
+    model_net_flows = gpd.read_file(
+        config.paths.model_input / file_paths.MODEL_ROAD_FLOWS_MODEL_INPUT_PATH
     )
 
-    if noham_net_flows.empty:
-        LOG.warning("NoHAM network flows layer is empty. Skipping.")
+    if model_net_flows.empty:
+        LOG.warning("Transport model network flows layer is empty. Skipping.")
         return
 
-    noham_risk = _infrastructure_risk_intersect(noham_net_flows, hazard_layers)
+    model_road_risk = _infrastructure_risk_intersect(model_net_flows, hazard_layers)
 
     feature_range = (config.constants.score_min, config.constants.score_max)
-    noham_risk = _noham_impact_index(noham_risk, feature_range)
+    model_road_risk = _model_road_impact_index(model_road_risk, feature_range)
 
     risk_impact_cols = [*risk_cols, *ImpactCols]
 
     _audit_infrastructure_risk(
-        noham_risk,
-        "NoHAM Roads",
+        model_road_risk,
+        "Model Roads",
         risk_impact_cols,
-        audit_path / "Road" / "NoHAM",
+        audit_path / "Road" / "Model Roads",
         feature_range=feature_range,
     )
 
     data_cleaning.write_to_file(
-        noham_risk,
-        config.paths.model_output / "Road" / "NoHAM" / "noham_risk.gpkg",
+        model_road_risk,
+        config.paths.model_output / "Road" / "Model Roads" / "model_road_risk.gpkg",
     )
 
-    noham_risk = _prepare_model_output(
-        risk_data=noham_risk,
+    model_road_risk = _prepare_model_output(
+        risk_data=model_road_risk,
         drop_cols=[],
         rename_map={"link_id": "id"},
         risk_cols_order=risk_impact_cols,
     )
 
     _split_csv_shapefile(
-        config, noham_risk, "id", pathlib.Path("Road") / "NoHAM" / "noham_risk"
+        config, model_road_risk, "id", pathlib.Path("Road") / "Model Roads" / "model_road_risk"
     )
 
-    LOG.info("Finished layering NoHAM with hazard risk and calculating impact index.")
+    LOG.info(
+        "Finished layering transport model roads with hazards and calculating impact index."
+    )
 
 
-def _noham_impact_index(
-    noham: gpd.GeoDataFrame, feature_range: tuple[int, int]
+def _model_road_impact_index(
+    model_road_risk: gpd.GeoDataFrame, feature_range: tuple[int, int]
 ) -> gpd.GeoDataFrame:
-    """Normalise NoHAM demand, then calculate impact index."""
-    noham = _normalise_uc_demand(noham, feature_range)
-    noham = _normalise_total_demand(noham, feature_range)
-    noham = _calculate_noham_impact(noham)
-    return _normalise_noham_impact(noham, feature_range)
+    """Normalise transport model road demand, then calculate impact index."""
+    # First, normalise demand for each user class individually and for total demand
+    model_road_risk = functional_rules.min_max_scaling_pair(
+        data=model_road_risk,
+        pairs=[
+            (f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")
+        ] + [
+            (f"{uc}_demand_{Scenarios.CURRENT}", f"{uc}_demand_{Scenarios.FORECAST}")
+            for uc in UserClasses
+        ],
+        feature_range=feature_range,
+    )
 
+    # Then, calculate impact index for each user class and for total demand
+    model_road_risk = _calculate_model_road_impact(model_road_risk)
 
-def _normalise_uc_demand(noham: pd.DataFrame, feature_range: tuple[int, int]) -> pd.DataFrame:
-    """Normalise NoHAM demand for each user class individually."""
-    pairs = [
-        (f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}")
-        for uc in NoHAMUserClasses
-    ]
-
-    noham = functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
-
-    rename_map = {
-        col: col.replace("total", "demand")
-        for uc in NoHAMUserClasses
-        for col in [f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}"]
-    }
-    return noham.rename(columns=rename_map)
-
-
-def _normalise_total_demand(
-    noham: pd.DataFrame, feature_range: tuple[int, int]
-) -> pd.DataFrame:
-    """Normalise NoHAM demand across all user classes combined."""
-    pairs = [(f"all_vehs_total_{Scenarios.CURRENT}", f"all_vehs_total_{Scenarios.FORECAST}")]
-    noham = functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
-    return noham.rename(
-        columns={
-            f"all_vehs_total_{Scenarios.CURRENT}": f"demand_{Scenarios.CURRENT}",
-            f"all_vehs_total_{Scenarios.FORECAST}": f"demand_{Scenarios.FORECAST}",
-        }
+    # Finally, normalise the impact index for each user class and for total demand
+    return functional_rules.min_max_scaling_pair(
+        data=model_road_risk,
+        pairs=[
+            (f"{uc}_impact_{Scenarios.CURRENT}", f"{uc}_impact_{Scenarios.FORECAST}")
+            for uc in UserClasses
+        ] + [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")],
+        feature_range=feature_range,
     )
 
 
-def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
-    """Calculate NoHAM impact score for each user class, and for all vehicles."""
+def _calculate_model_road_impact(model_road_risk: pd.DataFrame) -> pd.DataFrame:
+    """Calculate transport model impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
     risk_cols = [
-        col for col in MainHazardRiskCols if f"{col}_{Scenarios.CURRENT}" in noham.columns
+        col for col in MainHazardRiskCols
+        if f"{col}_{Scenarios.CURRENT}" in model_road_risk.columns
     ]
 
     hazards = [col.removesuffix("_risk") for col in risk_cols]
@@ -455,30 +447,22 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
 
     for scenario in Scenarios:
         hazard_component = sum(
-            noham[f"{risk_col}_{scenario}"] * impact_weights[risk_col.removesuffix("_risk")]
+            model_road_risk[
+                f"{risk_col}_{scenario}"] * impact_weights[risk_col.removesuffix("_risk")
+            ]
             for risk_col in risk_cols
         )
-        for uc in NoHAMUserClasses:
-            impact_component = noham[f"{uc}_demand_{scenario}"] * impact_weights["demand"]
-            noham[f"{uc}_impact_{scenario}"] = impact_component + hazard_component
+        for uc in UserClasses:
+            impact_component = (
+                model_road_risk[f"{uc}_demand_{scenario}"] * impact_weights["demand"]
+            )
+            model_road_risk[f"{uc}_impact_{scenario}"] = impact_component + hazard_component
 
-        impact_component = noham[f"demand_{scenario}"] * impact_weights["demand"]
-        noham[f"impact_{scenario}"] = impact_component + hazard_component
+        impact_component = model_road_risk[f"demand_{scenario}"] * impact_weights["demand"]
+        model_road_risk[f"impact_{scenario}"] = impact_component + hazard_component
 
-    demand_cols = [col for col in noham.columns if "demand" in col]
-    return noham.drop(columns=demand_cols)
-
-
-def _normalise_noham_impact(
-    noham: pd.DataFrame, feature_range: tuple[int, int]
-) -> pd.DataFrame:
-    """Normalise NoHAM impact scores across all user classes combined."""
-    pairs = [
-        (f"{uc}_impact_{Scenarios.CURRENT}", f"{uc}_impact_{Scenarios.FORECAST}")
-        for uc in NoHAMUserClasses
-    ] + [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")]
-
-    return functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
+    demand_cols = [col for col in model_road_risk.columns if "demand" in col]
+    return model_road_risk.drop(columns=demand_cols)
 
 
 ### RAIL

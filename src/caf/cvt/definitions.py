@@ -144,17 +144,19 @@ class StormCols(RiskColumn):
 
 
 class ImpactCols(RiskColumn):
-    """Column definitions for NoHAM impact layers."""
+    """Column definitions for impact layers."""
 
     UC1_IMPACT = "uc1_impact"
     UC2_IMPACT = "uc2_impact"
     UC3_IMPACT = "uc3_impact"
     UC4_IMPACT = "uc4_impact"
     UC5_IMPACT = "uc5_impact"
+    UC6_IMPACT = "uc6_impact"
+    UC7_IMPACT = "uc7_impact"
     IMPACT = "impact"
 
     def get_cmap(self) -> str:
-        """Return the appropriate colormap for a given NoHAM impact column."""
+        """Return the appropriate colormap for a given impact column."""
         return "viridis"
 
 
@@ -170,18 +172,20 @@ class Scenarios(enum.StrEnum):
         return f"{cls.CURRENT}_or_{cls.FORECAST}"
 
 
-class NoHAMUserClasses(enum.StrEnum):
-    """Definitions for NoHAM user classes."""
+class UserClasses(enum.StrEnum):
+    """Definitions for user classes."""
 
     USER_CLASS_1 = "uc1"
     USER_CLASS_2 = "uc2"
     USER_CLASS_3 = "uc3"
     USER_CLASS_4 = "uc4"
     USER_CLASS_5 = "uc5"
+    USER_CLASS_6 = "uc6"
+    USER_CLASS_7 = "uc7"
 
 
-class NoHAMTimePeriods(enum.StrEnum):
-    """Definitions for NoHAM time periods."""
+class TimePeriods(enum.StrEnum):
+    """Definitions for time periods."""
 
     TIME_PERIOD_1 = "TS1"
     TIME_PERIOD_2 = "TS2"

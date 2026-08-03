@@ -1923,11 +1923,11 @@ def _map_freight_networks(
     return os_freight_network_demand.drop(columns=["index_right"])
 
 
-### NoHAM
+### TRANSPORT MODEL FLOWS
 
 
 def _clean_model_road_flows(config: model_config.Config) -> None:
-    """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
+    """Clean model flows data, aggregate link flows, merge with network, then write to file."""
     uc_link_flows = pd.read_csv(config.impact.model_road_flows.link_flows)
     ufs = pd.read_csv(config.impact.model_road_flows.ufs)
     annualisation_factors = pd.read_csv(config.impact.model_road_flows.annualisation_factors)
@@ -1967,6 +1967,64 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
     symca_uc_link_flows = symca_uc_link_flows.groupby(
         ["link_id", "userclass", "year", "scenario"]
     ).agg({"annual_flow": "sum"}).reset_index()
+
+    # TODO (DJ): Alter the following slightly when future demand is available
+    years = sorted(symca_uc_link_flows["year"].unique())
+    if len(years) == 1:
+        current_year = years[0]
+        forecast_year = years[0]
+    elif len(years) == 2:
+        current_year = min(years)
+        forecast_year = max(years)
+    else:
+        raise ValueError(
+            f"Expected 1 or 2 years. Found {years}"
+        )
+
+    current_flows = symca_uc_link_flows[symca_uc_link_flows["year"] == current_year].copy()
+    forecast_flows = symca_uc_link_flows[symca_uc_link_flows["year"] == forecast_year].copy()
+
+    if current_year == forecast_year:
+        forecast_flows = current_flows.copy()
+
+    current_flows = current_flows.pivot_table(
+        index="link_id",
+        columns="userclass",
+        values="annual_flow",
+        aggfunc="sum",
+    )
+
+    forecast_flows = forecast_flows.pivot_table(
+        index="link_id",
+        columns="userclass",
+        values="annual_flow",
+        aggfunc="sum",
+    )
+
+    current_flows.columns = [
+        f"uc{uc}_demand_{Scenarios.CURRENT}" for uc in current_flows.columns
+    ]
+
+    forecast_flows.columns = [
+        f"uc{uc}_demand_{Scenarios.FORECAST}" for uc in forecast_flows.columns
+    ]
+
+    symca_uc_link_flows = current_flows.join(
+        forecast_flows,
+        how="left"
+    )
+
+    symca_uc_link_flows[f"demand_{Scenarios.CURRENT}"] = (
+        symca_uc_link_flows[
+            [c for c in symca_uc_link_flows.columns if c.endswith(f"_{Scenarios.CURRENT}")]
+        ].sum(axis=1)
+    )
+
+    symca_uc_link_flows[f"demand_{Scenarios.FORECAST}"] = (
+        symca_uc_link_flows[
+            [c for c in symca_uc_link_flows.columns if c.endswith(f"_{Scenarios.FORECAST}")]
+        ].sum(axis=1)
+    )
 
     symca_uc_link_flows = symca_uc_link_flows.merge(
         symca_links[["link_id", "geometry"]],
