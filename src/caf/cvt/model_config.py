@@ -102,7 +102,10 @@ class OtherInput(ctk.BaseConfig):
     # Empty yaml values are loaded as strings, so need to convert to None
     @pydantic.field_validator("boundary_path", mode="before")
     @classmethod
-    def _empty_to_none(cls, v: str) -> pydantic.FilePath | None:
+    def _empty_to_none(
+        cls,
+        v: str | pydantic.FilePath | None
+) -> str | pydantic.FilePath | None:
         if v == "":
             return None
         return v
