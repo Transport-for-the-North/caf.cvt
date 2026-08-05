@@ -190,3 +190,23 @@ class TimePeriods(enum.StrEnum):
     TIME_PERIOD_1 = "TS1"
     TIME_PERIOD_2 = "TS2"
     TIME_PERIOD_3 = "TS3"
+
+
+class OSRoadStructure(enum.StrEnum):
+    """Definitions for OS road structure types."""
+
+    BRIDGE = "Road On Bridge"
+    TUNNEL = "Road In Tunnel"
+
+
+class OSRailStructure(enum.StrEnum):
+    """Definitions for OS rail structure types."""
+
+    CUTTING = "In Cutting"
+    EMBANKMENT = "On Embankment"
+    UNDER_STRUCTURE = "Under Structure"
+    ON_STRUCTURE = "On Structure"
+    BRIDGE = "On Bridge"
+    TUNNEL = "In Tunnel"
+    BUILDING = "In Building"
+

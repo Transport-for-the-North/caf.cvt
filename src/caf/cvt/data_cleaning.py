@@ -18,7 +18,12 @@ from caf.cvt.definitions import (
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
+    ExtremeWeatherRiskCols,
+    FloodingRiskCols,
     GroundStabilityRiskCols,
+    MainHazardRiskCols,
+    OSRailStructure,
+    OSRoadStructure,
     Scenarios,
     StormCols,
 )
@@ -51,6 +56,56 @@ MMRN_NODE_TYPES = {
 
 _WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
 _WIND_SPEED_PERCENTILE = 0.99
+
+
+_ROAD_STRUCTURE_VULNERABILITY = {
+    OSRoadStructure.BRIDGE:
+    {
+        ExtremeWeatherRiskCols.EXTREME_HEAT: 1.2,
+        ExtremeWeatherRiskCols.EXTREME_COLD: 1.2,
+        ExtremeWeatherRiskCols.STORM: 1.1,
+        FloodingRiskCols.RIVERS_SEA: 1.2,
+    },
+    OSRoadStructure.TUNNEL:
+    {
+        ExtremeWeatherRiskCols.STORM: 0.9,
+        FloodingRiskCols.RIVERS_SEA: 1.1,
+        FloodingRiskCols.SURFACE_WATER: 1.2,
+    },
+}
+
+
+_RAIL_STRUCTURE_VULNERABILITY = {
+    OSRailStructure.CUTTING: {
+        ExtremeWeatherRiskCols.STORM: 1.2,
+        ExtremeWeatherRiskCols.DROUGHT: 1.2,
+        GroundStabilityRiskCols.LANDSLIDES: 1.2,
+        FloodingRiskCols.SURFACE_WATER: 1.2
+    },
+    OSRailStructure.EMBANKMENT: {
+        MainHazardRiskCols.EXTREME_WEATHER: 1,
+    },
+    OSRailStructure.BRIDGE: {
+        ExtremeWeatherRiskCols.EXTREME_HEAT: 1.2,
+        ExtremeWeatherRiskCols.EXTREME_COLD: 1.2,
+        ExtremeWeatherRiskCols.STORM: 1.1,
+        FloodingRiskCols.RIVERS_SEA: 1.2,
+    },
+    OSRailStructure.TUNNEL: {
+        ExtremeWeatherRiskCols.STORM: 0.9,
+        FloodingRiskCols.RIVERS_SEA: 1.1,
+        FloodingRiskCols.SURFACE_WATER: 1.2,
+    },
+    OSRailStructure.BUILDING: {
+        MainHazardRiskCols.EXTREME_WEATHER: 1,
+    },
+    OSRailStructure.UNDER_STRUCTURE: {
+        MainHazardRiskCols.EXTREME_WEATHER: 1,
+    },
+    OSRailStructure.ON_STRUCTURE: {
+        MainHazardRiskCols.EXTREME_WEATHER: 1,
+    },
+}
 
 
 ### GENERAL FUNCTIONS
@@ -427,42 +482,48 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
 
 def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean transport model road network dataset, then write to file."""
-    # First, read in the bendy links shapefile, which contains the geometry of the links
-    bendy_links = gpd.read_file("D:/Climate Vulnerability Tool/Localisation/v2/SYSTM2/Network_GIS_with_Bendy_Links/UserLinks/userlinks.shp")
-    bendy_links = (
-        bendy_links[["ANode", "BNode", "geometry"]]
-        .rename(columns={"ANode": "a_node", "BNode": "b_node"})
-    )
-
-    # Next, find all of the zone connector nodes in the network
+    # TODO (DJ): Replace with shaped links dataset when available
     nodes = pd.read_csv(config.infrastructure.road.model_roads.nodes)
-    zone_nodes = nodes.loc[nodes["is_zone"] == 1, "id"].astype(str)
-
-    # Next, filter out any zone connector links in the network
     links = pd.read_csv(config.infrastructure.road.model_roads.links)
-    links = links.rename(columns={"id": "link_id"}).astype({"a_node": str, "b_node": str})
+
+    links = links.rename(columns={"id": "link_id"})
+    zone_nodes = nodes.loc[nodes["is_zone"] == 1, "id"]
+
     links_before_filter = len(links)
     links = links[
         ~links["a_node"].isin(zone_nodes) & ~links["b_node"].isin(zone_nodes)
     ]
+
     LOG.info("Removed %s zone connectors.", links_before_filter - len(links))
 
-    if len(bendy_links) != len(links):
-        LOG.warning(
-            "Number of rows in bendy links (%s) "
-            "does not match number of rows in links table (%s).",
-            len(bendy_links),
-            len(links),
-        )
+    links = links.merge(
+        nodes[["id", "easting", "northing"]].rename(columns={
+            "id": "a_node",
+            "easting": "start_x",
+            "northing": "start_y",
+        }),
+        on="a_node",
+    )
 
-    model_roads = bendy_links.merge(
-        links,
-        on=["a_node", "b_node"],
-        how="inner",
+    links = links.merge(
+        nodes[["id", "easting", "northing"]].rename(columns={
+            "id": "b_node",
+            "easting": "end_x",
+            "northing": "end_y",
+        }),
+        on="b_node",
+    )
+
+    links["geometry"] = links.apply(
+        lambda r: LineString([
+            (r.start_x, r.start_y),
+            (r.end_x, r.end_y)
+        ]),
+        axis=1
     )
 
     model_roads = gpd.GeoDataFrame(
-        model_roads[["link_id", "geometry"]],
+        links[["link_id", "a_node", "b_node", "geometry"]],
         geometry="geometry",
         crs=BNG_CRS
     )
@@ -505,15 +566,15 @@ def _get_rail_links(
     rail_links = gpd.read_file(
         os_rail_path,
         mask=boundary,
-#        columns=[
-#            "osid",
-#            "description",
-#            "structure",
-#            "physicallevel",
-#            "railwayuse",
-#            "trackrepresentation",
-#            "operationalstatus",
-#        ],
+        columns=[
+            "osid",
+            "description",
+            "structure",
+            "physicallevel",
+            "railwayuse",
+            "trackrepresentation",
+            "operationalstatus",
+        ],
     )
     len_before_filter = len(rail_links)
     rail_links = rail_links[rail_links["operationalstatus"] == "Active"]
