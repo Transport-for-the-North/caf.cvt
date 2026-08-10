@@ -11,7 +11,7 @@ import geopandas as gpd
 import osbng
 import pandas as pd
 import xarray as xr
-from shapely import LineString, geometry
+from shapely import geometry
 
 from caf.cvt import file_paths, model_config
 from caf.cvt.definitions import (
@@ -482,48 +482,67 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
 
 def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean transport model road network dataset, then write to file."""
-    # TODO (DJ): Replace with shaped links dataset when available
     nodes = pd.read_csv(config.infrastructure.road.model_roads.nodes)
-    links = pd.read_csv(config.infrastructure.road.model_roads.links)
-
-    links = links.rename(columns={"id": "link_id"})
     zone_nodes = nodes.loc[nodes["is_zone"] == 1, "id"]
 
+    links = pd.read_csv(config.infrastructure.road.model_roads.links)
+    links = links.rename(columns={"id": "link_id"})
     links_before_filter = len(links)
     links = links[
         ~links["a_node"].isin(zone_nodes) & ~links["b_node"].isin(zone_nodes)
     ]
-
     LOG.info("Removed %s zone connectors.", links_before_filter - len(links))
-
     links = links.merge(
-        nodes[["id", "easting", "northing"]].rename(columns={
+        nodes.rename(columns={
             "id": "a_node",
-            "easting": "start_x",
-            "northing": "start_y",
-        }),
-        on="a_node",
+            "easting": "X1",
+            "northing": "Y1"
+        })[["a_node", "X1", "Y1"]],
+        on="a_node"
     )
-
     links = links.merge(
-        nodes[["id", "easting", "northing"]].rename(columns={
+        nodes.rename(columns={
             "id": "b_node",
-            "easting": "end_x",
-            "northing": "end_y",
-        }),
-        on="b_node",
+            "easting": "X2",
+            "northing": "Y2"
+        })[["b_node", "X2", "Y2"]],
+        on="b_node"
     )
 
-    links["geometry"] = links.apply(
-        lambda r: LineString([
-            (r.start_x, r.start_y),
-            (r.end_x, r.end_y)
-        ]),
-        axis=1
+
+    shaped_links = gpd.read_file(config.infrastructure.road.model_roads.shaped_links)
+    shaped_links = shaped_links.to_crs(BNG_CRS)
+    if len(shaped_links) != len(links):
+        LOG.warning(
+            "Number of shaped links (%s) does not match number of links (%s).",
+            len(shaped_links),
+            len(links),
+        )
+
+    coord_cols = ["X1", "Y1", "X2", "Y2"]
+
+    for col in coord_cols:
+        links[col] = round(links[col].astype(float), 0)
+        shaped_links[col] = round(shaped_links[col].astype(float), 0)
+
+    # Join shaped links to links using coordinates
+    # This link key assumes (X1, Y1) -> (X2, Y2) is stored the same direction in both datasets
+    model_roads = links[["link_id", *coord_cols]].merge(
+        shaped_links[[*coord_cols, "geometry"]],
+        on=coord_cols,
+        how="left",
+        validate="one_to_one"
     )
+
+    if model_roads["geometry"].isna().sum() != 0:
+        LOG.warning(
+            "Some model roads do not have a matching shaped link. "
+            "Missing geometries: %s",
+            model_roads['geometry'].isna().sum()
+        )
 
     model_roads = gpd.GeoDataFrame(
-        links[["link_id", "a_node", "b_node", "geometry"]],
+        model_roads.drop(columns=coord_cols),
         geometry="geometry",
         crs=BNG_CRS
     )

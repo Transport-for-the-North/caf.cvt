@@ -119,10 +119,13 @@ class ModelRoadsEntry(ctk.BaseConfig):
         Path to the nodes CSV file.
     links: pathlib.Path
         Path to the links CSV file.
+    shaped_links: pathlib.Path
+        Path to the shaped links shapefile.
     """
 
     nodes: pathlib.Path
     links: pathlib.Path
+    shaped_links: pathlib.Path
 
 
 class Road(ctk.BaseConfig):
