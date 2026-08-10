@@ -209,4 +209,3 @@ class OSRailStructure(enum.StrEnum):
     BRIDGE = "On Bridge"
     TUNNEL = "In Tunnel"
     BUILDING = "In Building"
-

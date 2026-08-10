@@ -59,15 +59,13 @@ _WIND_SPEED_PERCENTILE = 0.99
 
 
 _ROAD_STRUCTURE_VULNERABILITY = {
-    OSRoadStructure.BRIDGE:
-    {
+    OSRoadStructure.BRIDGE: {
         ExtremeWeatherRiskCols.EXTREME_HEAT: 1.2,
         ExtremeWeatherRiskCols.EXTREME_COLD: 1.2,
         ExtremeWeatherRiskCols.STORM: 1.1,
         FloodingRiskCols.RIVERS_SEA: 1.2,
     },
-    OSRoadStructure.TUNNEL:
-    {
+    OSRoadStructure.TUNNEL: {
         ExtremeWeatherRiskCols.STORM: 0.9,
         FloodingRiskCols.RIVERS_SEA: 1.1,
         FloodingRiskCols.SURFACE_WATER: 1.2,
@@ -80,7 +78,7 @@ _RAIL_STRUCTURE_VULNERABILITY = {
         ExtremeWeatherRiskCols.STORM: 1.2,
         ExtremeWeatherRiskCols.DROUGHT: 1.2,
         GroundStabilityRiskCols.LANDSLIDES: 1.2,
-        FloodingRiskCols.SURFACE_WATER: 1.2
+        FloodingRiskCols.SURFACE_WATER: 1.2,
     },
     OSRailStructure.EMBANKMENT: {
         MainHazardRiskCols.EXTREME_WEATHER: 1,
@@ -488,27 +486,20 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     links = pd.read_csv(config.infrastructure.road.model_roads.links)
     links = links.rename(columns={"id": "link_id"})
     links_before_filter = len(links)
-    links = links[
-        ~links["a_node"].isin(zone_nodes) & ~links["b_node"].isin(zone_nodes)
-    ]
+    links = links[~links["a_node"].isin(zone_nodes) & ~links["b_node"].isin(zone_nodes)]
     LOG.info("Removed %s zone connectors.", links_before_filter - len(links))
     links = links.merge(
-        nodes.rename(columns={
-            "id": "a_node",
-            "easting": "X1",
-            "northing": "Y1"
-        })[["a_node", "X1", "Y1"]],
-        on="a_node"
+        nodes.rename(columns={"id": "a_node", "easting": "X1", "northing": "Y1"})[
+            ["a_node", "X1", "Y1"]
+        ],
+        on="a_node",
     )
     links = links.merge(
-        nodes.rename(columns={
-            "id": "b_node",
-            "easting": "X2",
-            "northing": "Y2"
-        })[["b_node", "X2", "Y2"]],
-        on="b_node"
+        nodes.rename(columns={"id": "b_node", "easting": "X2", "northing": "Y2"})[
+            ["b_node", "X2", "Y2"]
+        ],
+        on="b_node",
     )
-
 
     shaped_links = gpd.read_file(config.infrastructure.road.model_roads.shaped_links)
     shaped_links = shaped_links.to_crs(BNG_CRS)
@@ -531,20 +522,17 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         shaped_links[[*coord_cols, "geometry"]],
         on=coord_cols,
         how="left",
-        validate="one_to_one"
+        validate="one_to_one",
     )
 
     if model_roads["geometry"].isna().sum() != 0:
         LOG.warning(
-            "Some model roads do not have a matching shaped link. "
-            "Missing geometries: %s",
-            model_roads['geometry'].isna().sum()
+            "Some model roads do not have a matching shaped link. Missing geometries: %s",
+            model_roads["geometry"].isna().sum(),
         )
 
     model_roads = gpd.GeoDataFrame(
-        model_roads.drop(columns=coord_cols),
-        geometry="geometry",
-        crs=BNG_CRS
+        model_roads.drop(columns=coord_cols), geometry="geometry", crs=BNG_CRS
     )
 
     len_before_filter = len(model_roads)
@@ -560,7 +548,6 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         model_roads,
         config.paths.model_input / file_paths.MODEL_ROADS_MODEL_INPUT_PATH,
     )
-
 
 
 ### RAIL
@@ -1412,7 +1399,7 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
             "IcingDays_baseline_01_20_median": (
                 f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.CURRENT}"
             ),
-            "IcingDays_40_median": (f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.FORECAST}")
+            "IcingDays_40_median": (f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.FORECAST}"),
         }
     )
     len_before_filter = len(ice_days)
@@ -2002,6 +1989,7 @@ def _map_freight_networks(
 
 def _clean_model_road_flows(config: model_config.Config) -> None:
     """Clean model flows data, aggregate link flows, merge with network, then write to file."""
+    LOG.info("Cleaning model road flows data...")
     uc_link_flows = pd.read_csv(config.impact.model_road_flows.link_flows)
     ufs = pd.read_csv(config.impact.model_road_flows.ufs)
     annualisation_factors = pd.read_csv(config.impact.model_road_flows.annualisation_factors)
@@ -2038,9 +2026,11 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         columns=["ufs_id", "id", "factor", "actual_flow"]
     )
 
-    symca_uc_link_flows = symca_uc_link_flows.groupby(
-        ["link_id", "userclass", "year", "scenario"]
-    ).agg({"annual_flow": "sum"}).reset_index()
+    symca_uc_link_flows = (
+        symca_uc_link_flows.groupby(["link_id", "userclass", "year", "scenario"])
+        .agg({"annual_flow": "sum"})
+        .reset_index()
+    )
 
     # TODO (DJ): Alter the following slightly when future demand is available
     years = sorted(symca_uc_link_flows["year"].unique())
@@ -2051,9 +2041,7 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         current_year = min(years)
         forecast_year = max(years)
     else:
-        raise ValueError(
-            f"Expected 1 or 2 years. Found {years}"
-        )
+        raise ValueError(f"Expected 1 or 2 years. Found {years}")
 
     current_flows = symca_uc_link_flows[symca_uc_link_flows["year"] == current_year].copy()
     forecast_flows = symca_uc_link_flows[symca_uc_link_flows["year"] == forecast_year].copy()
@@ -2083,22 +2071,15 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         f"uc{uc}_demand_{Scenarios.FORECAST}" for uc in forecast_flows.columns
     ]
 
-    symca_uc_link_flows = current_flows.join(
-        forecast_flows,
-        how="left"
-    )
+    symca_uc_link_flows = current_flows.join(forecast_flows, how="left")
 
-    symca_uc_link_flows[f"demand_{Scenarios.CURRENT}"] = (
-        symca_uc_link_flows[
-            [c for c in symca_uc_link_flows.columns if c.endswith(f"_{Scenarios.CURRENT}")]
-        ].sum(axis=1)
-    )
+    symca_uc_link_flows[f"demand_{Scenarios.CURRENT}"] = symca_uc_link_flows[
+        [c for c in symca_uc_link_flows.columns if c.endswith(f"_{Scenarios.CURRENT}")]
+    ].sum(axis=1)
 
-    symca_uc_link_flows[f"demand_{Scenarios.FORECAST}"] = (
-        symca_uc_link_flows[
-            [c for c in symca_uc_link_flows.columns if c.endswith(f"_{Scenarios.FORECAST}")]
-        ].sum(axis=1)
-    )
+    symca_uc_link_flows[f"demand_{Scenarios.FORECAST}"] = symca_uc_link_flows[
+        [c for c in symca_uc_link_flows.columns if c.endswith(f"_{Scenarios.FORECAST}")]
+    ].sum(axis=1)
 
     symca_uc_link_flows = symca_uc_link_flows.merge(
         symca_links[["link_id", "geometry"]],

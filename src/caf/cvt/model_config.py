@@ -98,17 +98,16 @@ class OtherInput(ctk.BaseConfig):
     ca_path: pathlib.Path
     boundary_path: pydantic.FilePath | None = None
 
-
     # Empty yaml values are loaded as strings, so need to convert to None
     @pydantic.field_validator("boundary_path", mode="before")
     @classmethod
     def _empty_to_none(
-        cls,
-        v: str | pydantic.FilePath | None
-) -> str | pydantic.FilePath | None:
+        cls, v: str | pydantic.FilePath | None
+    ) -> str | pydantic.FilePath | None:
         if v == "":
             return None
         return v
+
 
 class ModelRoadsEntry(ctk.BaseConfig):
     """Configuration for the transport model road network data.
@@ -313,7 +312,6 @@ class ModelRoadFlowsEntry(ctk.BaseConfig):
     annualisation_factors: pathlib.Path
 
 
-
 class ImpactConfig(ctk.BaseConfig):
     """Configuration for impact data.
 
@@ -327,7 +325,6 @@ class ImpactConfig(ctk.BaseConfig):
 
     freight_demand: pathlib.Path
     model_road_flows: ModelRoadFlowsEntry
-
 
 
 class SwitchConfig(ctk.BaseConfig):
@@ -480,7 +477,6 @@ class ParameterConfig(ctk.BaseConfig):
         if not (self.stb is None) ^ (self.ca is None):
             raise ValueError("Exactly one of 'stb' or 'ca' must be provided, but not both.")
         return self
-
 
 
 class ConstantConfig(ctk.BaseConfig):

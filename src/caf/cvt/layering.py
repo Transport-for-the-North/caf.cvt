@@ -411,9 +411,8 @@ def _model_road_impact_index(
     # First, normalise demand for each user class individually and for total demand
     model_road_risk = functional_rules.min_max_scaling_pair(
         data=model_road_risk,
-        pairs=[
-            (f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")
-        ] + [
+        pairs=[(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")]
+        + [
             (f"{uc}_demand_{Scenarios.CURRENT}", f"{uc}_demand_{Scenarios.FORECAST}")
             for uc in UserClasses
         ],
@@ -429,7 +428,8 @@ def _model_road_impact_index(
         pairs=[
             (f"{uc}_impact_{Scenarios.CURRENT}", f"{uc}_impact_{Scenarios.FORECAST}")
             for uc in UserClasses
-        ] + [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")],
+        ]
+        + [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")],
         feature_range=feature_range,
     )
 
@@ -438,7 +438,8 @@ def _calculate_model_road_impact(model_road_risk: pd.DataFrame) -> pd.DataFrame:
     """Calculate transport model impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
     risk_cols = [
-        col for col in MainHazardRiskCols
+        col
+        for col in MainHazardRiskCols
         if f"{col}_{Scenarios.CURRENT}" in model_road_risk.columns
     ]
 
@@ -447,9 +448,8 @@ def _calculate_model_road_impact(model_road_risk: pd.DataFrame) -> pd.DataFrame:
 
     for scenario in Scenarios:
         hazard_component = sum(
-            model_road_risk[
-                f"{risk_col}_{scenario}"] * impact_weights[risk_col.removesuffix("_risk")
-            ]
+            model_road_risk[f"{risk_col}_{scenario}"]
+            * impact_weights[risk_col.removesuffix("_risk")]
             for risk_col in risk_cols
         )
         for uc in UserClasses:
