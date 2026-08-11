@@ -34,37 +34,16 @@ LOG = logging.getLogger(__name__)
 plt.switch_backend("Agg")  # Use non-interactive backend for plotting
 
 _EXTREME_HEAT_RISK_THRESHOLD = 30
-_EXTREME_HEAT_WEIGHTS: dict[str, float] = {
-    ExtremeHeatCols.MAX_TEMP_SUMMER: 0.5,
-    ExtremeHeatCols.HOT_SUMMER_DAYS: 0.25,
-    ExtremeHeatCols.EXTREME_SUMMER_DAYS: 0.25,
-}
 
 _EXTREME_COLD_RISK_THRESHOLD = 0
-_EXTREME_COLD_WEIGHTS: dict[str, float] = {
-    ExtremeColdCols.MIN_TEMP_WINTER: 0.5,
-    ExtremeColdCols.FROST_DAYS: 0.25,
-    ExtremeColdCols.ICING_DAYS: 0.25,
-}
 
 _WIND_SPEED_RISK_THRESHOLD_LOWER = 13.4  # 30 mph in m/s (should not exceed upper threshold)
 _WIND_SPEED_RISK_THRESHOLD_UPPER = 20.1  # 45 mph in m/s (should not exceed 25)
 _EXTREME_WIND_MAX = 25
 
 _DROUGHT_NEAREST_JOIN_MAX_DISTANCE = 10000
-_DROUGHT_WEIGHTS: dict[str, float] = {
-    DroughtCols.DROUGHT_SEVERITY_INDEX: 0.75,
-    DroughtCols.PRECIP_SUMMER: 0.25,
-}
 
 _STORM_NEAREST_JOIN_MAX_DISTANCE = 5000
-_STORM_WEIGHTS: dict[str, float] = {
-    StormCols.WIND_SPEED: 0.3,
-    StormCols.EXCEEDANCE_DAYS: 0.2,
-    StormCols.PRECIP_WINTER: 0.15,
-    StormCols.RAIN_DAYS: 0.15,
-    StormCols.WIND_DRIVEN_RAIN_INDEX: 0.2,
-}
 
 _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE = 10000
 
@@ -702,7 +681,7 @@ def _extreme_heat_index(
 
     extreme_heat = _calculate_composite_score(
         extreme_heat,
-        _EXTREME_HEAT_WEIGHTS,
+        ExtremeHeatCols.get_weights(),
         ExtremeWeatherRiskCols.EXTREME_HEAT,
     )
 
@@ -780,7 +759,7 @@ def _extreme_cold_index(
 
     extreme_cold = _calculate_composite_score(
         extreme_cold,
-        _EXTREME_COLD_WEIGHTS,
+        ExtremeColdCols.get_weights(),
         ExtremeWeatherRiskCols.EXTREME_COLD,
     )
 
@@ -894,7 +873,7 @@ def _drought_index(
 
     drought_risk = _calculate_composite_score(
         drought_risk,
-        _DROUGHT_WEIGHTS,
+        DroughtCols.get_weights(),
         ExtremeWeatherRiskCols.DROUGHT,
     )
 
@@ -1041,7 +1020,7 @@ def _storm_index(
 
     storm_risk = _calculate_composite_score(
         storm_risk,
-        _STORM_WEIGHTS,
+        StormCols.get_weights(),
         ExtremeWeatherRiskCols.STORM,
     )
 

@@ -20,7 +20,6 @@ from caf.cvt.definitions import (
     RiskColumn,
     Scenarios,
     UserClasses,
-    VulnerabilityModifier,
 )
 
 LOG = logging.getLogger(__name__)
@@ -35,60 +34,6 @@ _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M = 50
 _FERRY_TERMINALS_BUFFER_SIZE_M = 50
 _PETROL_STATIONS_BUFFER_SIZE_M = 50
 
-
-_ROAD_STRUCTURE_VULNERABILITY = {
-    OSRoadStructure.BRIDGE: {
-        ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.VERY_HIGH,
-        ExtremeWeatherRiskCols.EXTREME_COLD: VulnerabilityModifier.VERY_HIGH,
-        ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-        FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.VERY_HIGH,
-    },
-    OSRoadStructure.TUNNEL: {
-        ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.LOW,
-        FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-        FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-    },
-}
-
-
-_RAIL_STRUCTURE_VULNERABILITY = {
-    OSRailStructure.CUTTING: {
-        ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-        ExtremeWeatherRiskCols.DROUGHT: VulnerabilityModifier.HIGH,
-        FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-        FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-        GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
-    },
-    OSRailStructure.EMBANKMENT: {
-        ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-        ExtremeWeatherRiskCols.DROUGHT: VulnerabilityModifier.HIGH,
-        FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.VERY_HIGH,
-        FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-        GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
-        GroundStabilityRiskCols.SHRINK_SWELL: VulnerabilityModifier.VERY_HIGH,
-        GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE: VulnerabilityModifier.VERY_HIGH,
-    },
-    OSRailStructure.BRIDGE: {
-        ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.VERY_HIGH,
-        ExtremeWeatherRiskCols.EXTREME_COLD: VulnerabilityModifier.VERY_HIGH,
-        ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-        FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.VERY_HIGH,
-    },
-    OSRailStructure.TUNNEL: {
-        ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.LOW,
-        FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-        FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-    },
-    OSRailStructure.BUILDING: {
-        ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.VERY_LOW,
-    },
-    OSRailStructure.UNDER_STRUCTURE: {},
-    OSRailStructure.ON_STRUCTURE: {
-        ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-        ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.HIGH,
-        FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-    },
-}
 
 # GENERAL FUNCTIONS
 
@@ -258,25 +203,21 @@ def _get_impact_weights(hazards: list[str]) -> dict[str, float]:
 
 def _apply_asset_vulnerability(
         risk_data: gpd.GeoDataFrame,
-        vulnerability_lookup: dict[str, dict[RiskColumn, VulnerabilityModifier]],
+        structure_enum: OSRoadStructure | OSRailStructure,
         structure_col: str,
         feature_range: tuple[int, int]
 ) -> gpd.GeoDataFrame:
     """Apply asset vulnerability modifiers to risk data."""
-    risk_col_pairs = set() # Use a set to ensure no duplicates
-    for structure, hazards in vulnerability_lookup.items():
+    for structure in structure_enum:
         mask = risk_data[structure_col] == structure
-        for hazard, modifier in hazards.items():
-            risk_col_pair = ()
+        for hazard, modifier in structure.get_vulnerability().items():
             for scenario in Scenarios:
                 risk_col = f"{hazard}_{scenario}"
+                if risk_col not in risk_data.columns:
+                    continue  # Skip if the risk column doesn't exist
                 risk_data.loc[mask, risk_col] = (
                     risk_data.loc[mask, risk_col] * modifier
                 ).clip(lower=feature_range[0], upper=feature_range[1])
-                risk_col_pair += (risk_col,)
-            risk_col_pairs.add(risk_col_pair)
-
-
     return risk_data
 
 # LAYERING
@@ -324,25 +265,25 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
     hazard_layers = {}
     if config.switches.extreme_weather:
         LOG.info("Reading extreme weather layer.")
-        hazard_layers["Extreme Weather"] = gpd.read_file(
+        hazard_layers[MainHazardRiskCols.EXTREME_WEATHER] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH
         )
     if config.switches.flooding:
         LOG.info("Reading flooding layer.")
-        hazard_layers["Flooding"] = gpd.read_file(
+        hazard_layers[MainHazardRiskCols.FLOODING] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.FLOODING_RISK_MODEL_INTERIM_OUTPUT_PATH
         )
     if config.switches.ground_stability:
         LOG.info("Reading ground stability layer.")
-        hazard_layers["Ground Stability"] = gpd.read_file(
+        hazard_layers[MainHazardRiskCols.GROUND_STABILITY] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.GROUND_STABILITY_MODEL_INTERIM_OUTPUT_PATH
         )
     if config.switches.coastal_erosion:
         LOG.info("Reading coastal erosion layer.")
-        hazard_layers["Coastal Erosion"] = gpd.read_file(
+        hazard_layers[MainHazardRiskCols.COASTAL_EROSION] = gpd.read_file(
             config.paths.model_interim_output
             / file_paths.COASTAL_EROSION_MODEL_INTERIM_OUTPUT_PATH
         )
@@ -403,12 +344,13 @@ def _os_open_road_risk(
 
     os_road_risk = _apply_asset_vulnerability(
         os_road_risk,
-        vulnerability_lookup=_ROAD_STRUCTURE_VULNERABILITY,
+        structure_enum=OSRoadStructure,
         structure_col=OSRoadCols.ROAD_STRUCTURE,
+        feature_range=(config.constants.score_min, config.constants.score_max)
     )
 
     # Re-calculate composite risk
-    for main_hazard in MainHazardRiskCols:
+    for main_hazard in hazard_layers:
         os_road_risk = functional_rules._calculate_composite_score(
             os_road_risk,
             weights=main_hazard.get_weights(),
@@ -420,7 +362,7 @@ def _os_open_road_risk(
         data=os_road_risk,
         pairs=[
             (f"{main_hazard}_{Scenarios.CURRENT}", f"{main_hazard}_{Scenarios.FORECAST}")
-            for main_hazard in MainHazardRiskCols
+            for main_hazard in hazard_layers
             ],
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
@@ -612,6 +554,31 @@ def _passenger_rail_risk(
         passenger_rail_network, hazard_layers
     )
 
+    passenger_rail_network_risk = _apply_asset_vulnerability(
+        passenger_rail_network_risk,
+        structure_enum=OSRailStructure,
+        structure_col=OSRailStructure.RAIL_STRUCTURE,
+        feature_range=(config.constants.score_min, config.constants.score_max)
+    )
+
+    # Re-calculate composite risk
+    for main_hazard in hazard_layers:
+        passenger_rail_network_risk = functional_rules._calculate_composite_score(
+            passenger_rail_network_risk,
+            weights=main_hazard.get_weights(),
+            output_col=main_hazard
+        )
+
+    # Re-normalise main hazards
+    passenger_rail_network_risk = functional_rules.min_max_scaling_pair(
+        data=passenger_rail_network_risk,
+        pairs=[
+            (f"{main_hazard}_{Scenarios.CURRENT}", f"{main_hazard}_{Scenarios.FORECAST}")
+            for main_hazard in hazard_layers
+            ],
+        feature_range=(config.constants.score_min, config.constants.score_max),
+    )
+
     _audit_infrastructure_risk(
         passenger_rail_network_risk,
         "Passenger Rail",
@@ -680,6 +647,32 @@ def _freight_rail_risk(
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
+
+    freight_rail_network_risk = _apply_asset_vulnerability(
+        freight_rail_network_risk,
+        structure_enum=OSRailStructure,
+        structure_col=OSRailStructure.RAIL_STRUCTURE,
+        feature_range=feature_range
+    )
+
+    # Re-calculate composite risk
+    for main_hazard in hazard_layers:
+        freight_rail_network_risk = functional_rules._calculate_composite_score(
+            freight_rail_network_risk,
+            weights=main_hazard.get_weights(),
+            output_col=main_hazard
+        )
+
+    # Re-normalise main hazards
+    freight_rail_network_risk = functional_rules.min_max_scaling_pair(
+        data=freight_rail_network_risk,
+        pairs=[
+            (f"{main_hazard}_{Scenarios.CURRENT}", f"{main_hazard}_{Scenarios.FORECAST}")
+            for main_hazard in hazard_layers
+            ],
+        feature_range=feature_range,
+    )
+
     freight_rail_network_risk = _freight_impact_index(freight_rail_network_risk, feature_range)
 
     # Set the correct CRS
@@ -1407,6 +1400,31 @@ def _tram_network_risk(
 
     tram_risk = _infrastructure_risk_intersect(tram_network, hazard_layers)
 
+    tram_risk = _apply_asset_vulnerability(
+        tram_risk,
+        structure_enum=OSRailStructure,
+        structure_col=OSRailStructure.RAIL_STRUCTURE,
+        feature_range=(config.constants.score_min, config.constants.score_max)
+    )
+
+    # Re-calculate composite risk
+    for main_hazard in hazard_layers:
+        tram_risk = functional_rules._calculate_composite_score(
+            tram_risk,
+            weights=main_hazard.get_weights(),
+            output_col=main_hazard
+        )
+
+    # Re-normalise main hazards
+    tram_risk = functional_rules.min_max_scaling_pair(
+        data=tram_risk,
+        pairs=[
+            (f"{main_hazard}_{Scenarios.CURRENT}", f"{main_hazard}_{Scenarios.FORECAST}")
+            for main_hazard in hazard_layers
+            ],
+        feature_range=(config.constants.score_min, config.constants.score_max),
+    )
+
     _audit_infrastructure_risk(
         tram_risk,
         "Tram Network",
@@ -1467,12 +1485,39 @@ def _rapid_transport_network_risk(
 
     rapid_transport_risk = _infrastructure_risk_intersect(rapid_transport, hazard_layers)
 
+    feature_range = (config.constants.score_min, config.constants.score_max)
+
+    rapid_transport_risk = _apply_asset_vulnerability(
+        rapid_transport_risk,
+        structure_enum=OSRailStructure,
+        structure_col=OSRailStructure.RAIL_STRUCTURE,
+        feature_range=feature_range
+    )
+
+    # Re-calculate composite risk
+    for main_hazard in hazard_layers:
+        rapid_transport_risk = functional_rules._calculate_composite_score(
+            rapid_transport_risk,
+            weights=main_hazard.get_weights(),
+            output_col=main_hazard
+        )
+
+    # Re-normalise main hazards
+    rapid_transport_risk = functional_rules.min_max_scaling_pair(
+        data=rapid_transport_risk,
+        pairs=[
+            (f"{main_hazard}_{Scenarios.CURRENT}", f"{main_hazard}_{Scenarios.FORECAST}")
+            for main_hazard in hazard_layers
+            ],
+        feature_range=feature_range,
+    )
+
     _audit_infrastructure_risk(
         rapid_transport_risk,
         "Rapid Transport Network",
         risk_cols,
         audit_path / "Other" / "Rapid Transport Network",
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=feature_range,
     )
 
     data_cleaning.write_to_file(

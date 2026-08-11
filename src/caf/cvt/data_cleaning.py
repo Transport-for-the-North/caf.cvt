@@ -15,6 +15,7 @@ from shapely import geometry
 
 from caf.cvt import file_paths, model_config
 from caf.cvt.definitions import (
+    BNG_CRS,
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
@@ -26,17 +27,13 @@ from caf.cvt.definitions import (
 
 LOG = logging.getLogger(__name__)
 
-### ENVIRONMENT VARIABLES ###
-
-
-# British National Grid CRS, for use in spatially merging datasets
-BNG_CRS = os.getenv("BNG_CRS", "EPSG:27700")
 
 _FREIGHT_DEMAND_NETWORK_MAP_MAX_DISTANCE = int(
     os.getenv("_FREIGHT_DEMAND_NETWORK_MAP_MAX_DISTANCE", "500")
 )
 
 ### MODULE CONSTANTS ###
+# TODO (DJ): Check that this is needed, if not remove
 MMRN_NODE_TYPES = {
     "Train Stations": [
         "Railway Station;Modal Change",
