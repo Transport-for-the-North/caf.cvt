@@ -67,12 +67,6 @@ _STORM_WEIGHTS: dict[str, float] = {
 }
 
 _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE = 10000
-_EXTREME_WEATHER_WEIGHTS: dict[str, float] = {
-    ExtremeWeatherRiskCols.EXTREME_HEAT: 0.25,
-    ExtremeWeatherRiskCols.EXTREME_COLD: 0.25,
-    ExtremeWeatherRiskCols.DROUGHT: 0.25,
-    ExtremeWeatherRiskCols.STORM: 0.25,
-}
 
 _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE = 1000
 _GROUND_STABILITY_RISK_SCORE_MAP = {
@@ -83,29 +77,12 @@ _GROUND_STABILITY_RISK_SCORE_MAP = {
 }
 
 _GEOCLIMATE_YEAR_SCENARIO_MAP = {"2030": Scenarios.CURRENT, "2070": Scenarios.FORECAST}
-_GROUND_STABILITY_WEIGHTS: dict[str, float] = {
-    GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE: 0.40,
-    GroundStabilityRiskCols.LANDSLIDES: 0.10,
-    GroundStabilityRiskCols.SHRINK_SWELL: 0.10,
-    GroundStabilityRiskCols.COMPRESSIBLE_GROUND: 0.10,
-    GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: 0.10,
-    GroundStabilityRiskCols.RUNNING_SAND: 0.10,
-    GroundStabilityRiskCols.SOLUBLE_ROCKS: 0.10,
-}
 
 _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
-_COASTAL_EROSION_WEIGHTS: dict[str, float] = {
-    CoastalErosionRiskCols.EROSION: 0.9,
-    CoastalErosionRiskCols.GIZ: 0.1,
-}
 
 _FLOODING_TILE_SIZE_M = 10000
 _FLOODING_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
-_FLOODING_WEIGHTS: dict[str, float] = {
-    FloodingRiskCols.RIVERS_SEA: 0.5,
-    FloodingRiskCols.SURFACE_WATER: 0.5,
-}
 
 _PLOT_ALPHA_BASEMAP = 0.7
 _PLOT_ALPHA_NO_BASEMAP = 1.0
@@ -638,7 +615,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
 
     extreme_weather_risk = _calculate_composite_score(
         extreme_weather_risk,
-        _EXTREME_WEATHER_WEIGHTS,
+        MainHazardRiskCols.EXTREME_WEATHER.get_weights(),
         MainHazardRiskCols.EXTREME_WEATHER,
     )
 
@@ -1208,7 +1185,7 @@ def _flooding_index(
 
     flooding_risk = _calculate_composite_score(
         flooding_risk,
-        _FLOODING_WEIGHTS,
+        MainHazardRiskCols.FLOODING.get_weights(),
         MainHazardRiskCols.FLOODING,
     )
 
@@ -1396,7 +1373,7 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
 
     ground_stability = _calculate_composite_score(
         ground_stability,
-        _GROUND_STABILITY_WEIGHTS,
+        MainHazardRiskCols.GROUND_STABILITY.get_weights(),
         MainHazardRiskCols.GROUND_STABILITY,
     )
 
@@ -1489,9 +1466,13 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
         # Compute composite risk score
         erosion_risk[scenario][f"{MainHazardRiskCols.COASTAL_EROSION}"] = (
             erosion_risk[scenario][CoastalErosionRiskCols.EROSION]
-            * _COASTAL_EROSION_WEIGHTS[CoastalErosionRiskCols.EROSION]
+            * MainHazardRiskCols.COASTAL_EROSION.get_weights()[
+                CoastalErosionRiskCols.EROSION
+            ]
             + erosion_risk[scenario][CoastalErosionRiskCols.GIZ]
-            * _COASTAL_EROSION_WEIGHTS[CoastalErosionRiskCols.GIZ]
+            * MainHazardRiskCols.COASTAL_EROSION.get_weights()[
+                CoastalErosionRiskCols.GIZ
+            ]
         )
 
         erosion_risk[scenario] = erosion_risk[scenario].rename(

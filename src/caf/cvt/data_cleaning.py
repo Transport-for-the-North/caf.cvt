@@ -18,12 +18,8 @@ from caf.cvt.definitions import (
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
-    ExtremeWeatherRiskCols,
-    FloodingRiskCols,
     GroundStabilityRiskCols,
-    MainHazardRiskCols,
-    OSRailStructure,
-    OSRoadStructure,
+    OSRoadCols,
     Scenarios,
     StormCols,
 )
@@ -57,53 +53,6 @@ MMRN_NODE_TYPES = {
 _WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
 _WIND_SPEED_PERCENTILE = 0.99
 
-
-_ROAD_STRUCTURE_VULNERABILITY = {
-    OSRoadStructure.BRIDGE: {
-        ExtremeWeatherRiskCols.EXTREME_HEAT: 1.2,
-        ExtremeWeatherRiskCols.EXTREME_COLD: 1.2,
-        ExtremeWeatherRiskCols.STORM: 1.1,
-        FloodingRiskCols.RIVERS_SEA: 1.2,
-    },
-    OSRoadStructure.TUNNEL: {
-        ExtremeWeatherRiskCols.STORM: 0.9,
-        FloodingRiskCols.RIVERS_SEA: 1.1,
-        FloodingRiskCols.SURFACE_WATER: 1.2,
-    },
-}
-
-
-_RAIL_STRUCTURE_VULNERABILITY = {
-    OSRailStructure.CUTTING: {
-        ExtremeWeatherRiskCols.STORM: 1.2,
-        ExtremeWeatherRiskCols.DROUGHT: 1.2,
-        GroundStabilityRiskCols.LANDSLIDES: 1.2,
-        FloodingRiskCols.SURFACE_WATER: 1.2,
-    },
-    OSRailStructure.EMBANKMENT: {
-        MainHazardRiskCols.EXTREME_WEATHER: 1,
-    },
-    OSRailStructure.BRIDGE: {
-        ExtremeWeatherRiskCols.EXTREME_HEAT: 1.2,
-        ExtremeWeatherRiskCols.EXTREME_COLD: 1.2,
-        ExtremeWeatherRiskCols.STORM: 1.1,
-        FloodingRiskCols.RIVERS_SEA: 1.2,
-    },
-    OSRailStructure.TUNNEL: {
-        ExtremeWeatherRiskCols.STORM: 0.9,
-        FloodingRiskCols.RIVERS_SEA: 1.1,
-        FloodingRiskCols.SURFACE_WATER: 1.2,
-    },
-    OSRailStructure.BUILDING: {
-        MainHazardRiskCols.EXTREME_WEATHER: 1,
-    },
-    OSRailStructure.UNDER_STRUCTURE: {
-        MainHazardRiskCols.EXTREME_WEATHER: 1,
-    },
-    OSRailStructure.ON_STRUCTURE: {
-        MainHazardRiskCols.EXTREME_WEATHER: 1,
-    },
-}
 
 
 ### GENERAL FUNCTIONS
@@ -446,22 +395,22 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         f"{config.infrastructure.road.os_road.file_path.as_posix()}",
         mask=boundary,
         columns=[
-            "id",
-            "road_classification",
-            "road_function",
-            "form_of_way",
-            "road_classification_number",
-            "name_1",
-            "road_structure",
-            "primary_route",
-            "trunk_road",
+            OSRoadCols.ID,
+            OSRoadCols.ROAD_CLASSIFICATION,
+            OSRoadCols.ROAD_FUNCTION,
+            OSRoadCols.FORM_OF_WAY,
+            OSRoadCols.ROAD_CLASSIFICATION_NUMBER,
+            OSRoadCols.NAME_1,
+            OSRoadCols.ROAD_STRUCTURE,
+            OSRoadCols.PRIMARY_ROUTE,
+            OSRoadCols.TRUNK_ROAD,
             "geometry",
         ],
         layer="road_link",
     )
     len_before_filter = len(os_road)
     os_road = os_road.drop_duplicates(subset=["id", "geometry"])
-    os_road = os_road.rename(columns={"name_1": "name"})
+    os_road = os_road.rename(columns={OSRoadCols.NAME_1: "name"})
     os_road = os_road.replace(0, "N/A")
     os_road = validate_geometries(os_road)
     os_road = clip_to_boundary(os_road, boundary)

@@ -37,6 +37,37 @@ class MainHazardRiskCols(RiskColumn):
         return cmap_mapping[self]
 
 
+    def get_weights(self) -> dict[RiskColumn, float]:
+        """Return the weights for the sub-hazards of a given main hazard column."""
+        weights_mapping: dict[MainHazardRiskCols, dict[RiskColumn, float]] = {
+            MainHazardRiskCols.EXTREME_WEATHER: {
+                ExtremeWeatherRiskCols.EXTREME_HEAT: 0.25,
+                ExtremeWeatherRiskCols.EXTREME_COLD: 0.25,
+                ExtremeWeatherRiskCols.DROUGHT: 0.25,
+                ExtremeWeatherRiskCols.STORM: 0.25,
+            },
+            MainHazardRiskCols.FLOODING: {
+                FloodingRiskCols.RIVERS_SEA: 0.5,
+                FloodingRiskCols.SURFACE_WATER: 0.5,
+            },
+            MainHazardRiskCols.GROUND_STABILITY: {
+                GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE: 0.40,
+                GroundStabilityRiskCols.LANDSLIDES: 0.10,
+                GroundStabilityRiskCols.SHRINK_SWELL: 0.10,
+                GroundStabilityRiskCols.COMPRESSIBLE_GROUND: 0.10,
+                GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: 0.10,
+                GroundStabilityRiskCols.RUNNING_SAND: 0.10,
+                GroundStabilityRiskCols.SOLUBLE_ROCKS: 0.10,
+            },
+            MainHazardRiskCols.COASTAL_EROSION: {
+                CoastalErosionRiskCols.EROSION: 0.9,
+                CoastalErosionRiskCols.GIZ: 0.1,
+            },
+        }
+
+        return weights_mapping[self]
+
+
 class ExtremeWeatherRiskCols(RiskColumn):
     """Column definitions for extreme weather subhazard layers."""
 
@@ -209,3 +240,27 @@ class OSRailStructure(enum.StrEnum):
     BRIDGE = "On Bridge"
     TUNNEL = "In Tunnel"
     BUILDING = "In Building"
+
+
+class VulnerabilityModifier(float, enum.Enum):
+    """Definitions for vulnerability modifiers."""
+
+    VERY_LOW = 0.8
+    LOW = 0.9
+    NEUTRAL = 1.0
+    HIGH = 1.1
+    VERY_HIGH = 1.2
+
+
+class OSRoadCols(enum.StrEnum):
+    """Definitions for OS road columns."""
+
+    ID = "id"
+    ROAD_CLASSIFICATION = "road_classification"
+    ROAD_FUNCTION = "road_function"
+    FORM_OF_WAY = "form_of_way"
+    ROAD_CLASSIFICATION_NUMBER = "road_classification_number"
+    NAME_1 = "name_1"
+    ROAD_STRUCTURE = "road_structure"
+    PRIMARY_ROUTE = "primary_route"
+    TRUNK_ROAD = "trunk_road"
