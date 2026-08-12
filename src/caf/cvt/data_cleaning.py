@@ -20,6 +20,7 @@ from caf.cvt.definitions import (
     ExtremeColdCols,
     ExtremeHeatCols,
     GroundStabilityRiskCols,
+    OSRailCols,
     OSRoadCols,
     Scenarios,
     StormCols,
@@ -519,35 +520,41 @@ def _get_rail_links(
         os_rail_path,
         mask=boundary,
         columns=[
-            "osid",
-            "description",
-            "structure",
-            "physicallevel",
-            "railwayuse",
-            "trackrepresentation",
-            "operationalstatus",
+            OSRailCols.ID,
+            OSRailCols.DESCRIPTION,
+            OSRailCols.STRUCTURE,
+            OSRailCols.PHYSICAL_LEVEL,
+            OSRailCols.RAILWAY_USE,
+            OSRailCols.TRACK_REPRESENTATION,
+            OSRailCols.OPERATIONAL_STATUS,
         ],
     )
     len_before_filter = len(rail_links)
-    rail_links = rail_links[rail_links["operationalstatus"] == "Active"]
-    rail_links = rail_links.drop(columns="operationalstatus")
+    rail_links = rail_links[rail_links[OSRailCols.OPERATIONAL_STATUS] == "Active"]
+    rail_links = rail_links.drop(columns=OSRailCols.OPERATIONAL_STATUS)
     rail_links = rail_links[
-        ~rail_links["description"].isin(["Preserved", "Funicular", "Mineral", "Static Museum"])
+        ~rail_links[OSRailCols.DESCRIPTION].isin(
+            ["Preserved", "Funicular", "Mineral", "Static Museum"]
+        )
     ]
-    rail_links = rail_links.drop_duplicates(subset=["osid", "geometry"])
+    rail_links = rail_links.drop_duplicates(subset=[OSRailCols.ID, "geometry"])
     rail_links[
-        ["description", "structure", "physicallevel", "railwayuse", "trackrepresentation"]
+        [
+            OSRailCols.DESCRIPTION,
+            OSRailCols.STRUCTURE,
+            OSRailCols.PHYSICAL_LEVEL,
+            OSRailCols.RAILWAY_USE,
+            OSRailCols.TRACK_REPRESENTATION,
+        ]
     ] = rail_links[
-        ["description", "structure", "physicallevel", "railwayuse", "trackrepresentation"]
+        [
+            OSRailCols.DESCRIPTION,
+            OSRailCols.STRUCTURE,
+            OSRailCols.PHYSICAL_LEVEL,
+            OSRailCols.RAILWAY_USE,
+            OSRailCols.TRACK_REPRESENTATION,
+        ]
     ].replace(0, "N/A")
-    rail_links = rail_links.rename(
-        columns={
-            "description": "desc",
-            "physicallevel": "phys_level",
-            "railwayuse": "rail_use",
-            "trackrepresentation": "track_rep",
-        },
-    )
     rail_links = validate_geometries(rail_links)
     rail_links = clip_to_boundary(rail_links, boundary)
     filter_removed = len_before_filter - len(rail_links)
@@ -565,10 +572,10 @@ def _clean_passenger_rail(config: model_config.Config, rail_links: gpd.GeoDataFr
     """Filter OS rail data to passenger rail network, then write to file."""
     len_before_filter = len(rail_links)
     passenger_rail = rail_links[
-        rail_links["rail_use"].isin(["Freight And Passenger", "Passenger"])
+        rail_links[OSRailCols.RAILWAY_USE].isin(["Freight And Passenger", "Passenger"])
     ]
     passenger_rail = passenger_rail[
-        passenger_rail["desc"].isin(
+        passenger_rail[OSRailCols.DESCRIPTION].isin(
             ["Main Line", "Main Line And Tram", "Main Line And Rapid Transport System"]
         )
     ]
@@ -589,7 +596,7 @@ def _clean_freight_rail(config: model_config.Config, rail_links: gpd.GeoDataFram
     """Filter OS rail data to freight rail network, then write to file."""
     len_before_filter = len(rail_links)
     freight_rail = rail_links[
-        rail_links["rail_use"].isin(["Freight And Passenger", "Freight"])
+        rail_links[OSRailCols.RAILWAY_USE].isin(["Freight And Passenger", "Freight"])
     ]
     filter_removed = len_before_filter - len(freight_rail)
     LOG.info(
@@ -856,9 +863,11 @@ def _clean_tram_network(config: model_config.Config, rail_links: gpd.GeoDataFram
     """Filter OS rail links for tram network, then write to file."""
     len_before_filter = len(rail_links)
     tram_links = rail_links[
-        rail_links["rail_use"].isin(["Freight And Passenger", "Passenger"])
+        rail_links[OSRailCols.RAILWAY_USE].isin(["Freight And Passenger", "Passenger"])
     ]
-    tram_links = tram_links[tram_links["desc"].isin(["Tram", "Main Line And Tram"])]
+    tram_links = tram_links[tram_links[OSRailCols.DESCRIPTION].isin(
+        ["Tram", "Main Line And Tram"]
+    )]
     filter_removed = len_before_filter - len(tram_links)
     LOG.info(
         "Tram network links filtered - %s of %s (%.1f percent) rows removed",
@@ -877,10 +886,10 @@ def _clean_rapid_transport_network(
     """Filter OS rail links for rapid transport network, then write to file."""
     len_before_filter = len(rail_links)
     rapid_transport_links = rail_links[
-        rail_links["rail_use"].isin(["Freight And Passenger", "Passenger"])
+        rail_links[OSRailCols.RAILWAY_USE].isin(["Freight And Passenger", "Passenger"])
     ]
     rapid_transport_links = rapid_transport_links[
-        rapid_transport_links["desc"].isin(
+        rapid_transport_links[OSRailCols.DESCRIPTION].isin(
             ["Rapid Transport System", "Main Line And Rapid Transport System"]
         )
     ]

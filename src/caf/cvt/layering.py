@@ -14,12 +14,14 @@ from caf.cvt.definitions import (
     GroundStabilityRiskCols,
     ImpactCols,
     MainHazardRiskCols,
+    OSRailCols,
     OSRailStructure,
     OSRoadCols,
     OSRoadStructure,
     RiskColumn,
     Scenarios,
     UserClasses,
+    VulnerabilityModifier,
 )
 
 LOG = logging.getLogger(__name__)
@@ -201,6 +203,36 @@ def _get_impact_weights(hazards: list[str]) -> dict[str, float]:
     return impact_weights
 
 
+def _get_main_hazard_modifiers(
+        vulnerabilities: dict[RiskColumn, VulnerabilityModifier]
+) -> dict[MainHazardRiskCols, float]:
+    """Get main hazard modifiers from sub-hazard modifiers."""
+    modifiers = {}
+    for main_hazard in MainHazardRiskCols:
+        weights = main_hazard.get_weights()
+        relevant_weights = {
+            hazard: weight
+            for hazard, weight in weights.items()
+            if hazard in vulnerabilities
+        }
+
+        if not relevant_weights:
+            continue
+
+
+        modifier = (
+            sum( # Calculate weighted contribution of hazards with explicit modifier
+                vulnerabilities[hazard] * weight
+                for hazard, weight in relevant_weights.items()
+            )
+            + # Calculate contribution of unspecified hazards
+            (1 - sum(relevant_weights.values()))
+        )
+
+        modifiers[main_hazard] = modifier
+
+    return modifiers
+
 def _apply_asset_vulnerability(
         risk_data: gpd.GeoDataFrame,
         structure_enum: OSRoadStructure | OSRailStructure,
@@ -210,9 +242,20 @@ def _apply_asset_vulnerability(
     """Apply asset vulnerability modifiers to risk data."""
     for structure in structure_enum:
         mask = risk_data[structure_col] == structure
+        vulnerabilities = structure.get_vulnerability()
         for hazard, modifier in structure.get_vulnerability().items():
             for scenario in Scenarios:
                 risk_col = f"{hazard}_{scenario}"
+                if risk_col not in risk_data.columns:
+                    continue  # Skip if the risk column doesn't exist
+                risk_data.loc[mask, risk_col] = (
+                    risk_data.loc[mask, risk_col] * modifier
+                ).clip(lower=feature_range[0], upper=feature_range[1])
+
+        main_hazard_modifiers = _get_main_hazard_modifiers(vulnerabilities)
+        for main_hazard, modifier in main_hazard_modifiers.items():
+            for scenario in Scenarios:
+                risk_col = f"{main_hazard}_{scenario}"
                 if risk_col not in risk_data.columns:
                     continue  # Skip if the risk column doesn't exist
                 risk_data.loc[mask, risk_col] = (
@@ -349,23 +392,6 @@ def _os_open_road_risk(
         feature_range=(config.constants.score_min, config.constants.score_max)
     )
 
-    # Re-calculate composite risk
-    for main_hazard in hazard_layers:
-        os_road_risk = functional_rules._calculate_composite_score(
-            os_road_risk,
-            weights=main_hazard.get_weights(),
-            output_col=main_hazard
-        )
-
-    # Re-normalise main hazards
-    os_road_risk = functional_rules.min_max_scaling_pair(
-        data=os_road_risk,
-        pairs=[
-            (f"{main_hazard}_{Scenarios.CURRENT}", f"{main_hazard}_{Scenarios.FORECAST}")
-            for main_hazard in hazard_layers
-            ],
-        feature_range=(config.constants.score_min, config.constants.score_max),
-    )
 
     _audit_infrastructure_risk(
         os_road_risk,
@@ -557,26 +583,8 @@ def _passenger_rail_risk(
     passenger_rail_network_risk = _apply_asset_vulnerability(
         passenger_rail_network_risk,
         structure_enum=OSRailStructure,
-        structure_col=OSRailStructure.RAIL_STRUCTURE,
+        structure_col=OSRailCols.STRUCTURE,
         feature_range=(config.constants.score_min, config.constants.score_max)
-    )
-
-    # Re-calculate composite risk
-    for main_hazard in hazard_layers:
-        passenger_rail_network_risk = functional_rules._calculate_composite_score(
-            passenger_rail_network_risk,
-            weights=main_hazard.get_weights(),
-            output_col=main_hazard
-        )
-
-    # Re-normalise main hazards
-    passenger_rail_network_risk = functional_rules.min_max_scaling_pair(
-        data=passenger_rail_network_risk,
-        pairs=[
-            (f"{main_hazard}_{Scenarios.CURRENT}", f"{main_hazard}_{Scenarios.FORECAST}")
-            for main_hazard in hazard_layers
-            ],
-        feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
     _audit_infrastructure_risk(
@@ -600,11 +608,10 @@ def _passenger_rail_risk(
         risk_data=passenger_rail_network_risk,
         drop_cols=[],
         rename_map={
-            "osid": "id",
-            "desc": "description",
-            "phys_level": "physical_level",
-            "rail_use": "railway_use",
-            "track_rep": "track_representation",
+            OSRailCols.ID: "id",
+            OSRailCols.PHYSICAL_LEVEL: "physical_level",
+            OSRailCols.RAILWAY_USE: "railway_use",
+            OSRailCols.TRACK_REPRESENTATION: "track_representation",
         },
         risk_cols_order=risk_cols,
     )
@@ -651,27 +658,10 @@ def _freight_rail_risk(
     freight_rail_network_risk = _apply_asset_vulnerability(
         freight_rail_network_risk,
         structure_enum=OSRailStructure,
-        structure_col=OSRailStructure.RAIL_STRUCTURE,
+        structure_col=OSRailCols.STRUCTURE,
         feature_range=feature_range
     )
 
-    # Re-calculate composite risk
-    for main_hazard in hazard_layers:
-        freight_rail_network_risk = functional_rules._calculate_composite_score(
-            freight_rail_network_risk,
-            weights=main_hazard.get_weights(),
-            output_col=main_hazard
-        )
-
-    # Re-normalise main hazards
-    freight_rail_network_risk = functional_rules.min_max_scaling_pair(
-        data=freight_rail_network_risk,
-        pairs=[
-            (f"{main_hazard}_{Scenarios.CURRENT}", f"{main_hazard}_{Scenarios.FORECAST}")
-            for main_hazard in hazard_layers
-            ],
-        feature_range=feature_range,
-    )
 
     freight_rail_network_risk = _freight_impact_index(freight_rail_network_risk, feature_range)
 
@@ -701,11 +691,10 @@ def _freight_rail_risk(
             "distance",
         ],
         rename_map={
-            "osid": "id",
-            "desc": "description",
-            "phys_level": "physical_level",
-            "rail_use": "railway_use",
-            "track_rep": "track_representation",
+            OSRailCols.ID: "id",
+            OSRailCols.PHYSICAL_LEVEL: "physical_level",
+            OSRailCols.RAILWAY_USE: "railway_use",
+            OSRailCols.TRACK_REPRESENTATION: "track_representation",
         },
         risk_cols_order=[*risk_cols, ImpactCols.IMPACT],
     )
@@ -1403,27 +1392,10 @@ def _tram_network_risk(
     tram_risk = _apply_asset_vulnerability(
         tram_risk,
         structure_enum=OSRailStructure,
-        structure_col=OSRailStructure.RAIL_STRUCTURE,
+        structure_col=OSRailCols.STRUCTURE,
         feature_range=(config.constants.score_min, config.constants.score_max)
     )
 
-    # Re-calculate composite risk
-    for main_hazard in hazard_layers:
-        tram_risk = functional_rules._calculate_composite_score(
-            tram_risk,
-            weights=main_hazard.get_weights(),
-            output_col=main_hazard
-        )
-
-    # Re-normalise main hazards
-    tram_risk = functional_rules.min_max_scaling_pair(
-        data=tram_risk,
-        pairs=[
-            (f"{main_hazard}_{Scenarios.CURRENT}", f"{main_hazard}_{Scenarios.FORECAST}")
-            for main_hazard in hazard_layers
-            ],
-        feature_range=(config.constants.score_min, config.constants.score_max),
-    )
 
     _audit_infrastructure_risk(
         tram_risk,
@@ -1443,11 +1415,10 @@ def _tram_network_risk(
         risk_data=tram_risk,
         drop_cols=[],
         rename_map={
-            "osid": "id",
-            "desc": "description",
-            "phys_level": "physical_level",
-            "rail_use": "railway_use",
-            "track_rep": "track_representation",
+            OSRailCols.ID: "id",
+            OSRailCols.PHYSICAL_LEVEL: "physical_level",
+            OSRailCols.RAILWAY_USE: "railway_use",
+            OSRailCols.TRACK_REPRESENTATION: "track_representation",
         },
         risk_cols_order=risk_cols,
     )
@@ -1490,27 +1461,10 @@ def _rapid_transport_network_risk(
     rapid_transport_risk = _apply_asset_vulnerability(
         rapid_transport_risk,
         structure_enum=OSRailStructure,
-        structure_col=OSRailStructure.RAIL_STRUCTURE,
+        structure_col=OSRailCols.STRUCTURE,
         feature_range=feature_range
     )
 
-    # Re-calculate composite risk
-    for main_hazard in hazard_layers:
-        rapid_transport_risk = functional_rules._calculate_composite_score(
-            rapid_transport_risk,
-            weights=main_hazard.get_weights(),
-            output_col=main_hazard
-        )
-
-    # Re-normalise main hazards
-    rapid_transport_risk = functional_rules.min_max_scaling_pair(
-        data=rapid_transport_risk,
-        pairs=[
-            (f"{main_hazard}_{Scenarios.CURRENT}", f"{main_hazard}_{Scenarios.FORECAST}")
-            for main_hazard in hazard_layers
-            ],
-        feature_range=feature_range,
-    )
 
     _audit_infrastructure_risk(
         rapid_transport_risk,
@@ -1532,11 +1486,10 @@ def _rapid_transport_network_risk(
         risk_data=rapid_transport_risk,
         drop_cols=[],
         rename_map={
-            "osid": "id",
-            "desc": "description",
-            "phys_level": "physical_level",
-            "rail_use": "railway_use",
-            "track_rep": "track_representation",
+            OSRailCols.ID: "id",
+            OSRailCols.PHYSICAL_LEVEL: "physical_level",
+            OSRailCols.RAILWAY_USE: "railway_use",
+            OSRailCols.TRACK_REPRESENTATION: "track_representation",
         },
         risk_cols_order=risk_cols,
     )

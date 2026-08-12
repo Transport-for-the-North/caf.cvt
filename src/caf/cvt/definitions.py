@@ -381,3 +381,15 @@ class OSRoadCols(enum.StrEnum):
     ROAD_STRUCTURE = "road_structure"
     PRIMARY_ROUTE = "primary_route"
     TRUNK_ROAD = "trunk_road"
+
+
+class OSRailCols(enum.StrEnum):
+    """Definitions for OS rail columns."""
+
+    ID = "osid"
+    DESCRIPTION = "description"
+    STRUCTURE = "structure"
+    PHYSICAL_LEVEL = "physicallevel"
+    RAILWAY_USE = "railwayuse"
+    TRACK_REPRESENTATION = "trackrepresentation"
+    OPERATIONAL_STATUS = "operationalstatus"

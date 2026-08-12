@@ -9,7 +9,7 @@ OS_ROAD_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Road/OS Road/os_road.gpk
 MODEL_ROADS_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Road/Model Roads/model_roads.gpkg")
 
 PASSENGER_RAIL_MODEL_INPUT_PATH = pathlib.Path(
-    "Infrastructure/Rail/OS Passenger Rail/pass_rail_links.gpkg"
+    "Infrastructure/Rail/OS Passenger Rail/passenger_rail_links.gpkg"
 )
 
 FREIGHT_RAIL_MODEL_INPUT_PATH = pathlib.Path(
