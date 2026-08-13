@@ -138,7 +138,6 @@ class MainHazardRiskCols(RiskColumn):
         }
         return cmap_mapping[self]
 
-
     def get_weights(self) -> dict[RiskColumn, float]:
         """Return the weights for the sub-hazards of a given main hazard column."""
         weights_mapping: dict[MainHazardRiskCols, dict[RiskColumn, float]] = {
@@ -161,7 +160,8 @@ class ExtremeHeatCols(RiskColumn):
         """Return extreme heat colourmap."""
         return "Reds"
 
-    def get_weights(self) -> dict[RiskColumn, float]:
+    @classmethod
+    def get_weights(cls) -> dict[RiskColumn, float]:
         """Return appropriate weights for Extreme Heat."""
         return {
             ExtremeHeatCols.MAX_TEMP_SUMMER: 0.5,
@@ -181,7 +181,8 @@ class ExtremeColdCols(RiskColumn):
         """Return extreme cold colourmap."""
         return "Blues"
 
-    def get_weights(self) -> dict[RiskColumn, float]:
+    @classmethod
+    def get_weights(cls) -> dict[RiskColumn, float]:
         """Return appropriate weights for Extreme Cold."""
         return {
             ExtremeColdCols.MIN_TEMP_WINTER: 0.5,
@@ -200,7 +201,8 @@ class DroughtCols(RiskColumn):
         """Return drought colourmap."""
         return "Oranges"
 
-    def get_weights(self) -> dict[RiskColumn, float]:
+    @classmethod
+    def get_weights(cls) -> dict[RiskColumn, float]:
         """Return appropriate weights for Drought."""
         return {
             DroughtCols.DROUGHT_SEVERITY_INDEX: 0.75,
@@ -221,7 +223,8 @@ class StormCols(RiskColumn):
         """Return storm colourmap."""
         return "Blues"
 
-    def get_weights(self) -> dict[RiskColumn, float]:
+    @classmethod
+    def get_weights(cls) -> dict[RiskColumn, float]:
         """Return appropriate weights for Storm."""
         return {
             StormCols.WIND_SPEED: 0.3,

@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import sklearn
 import xyzservices
+from pyogrio.errors import DataLayerError
 from shapely.geometry import Polygon, box
 
 from caf.cvt import data_cleaning, file_paths, model_config
@@ -1106,7 +1107,7 @@ def _flooding_index(
             mask=boundary,
             layer="flooding_overlay",
         )
-    except ValueError:
+    except DataLayerError:
         LOG.warning(
             "Layer 'flooding_overlay' not found, falling back to 'flood_overlay' layer."
         )
