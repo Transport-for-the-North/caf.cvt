@@ -39,6 +39,9 @@ def derive_rail_weights() -> None:
 
     incident_summary = calculate_incident_summary(rail_incidents)
 
+    LOG.info("Writing incident summary to CSV...")
+    incident_summary.to_csv(OUTPUT_PATH / "rail_incident_summary.csv", index=False)
+
     impact_weights = aggregate_impact_weights(incident_summary)
 
     LOG.info("Writing impact weights to CSV...")
