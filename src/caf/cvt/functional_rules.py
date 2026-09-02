@@ -67,6 +67,7 @@ _FLOODING_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium":
 _PLOT_ALPHA_BASEMAP = 0.7
 _PLOT_ALPHA_NO_BASEMAP = 1.0
 
+CARTO_API_KEY = "cb1_2ruq_1_a41dfaf6a0142c853f2d6bf8"
 
 ### GENERAL FUNCTIONS
 
@@ -373,7 +374,7 @@ def plot_choropleth_current_and_forecast(
     feature_range: tuple[int, int],
     linewidth: float = 0.1,
     edgecolor: str | None = "black",
-    basemap_source: xyzservices.TileProvider | None = None,
+    basemap_source: xyzservices.TileProvider | str | None = None,
 ) -> None:
     """Plot a choropleth map of the given column in the risk data.
 
@@ -396,7 +397,7 @@ def plot_choropleth_current_and_forecast(
         The width of the lines between polygons, by default 0.1.
     edgecolor : str | None, optional
         The color of the edges of the polygons, by default "black".
-    basemap_source : xyzservices.TileProvider | None, optional
+    basemap_source : xyzservices.TileProvider | str | None, optional
         The source for the basemap tiles. If none, no basemap is added. By default None.
 
     Returns
@@ -483,7 +484,10 @@ def _audit_index(
             title=f"{var.replace('_', ' ').title()}",
             out_path=out_path / f"{var}_choropleth.png",
             feature_range=feature_range,
-            basemap_source=xyzservices.providers.CartoDB.Positron,
+            basemap_source=(
+                "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key="
+                + CARTO_API_KEY
+            ),
         )
 
 
@@ -600,16 +604,6 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
-    extreme_weather_risk = min_max_scaling_pair(
-        extreme_weather_risk,
-        [
-            (
-                f"{MainHazardRiskCols.EXTREME_WEATHER}_{Scenarios.CURRENT}",
-                f"{MainHazardRiskCols.EXTREME_WEATHER}_{Scenarios.FORECAST}",
-            )
-        ],
-        feature_range,
-    )
 
     extreme_weather_risk = gpd.GeoDataFrame(
         extreme_weather_risk, geometry="geometry", crs=data_cleaning.BNG_CRS
@@ -1169,17 +1163,6 @@ def _flooding_index(
         MainHazardRiskCols.FLOODING,
     )
 
-    flooding_risk = min_max_scaling_pair(
-        flooding_risk,
-        [
-            (
-                f"{MainHazardRiskCols.FLOODING}_{Scenarios.CURRENT}",
-                f"{MainHazardRiskCols.FLOODING}_{Scenarios.FORECAST}",
-            ),
-        ],
-        feature_range,
-    )
-
     _validate_index(
         flooding_risk, [*FloodingRiskCols, MainHazardRiskCols.FLOODING], feature_range
     )
@@ -1355,17 +1338,6 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
         ground_stability,
         MainHazardRiskCols.GROUND_STABILITY.get_weights(),
         MainHazardRiskCols.GROUND_STABILITY,
-    )
-
-    ground_stability = min_max_scaling_pair(
-        ground_stability,
-        [
-            (
-                f"{MainHazardRiskCols.GROUND_STABILITY}_{Scenarios.CURRENT}",
-                f"{MainHazardRiskCols.GROUND_STABILITY}_{Scenarios.FORECAST}",
-            )
-        ],
-        feature_range,
     )
 
     _validate_index(

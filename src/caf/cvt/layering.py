@@ -5,10 +5,10 @@ import pathlib
 
 import geopandas as gpd
 import pandas as pd
-import xyzservices
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 from caf.cvt.definitions import (
+    AssetTypes,
     ExtremeWeatherRiskCols,
     FloodingRiskCols,
     GroundStabilityRiskCols,
@@ -188,7 +188,10 @@ def _audit_infrastructure_risk(
             linewidth=linewidth,
             edgecolor=None,
             feature_range=feature_range,
-            basemap_source=xyzservices.providers.CartoDB.Positron,
+            basemap_source=(
+                "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key="
+                + functional_rules.CARTO_API_KEY
+            ),
         )
 
 
@@ -233,6 +236,7 @@ def _get_main_hazard_modifiers(
 
     return modifiers
 
+
 def _apply_asset_vulnerability(
         risk_data: gpd.GeoDataFrame,
         structure_enum: OSRoadStructure | OSRailStructure,
@@ -262,6 +266,23 @@ def _apply_asset_vulnerability(
                     risk_data.loc[mask, risk_col] * modifier
                 ).clip(lower=feature_range[0], upper=feature_range[1])
     return risk_data
+
+
+def _apply_asset_hazard_weighting(
+        asset_risk: gpd.GeoDataFrame,
+        asset_type: AssetTypes,
+        hazards: dict[MainHazardRiskCols, gpd.GeoDataFrame]
+) -> gpd.GeoDataFrame:
+    """Recalculate main hazard risk scores based on sub-hazard risk scores and weights."""
+    for main_hazard in hazards:
+        weights = asset_type.get_asset_hazard_weights(main_hazard)
+        asset_risk = functional_rules._calculate_composite_score(
+            asset_risk,
+            weights,
+            main_hazard,
+        )
+    return asset_risk
+
 
 # LAYERING
 
@@ -303,7 +324,9 @@ def layering(config: model_config.Config) -> None:
 ## HAZARD LAYERS
 
 
-def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFrame]:
+def _read_hazard_layers(
+        config: model_config.Config
+) -> dict[MainHazardRiskCols, gpd.GeoDataFrame]:
     """Read and clean hazard layers, and return them in a dictionary."""
     hazard_layers = {}
     if config.switches.extreme_weather:
@@ -338,7 +361,7 @@ def _read_hazard_layers(config: model_config.Config) -> dict[str, gpd.GeoDataFra
 
 def _infrastructure_layering(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -353,7 +376,7 @@ def _infrastructure_layering(
 
 def _get_road_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -371,7 +394,7 @@ def _get_road_risk(
 
 def _os_open_road_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -384,6 +407,12 @@ def _os_open_road_risk(
         return
 
     os_road_risk = _infrastructure_risk_intersect(os_road, hazard_layers)
+
+    os_road_risk = _apply_asset_hazard_weighting(
+        os_road_risk,
+        AssetTypes.ROAD,
+        hazards=hazard_layers
+    )
 
     os_road_risk = _apply_asset_vulnerability(
         os_road_risk,
@@ -424,7 +453,7 @@ def _os_open_road_risk(
 
 def _model_road_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -443,6 +472,12 @@ def _model_road_risk(
         return
 
     model_road_risk = _infrastructure_risk_intersect(model_net_flows, hazard_layers)
+
+    model_road_risk = _apply_asset_hazard_weighting(
+        model_road_risk,
+        AssetTypes.ROAD,
+        hazards=hazard_layers
+    )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
     model_road_risk = _model_road_impact_index(model_road_risk, feature_range)
@@ -544,7 +579,7 @@ def _calculate_model_road_impact(model_road_risk: pd.DataFrame) -> pd.DataFrame:
 
 def _get_rail_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -562,7 +597,7 @@ def _get_rail_risk(
 
 def _passenger_rail_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -578,6 +613,12 @@ def _passenger_rail_risk(
 
     passenger_rail_network_risk = _infrastructure_risk_intersect(
         passenger_rail_network, hazard_layers
+    )
+
+    passenger_rail_network_risk = _apply_asset_hazard_weighting(
+        passenger_rail_network_risk,
+        AssetTypes.RAIL,
+        hazards=hazard_layers
     )
 
     passenger_rail_network_risk = _apply_asset_vulnerability(
@@ -631,7 +672,7 @@ def _passenger_rail_risk(
 
 def _freight_rail_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -651,6 +692,12 @@ def _freight_rail_risk(
 
     freight_rail_network_risk = _infrastructure_risk_intersect(
         freight_rail_network, hazard_layers
+    )
+
+    freight_rail_network_risk = _apply_asset_hazard_weighting(
+        freight_rail_network_risk,
+        AssetTypes.RAIL,
+        hazards=hazard_layers
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -761,7 +808,7 @@ def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
 
 def _get_other_risk(  # noqa: C901
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -806,7 +853,7 @@ def _buffer_geometry(infrastructure: gpd.GeoDataFrame, buffer_size_m: int) -> gp
 
 def _train_stations_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -861,7 +908,7 @@ def _train_stations_risk(
 
 def _charging_sites_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -916,7 +963,7 @@ def _charging_sites_risk(
 
 def _airports_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -969,7 +1016,7 @@ def _airports_risk(
 
 def _bus_coach_stations_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -1030,7 +1077,7 @@ def _bus_coach_stations_risk(
 
 def _bus_stops_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -1078,7 +1125,7 @@ def _bus_stops_risk(
 
 def _tram_stations_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -1133,7 +1180,7 @@ def _tram_stations_risk(
 
 def _rapid_transport_stations_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -1196,7 +1243,7 @@ def _rapid_transport_stations_risk(
 
 def _ferry_terminals_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -1251,7 +1298,7 @@ def _ferry_terminals_risk(
 
 def _petrol_stations_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -1306,7 +1353,7 @@ def _petrol_stations_risk(
 
 def _ncn_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -1370,7 +1417,7 @@ def _ncn_risk(
 
 def _tram_network_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -1437,7 +1484,7 @@ def _tram_network_risk(
 
 def _rapid_transport_network_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:

@@ -396,3 +396,35 @@ class OSRailCols(enum.StrEnum):
     RAILWAY_USE = "railwayuse"
     TRACK_REPRESENTATION = "trackrepresentation"
     OPERATIONAL_STATUS = "operationalstatus"
+
+
+class AssetTypes(enum.StrEnum):
+    """Asset Type definitions."""
+
+    ROAD = "road"
+    RAIL = "rail"
+
+    def get_asset_hazard_weights(
+            self,
+            main_hazard: MainHazardRiskCols
+    ) -> dict[RiskColumn, float]:
+        """Return asset-specific hazard weights."""
+        default_weights = main_hazard.get_weights()
+
+        if self == AssetTypes.ROAD:
+            return default_weights
+        if self == AssetTypes.RAIL:
+            if main_hazard == MainHazardRiskCols.EXTREME_WEATHER:
+                return {
+                    ExtremeWeatherRiskCols.EXTREME_HEAT: 0.20,
+                    ExtremeWeatherRiskCols.EXTREME_COLD: 0.21,
+                    ExtremeWeatherRiskCols.DROUGHT: 0.14,
+                    ExtremeWeatherRiskCols.STORM: 0.45,
+                }
+            return default_weights
+        raise ValueError(f"Unknown asset type: {self}")
+
+
+
+
+
