@@ -207,28 +207,24 @@ def _get_impact_weights(hazards: list[str]) -> dict[str, float]:
 
 
 def _get_main_hazard_modifiers(
-        vulnerabilities: dict[RiskColumn, VulnerabilityModifier]
+    vulnerabilities: dict[RiskColumn, VulnerabilityModifier],
 ) -> dict[MainHazardRiskCols, float]:
     """Get main hazard modifiers from sub-hazard modifiers."""
     modifiers = {}
     for main_hazard in MainHazardRiskCols:
         weights = main_hazard.get_weights()
         relevant_weights = {
-            hazard: weight
-            for hazard, weight in weights.items()
-            if hazard in vulnerabilities
+            hazard: weight for hazard, weight in weights.items() if hazard in vulnerabilities
         }
 
         if not relevant_weights:
             continue
 
-
         modifier = (
-            sum( # Calculate weighted contribution of hazards with explicit modifier
-                vulnerabilities[hazard] * weight
-                for hazard, weight in relevant_weights.items()
+            sum(  # Calculate weighted contribution of hazards with explicit modifier
+                vulnerabilities[hazard] * weight for hazard, weight in relevant_weights.items()
             )
-            + # Calculate contribution of unspecified hazards
+            +  # Calculate contribution of unspecified hazards
             (1 - sum(relevant_weights.values()))
         )
 
@@ -238,10 +234,10 @@ def _get_main_hazard_modifiers(
 
 
 def _apply_asset_vulnerability(
-        risk_data: gpd.GeoDataFrame,
-        structure_enum: OSRoadStructure | OSRailStructure,
-        structure_col: str,
-        feature_range: tuple[int, int]
+    risk_data: gpd.GeoDataFrame,
+    structure_enum: OSRoadStructure | OSRailStructure,
+    structure_col: str,
+    feature_range: tuple[int, int],
 ) -> gpd.GeoDataFrame:
     """Apply asset vulnerability modifiers to risk data."""
     for structure in structure_enum:
@@ -269,9 +265,9 @@ def _apply_asset_vulnerability(
 
 
 def _apply_asset_hazard_weighting(
-        asset_risk: gpd.GeoDataFrame,
-        asset_type: AssetTypes,
-        hazards: dict[MainHazardRiskCols, gpd.GeoDataFrame]
+    asset_risk: gpd.GeoDataFrame,
+    asset_type: AssetTypes,
+    hazards: dict[MainHazardRiskCols, gpd.GeoDataFrame],
 ) -> gpd.GeoDataFrame:
     """Recalculate main hazard risk scores based on sub-hazard risk scores and weights."""
     for main_hazard in hazards:
@@ -325,7 +321,7 @@ def layering(config: model_config.Config) -> None:
 
 
 def _read_hazard_layers(
-        config: model_config.Config
+    config: model_config.Config,
 ) -> dict[MainHazardRiskCols, gpd.GeoDataFrame]:
     """Read and clean hazard layers, and return them in a dictionary."""
     hazard_layers = {}
@@ -409,18 +405,15 @@ def _os_open_road_risk(
     os_road_risk = _infrastructure_risk_intersect(os_road, hazard_layers)
 
     os_road_risk = _apply_asset_hazard_weighting(
-        os_road_risk,
-        AssetTypes.ROAD,
-        hazards=hazard_layers
+        os_road_risk, AssetTypes.ROAD, hazards=hazard_layers
     )
 
     os_road_risk = _apply_asset_vulnerability(
         os_road_risk,
         structure_enum=OSRoadStructure,
         structure_col=OSRoadCols.ROAD_STRUCTURE,
-        feature_range=(config.constants.score_min, config.constants.score_max)
+        feature_range=(config.constants.score_min, config.constants.score_max),
     )
-
 
     _audit_infrastructure_risk(
         os_road_risk,
@@ -474,9 +467,7 @@ def _model_road_risk(
     model_road_risk = _infrastructure_risk_intersect(model_net_flows, hazard_layers)
 
     model_road_risk = _apply_asset_hazard_weighting(
-        model_road_risk,
-        AssetTypes.ROAD,
-        hazards=hazard_layers
+        model_road_risk, AssetTypes.ROAD, hazards=hazard_layers
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -616,16 +607,14 @@ def _passenger_rail_risk(
     )
 
     passenger_rail_network_risk = _apply_asset_hazard_weighting(
-        passenger_rail_network_risk,
-        AssetTypes.RAIL,
-        hazards=hazard_layers
+        passenger_rail_network_risk, AssetTypes.RAIL, hazards=hazard_layers
     )
 
     passenger_rail_network_risk = _apply_asset_vulnerability(
         passenger_rail_network_risk,
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
-        feature_range=(config.constants.score_min, config.constants.score_max)
+        feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
     _audit_infrastructure_risk(
@@ -695,9 +684,7 @@ def _freight_rail_risk(
     )
 
     freight_rail_network_risk = _apply_asset_hazard_weighting(
-        freight_rail_network_risk,
-        AssetTypes.RAIL,
-        hazards=hazard_layers
+        freight_rail_network_risk, AssetTypes.RAIL, hazards=hazard_layers
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -706,9 +693,8 @@ def _freight_rail_risk(
         freight_rail_network_risk,
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
-        feature_range=feature_range
+        feature_range=feature_range,
     )
-
 
     freight_rail_network_risk = _freight_impact_index(freight_rail_network_risk, feature_range)
 
@@ -1440,9 +1426,8 @@ def _tram_network_risk(
         tram_risk,
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
-        feature_range=(config.constants.score_min, config.constants.score_max)
+        feature_range=(config.constants.score_min, config.constants.score_max),
     )
-
 
     _audit_infrastructure_risk(
         tram_risk,
@@ -1509,9 +1494,8 @@ def _rapid_transport_network_risk(
         rapid_transport_risk,
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
-        feature_range=feature_range
+        feature_range=feature_range,
     )
-
 
     _audit_infrastructure_risk(
         rapid_transport_risk,

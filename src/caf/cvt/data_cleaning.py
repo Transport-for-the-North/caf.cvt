@@ -34,23 +34,9 @@ _FREIGHT_DEMAND_NETWORK_MAP_MAX_DISTANCE = int(
 )
 
 ### MODULE CONSTANTS ###
-# TODO (DJ): Check that this is needed, if not remove
-MMRN_NODE_TYPES = {
-    "Train Stations": [
-        "Railway Station;Modal Change",
-        "Railway Station;Railway Station (Underground System);Modal Change",
-        "Railway Station (Principal);Modal Change",
-        "Railway Station (Principal);Railway Station (Underground System);Modal Change",
-        "Railway Station;Tram Station;Modal Change",
-        "Railway Station (Non Public Accessible);Modal Change",
-        "Railway Station (Principal);Tram Station;Modal Change",
-    ]
-}
-
 
 _WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
 _WIND_SPEED_PERCENTILE = 0.99
-
 
 
 ### GENERAL FUNCTIONS
@@ -737,10 +723,7 @@ def _clean_train_stations(config: model_config.Config, boundary: gpd.GeoDataFram
         columns=["nodeid", "os_nodetype"],
     )
     len_before_filter = len(os_mmrn_railway_stations)
-    train_stations = os_mmrn_railway_stations[
-        os_mmrn_railway_stations["os_nodetype"].isin(MMRN_NODE_TYPES["Train Stations"])
-    ]
-    train_stations = train_stations.drop(columns=["os_nodetype"])
+    train_stations = os_mmrn_railway_stations.drop(columns=["os_nodetype"])
     train_stations = train_stations.drop_duplicates()
     train_stations = validate_geometries(train_stations)
     train_stations = clip_to_boundary(train_stations, boundary)
@@ -865,9 +848,9 @@ def _clean_tram_network(config: model_config.Config, rail_links: gpd.GeoDataFram
     tram_links = rail_links[
         rail_links[OSRailCols.RAILWAY_USE].isin(["Freight And Passenger", "Passenger"])
     ]
-    tram_links = tram_links[tram_links[OSRailCols.DESCRIPTION].isin(
-        ["Tram", "Main Line And Tram"]
-    )]
+    tram_links = tram_links[
+        tram_links[OSRailCols.DESCRIPTION].isin(["Tram", "Main Line And Tram"])
+    ]
     filter_removed = len_before_filter - len(tram_links)
     LOG.info(
         "Tram network links filtered - %s of %s (%.1f percent) rows removed",
@@ -1949,16 +1932,16 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
     ufs = pd.read_csv(config.impact.model_road_flows.ufs)
     annualisation_factors = pd.read_csv(config.impact.model_road_flows.annualisation_factors)
 
-    symca_links = gpd.read_file(
+    model_road_links = gpd.read_file(
         config.paths.model_input / file_paths.MODEL_ROADS_MODEL_INPUT_PATH
     )
 
     uc_link_flows = uc_link_flows.drop(columns=["id"])
-    symca_uc_link_flows = uc_link_flows.loc[
-        uc_link_flows["link_id"].isin(symca_links["link_id"])
+    model_road_uc_link_flows = uc_link_flows.loc[
+        uc_link_flows["link_id"].isin(model_road_links["link_id"])
     ]
 
-    symca_uc_link_flows = symca_uc_link_flows.merge(
+    model_road_uc_link_flows = model_road_uc_link_flows.merge(
         ufs,
         left_on="ufs_id",
         right_on="id",
@@ -1967,28 +1950,28 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
 
     annualisation_factors = annualisation_factors.drop(columns=["id"])
 
-    symca_uc_link_flows = symca_uc_link_flows.merge(
+    model_road_uc_link_flows = model_road_uc_link_flows.merge(
         annualisation_factors,
         on=["time_period", "userclass"],
         how="left",
     )
 
-    symca_uc_link_flows["annual_flow"] = (
-        symca_uc_link_flows["actual_flow"] * symca_uc_link_flows["factor"]
+    model_road_uc_link_flows["annual_flow"] = (
+        model_road_uc_link_flows["actual_flow"] * model_road_uc_link_flows["factor"]
     )
 
-    symca_uc_link_flows = symca_uc_link_flows.drop(
+    model_road_uc_link_flows = model_road_uc_link_flows.drop(
         columns=["ufs_id", "id", "factor", "actual_flow"]
     )
 
-    symca_uc_link_flows = (
-        symca_uc_link_flows.groupby(["link_id", "userclass", "year", "scenario"])
+    model_road_uc_link_flows = (
+        model_road_uc_link_flows.groupby(["link_id", "userclass", "year", "scenario"])
         .agg({"annual_flow": "sum"})
         .reset_index()
     )
 
     # TODO (DJ): Alter the following slightly when future demand is available
-    years = sorted(symca_uc_link_flows["year"].unique())
+    years = sorted(model_road_uc_link_flows["year"].unique())
     if len(years) == 1:
         current_year = years[0]
         forecast_year = years[0]
@@ -1998,8 +1981,12 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
     else:
         raise ValueError(f"Expected 1 or 2 years. Found {years}")
 
-    current_flows = symca_uc_link_flows[symca_uc_link_flows["year"] == current_year].copy()
-    forecast_flows = symca_uc_link_flows[symca_uc_link_flows["year"] == forecast_year].copy()
+    current_flows = model_road_uc_link_flows[
+        model_road_uc_link_flows["year"] == current_year
+    ].copy()
+    forecast_flows = model_road_uc_link_flows[
+        model_road_uc_link_flows["year"] == forecast_year
+    ].copy()
 
     if current_year == forecast_year:
         forecast_flows = current_flows.copy()
@@ -2026,27 +2013,27 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         f"uc{uc}_demand_{Scenarios.FORECAST}" for uc in forecast_flows.columns
     ]
 
-    symca_uc_link_flows = current_flows.join(forecast_flows, how="left")
+    model_road_uc_link_flows = current_flows.join(forecast_flows, how="left")
 
-    symca_uc_link_flows[f"demand_{Scenarios.CURRENT}"] = symca_uc_link_flows[
-        [c for c in symca_uc_link_flows.columns if c.endswith(f"_{Scenarios.CURRENT}")]
+    model_road_uc_link_flows[f"demand_{Scenarios.CURRENT}"] = model_road_uc_link_flows[
+        [c for c in model_road_uc_link_flows.columns if c.endswith(f"_{Scenarios.CURRENT}")]
     ].sum(axis=1)
 
-    symca_uc_link_flows[f"demand_{Scenarios.FORECAST}"] = symca_uc_link_flows[
-        [c for c in symca_uc_link_flows.columns if c.endswith(f"_{Scenarios.FORECAST}")]
+    model_road_uc_link_flows[f"demand_{Scenarios.FORECAST}"] = model_road_uc_link_flows[
+        [c for c in model_road_uc_link_flows.columns if c.endswith(f"_{Scenarios.FORECAST}")]
     ].sum(axis=1)
 
-    symca_uc_link_flows = symca_uc_link_flows.merge(
-        symca_links[["link_id", "geometry"]],
+    model_road_uc_link_flows = model_road_uc_link_flows.merge(
+        model_road_links[["link_id", "geometry"]],
         on="link_id",
         how="left",
     )
 
-    symca_uc_link_flows = gpd.GeoDataFrame(
-        symca_uc_link_flows, geometry="geometry", crs=BNG_CRS
+    model_road_uc_link_flows = gpd.GeoDataFrame(
+        model_road_uc_link_flows, geometry="geometry", crs=BNG_CRS
     )
 
     write_to_file(
-        symca_uc_link_flows,
+        model_road_uc_link_flows,
         config.paths.model_input / file_paths.MODEL_ROAD_FLOWS_MODEL_INPUT_PATH,
     )

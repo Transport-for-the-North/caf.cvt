@@ -6,7 +6,7 @@ import enum
 
 # GLOBAL CONSTANTS
 
-BNG_CRS = "EPSG:27700" # British National Grid CRS, for use in spatially merging datasets
+BNG_CRS = "EPSG:27700"  # British National Grid CRS, for use in spatially merging datasets
 
 # CLASSES
 
@@ -22,7 +22,6 @@ class RiskColumn(enum.StrEnum):
     def base_name(self) -> str:
         """Return the base name of the plotting column."""
         return self.removesuffix("_risk")
-
 
 
 class ExtremeWeatherRiskCols(RiskColumn):
@@ -52,6 +51,7 @@ class ExtremeWeatherRiskCols(RiskColumn):
             ExtremeWeatherRiskCols.DROUGHT: 0.25,
             ExtremeWeatherRiskCols.STORM: 0.25,
         }
+
 
 class FloodingRiskCols(RiskColumn):
     """Column definitions for flooding subhazard layers."""
@@ -148,6 +148,7 @@ class MainHazardRiskCols(RiskColumn):
         }
 
         return weights_mapping[self]
+
 
 class ExtremeHeatCols(RiskColumn):
     """Column definitions for extreme heat subhazard layers."""
@@ -307,6 +308,7 @@ class OSRoadStructure(enum.StrEnum):
         }
         return mapping[self]
 
+
 class OSRailStructure(enum.StrEnum):
     """Definitions for OS rail structure types."""
 
@@ -335,8 +337,7 @@ class OSRailStructure(enum.StrEnum):
                 FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
                 GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
                 GroundStabilityRiskCols.SHRINK_SWELL: VulnerabilityModifier.VERY_HIGH,
-                GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE:
-                    VulnerabilityModifier.VERY_HIGH,
+                GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE: VulnerabilityModifier.VERY_HIGH,
             },
             OSRailStructure.BRIDGE: {
                 ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.VERY_HIGH,
@@ -405,8 +406,7 @@ class AssetTypes(enum.StrEnum):
     RAIL = "rail"
 
     def get_asset_hazard_weights(
-            self,
-            main_hazard: MainHazardRiskCols
+        self, main_hazard: MainHazardRiskCols
     ) -> dict[RiskColumn, float]:
         """Return asset-specific hazard weights."""
         default_weights = main_hazard.get_weights()
@@ -423,8 +423,3 @@ class AssetTypes(enum.StrEnum):
                 }
             return default_weights
         raise ValueError(f"Unknown asset type: {self}")
-
-
-
-
-

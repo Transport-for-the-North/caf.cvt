@@ -1,4 +1,5 @@
 """Module to derive asset-specific hazard weights."""
+
 import logging
 import pathlib
 
@@ -25,13 +26,10 @@ NWR_NORTHWEST_PATH = INPUT_PATH / "weather data nwc.csv"
 
 # CONSTANTS
 
-INCIDENT_WEIGHTS = {
-    "incident_share": 0.2,
-    "minutes_share": 0.4,
-    "cost_share": 0.4
-}
+INCIDENT_WEIGHTS = {"incident_share": 0.2, "minutes_share": 0.4, "cost_share": 0.4}
 
 # MAIN FUNCTIONS
+
 
 def derive_rail_weights() -> None:
     """Derive asset-specific hazard weights for rail assets."""
@@ -69,13 +67,10 @@ def calculate_incident_summary(rail_incidents: pd.DataFrame) -> pd.DataFrame:
         .agg(
             incidents=pd.NamedAgg(column="Weather Category", aggfunc="count"),
             total_minutes=pd.NamedAgg(column="Minutes", aggfunc="sum"),
-            total_cost=pd.NamedAgg(column="cost", aggfunc="sum")
+            total_cost=pd.NamedAgg(column="cost", aggfunc="sum"),
         )
         .reset_index()
-        .round({
-            "total_minutes": 0,
-            "total_cost": 0
-        })
+        .round({"total_minutes": 0, "total_cost": 0})
     )
 
     incident_summary["incident_share"] = (
@@ -89,10 +84,11 @@ def calculate_incident_summary(rail_incidents: pd.DataFrame) -> pd.DataFrame:
     )
 
     incident_summary["impact"] = round(
-        incident_summary["incident_share"] * INCIDENT_WEIGHTS["incident_share"] +
-        incident_summary["minutes_share"] * INCIDENT_WEIGHTS["minutes_share"] +
-        incident_summary["cost_share"] * INCIDENT_WEIGHTS["cost_share"],
-    2)
+        incident_summary["incident_share"] * INCIDENT_WEIGHTS["incident_share"]
+        + incident_summary["minutes_share"] * INCIDENT_WEIGHTS["minutes_share"]
+        + incident_summary["cost_share"] * INCIDENT_WEIGHTS["cost_share"],
+        2,
+    )
 
     return incident_summary
 
@@ -104,29 +100,32 @@ def aggregate_impact_weights(incident_summary: pd.DataFrame) -> pd.DataFrame:
         columns={"Weather Category": "hazard", "impact": "impact_weight"}
     )
 
-    impact_weights["hazard"] = impact_weights["hazard"].map({
-        "Wind": "Storm",
-        "Heat": "Extreme Heat",
-        "Snow": "Extreme Cold",
-        "Cold": "Extreme Cold",
-        "Subsidence": "Drought"
-    })
+    impact_weights["hazard"] = impact_weights["hazard"].map(
+        {
+            "Wind": "Storm",
+            "Heat": "Extreme Heat",
+            "Snow": "Extreme Cold",
+            "Cold": "Extreme Cold",
+            "Subsidence": "Drought",
+        }
+    )
 
-    return impact_weights.groupby("hazard").agg(
-        impact_weight=pd.NamedAgg(column="impact_weight", aggfunc="sum")
-    ).reset_index()
+    return (
+        impact_weights.groupby("hazard")
+        .agg(impact_weight=pd.NamedAgg(column="impact_weight", aggfunc="sum"))
+        .reset_index()
+    )
 
 
 # RUN SCRIPT
 
 if __name__ == "__main__":
     with ctk.LogHelper(
-            _NAME,
-            ctk.ToolDetails(
-                cvt.__package__,
-                cvt.__version__,
-            ),
-            log_file=OUTPUT_PATH / "asset_risk_weighting.log",
-        ) as log:
-
+        _NAME,
+        ctk.ToolDetails(
+            cvt.__package__,
+            cvt.__version__,
+        ),
+        log_file=OUTPUT_PATH / "asset_risk_weighting.log",
+    ) as log:
         derive_rail_weights()

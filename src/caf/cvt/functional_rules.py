@@ -1418,13 +1418,9 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
         # Compute composite risk score
         erosion_risk[scenario][f"{MainHazardRiskCols.COASTAL_EROSION}"] = (
             erosion_risk[scenario][CoastalErosionRiskCols.EROSION]
-            * MainHazardRiskCols.COASTAL_EROSION.get_weights()[
-                CoastalErosionRiskCols.EROSION
-            ]
+            * MainHazardRiskCols.COASTAL_EROSION.get_weights()[CoastalErosionRiskCols.EROSION]
             + erosion_risk[scenario][CoastalErosionRiskCols.GIZ]
-            * MainHazardRiskCols.COASTAL_EROSION.get_weights()[
-                CoastalErosionRiskCols.GIZ
-            ]
+            * MainHazardRiskCols.COASTAL_EROSION.get_weights()[CoastalErosionRiskCols.GIZ]
         )
 
         erosion_risk[scenario] = erosion_risk[scenario].rename(
