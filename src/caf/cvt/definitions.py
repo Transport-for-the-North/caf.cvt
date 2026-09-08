@@ -252,6 +252,18 @@ class ImpactCols(RiskColumn):
         """Return the appropriate colormap for a given impact column."""
         return "viridis"
 
+    @classmethod
+    def get_noham_impact_cols(cls) -> list[str]:
+        """Return a list of all NOHAM impact columns."""
+        return [
+            cls.UC1_IMPACT,
+            cls.UC2_IMPACT,
+            cls.UC3_IMPACT,
+            cls.UC4_IMPACT,
+            cls.UC5_IMPACT,
+            cls.IMPACT
+        ]
+
 
 class Scenarios(enum.StrEnum):
     """Column definitions for scenarios."""
@@ -275,6 +287,17 @@ class UserClasses(enum.StrEnum):
     USER_CLASS_5 = "uc5"
     USER_CLASS_6 = "uc6"
     USER_CLASS_7 = "uc7"
+
+    @classmethod
+    def get_noham_classes(cls) -> list[str]:
+        """Return a list of all NOHAM user classes."""
+        return [
+            cls.USER_CLASS_1,
+            cls.USER_CLASS_2,
+            cls.USER_CLASS_3,
+            cls.USER_CLASS_4,
+            cls.USER_CLASS_5,
+        ]
 
 
 class TimePeriods(enum.StrEnum):
@@ -337,7 +360,8 @@ class OSRailStructure(enum.StrEnum):
                 FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
                 GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
                 GroundStabilityRiskCols.SHRINK_SWELL: VulnerabilityModifier.VERY_HIGH,
-                GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE: VulnerabilityModifier.VERY_HIGH,
+                GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE:
+                VulnerabilityModifier.VERY_HIGH,
             },
             OSRailStructure.BRIDGE: {
                 ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.VERY_HIGH,

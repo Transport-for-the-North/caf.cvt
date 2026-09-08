@@ -6,6 +6,8 @@ import pathlib
 
 OS_ROAD_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Road/OS Road/os_road.gpkg")
 
+NOHAM_NETWORK_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Road/NoHAM")
+
 MODEL_ROADS_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Road/Model Roads/model_roads.gpkg")
 
 PASSENGER_RAIL_MODEL_INPUT_PATH = pathlib.Path(
@@ -112,6 +114,11 @@ NCERM_MODEL_INPUT_PATH = pathlib.Path("Hazards/Coastal Erosion/NCERM")
 FREIGHT_DEMAND_MODEL_INPUT_PATH = pathlib.Path(
     "Impact/Freight Flows/freight_network_demand.gpkg"
 )
+
+NOHAM_FLOWS_MODEL_INPUT_PATH = pathlib.Path("Impact/NoHAM Flows/noham_net_flows.gpkg")
+
+NOHAM_ZIP_EXTRACT_OUTPUT_PATH = pathlib.Path("Impact/NoHAM Link Flows/h5 files")
+
 MODEL_ROAD_FLOWS_MODEL_INPUT_PATH = pathlib.Path(
     "Impact/Model Road Flows/model_road_flows.gpkg"
 )

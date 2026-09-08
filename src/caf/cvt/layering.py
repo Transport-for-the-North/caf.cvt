@@ -289,7 +289,7 @@ def layering(config: model_config.Config) -> None:
 
     Read in hazard layers from functional rules output, then spatially intersect with
     infrastructure layers to assign risk to each piece of infrastructure. Calculate impact
-    indices for transport model roads and freight rail.
+    index for relevant data.
 
     Parameters
     ----------
@@ -376,13 +376,19 @@ def _get_road_risk(
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
-    """Layer OS Open Roads and Transport Model roads with hazards to assign risk."""
-    LOG.info("Calculating road risk...")
-    if config.switches.all_roads:
-        _os_open_road_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.model_roads:
-        _model_road_risk(config, hazard_layers, risk_cols, audit_path)
-    LOG.info("Road risk calculation complete.")
+    """Layer OS Open Roads, NoHAM, and Transport Model roads with hazards to assign risk."""
+    road_risk_enabled = any(
+        [config.switches.all_roads, config.switches.noham_roads, config.switches.model_roads]
+    )
+    if road_risk_enabled:
+        LOG.info("Calculating road risk...")
+        if config.switches.all_roads:
+            _os_open_road_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.noham_roads:
+            _noham_road_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.model_roads:
+            _model_road_risk(config, hazard_layers, risk_cols, audit_path)
+        LOG.info("Road risk calculation complete.")
 
 
 #### OS Open Roads
@@ -441,6 +447,142 @@ def _os_open_road_risk(
     LOG.info("Finished layering OS Open Roads with hazard risk.")
 
 
+#### NoHAM Roads
+
+def _noham_road_risk(
+    config: model_config.Config,
+    hazard_layers: dict[str, gpd.GeoDataFrame],
+    risk_cols: list[RiskColumn],
+    audit_path: pathlib.Path,
+) -> None:
+    """Get NoHAM road risk and write to file.
+
+    Intersect NoHAM with hazards, calculate impact index, clean output, and write
+    to file.
+    """
+    LOG.info("Layering NoHAM with hazard risk and calculating impact index...")
+    noham_net_flows = gpd.read_file(
+        config.paths.model_input / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
+    )
+
+    if noham_net_flows.empty:
+        LOG.warning("NoHAM network flows layer is empty. Skipping.")
+        return
+
+    noham_risk = _infrastructure_risk_intersect(noham_net_flows, hazard_layers)
+
+    feature_range = (config.constants.score_min, config.constants.score_max)
+    noham_risk = _noham_impact_index(noham_risk, feature_range)
+
+    risk_impact_cols = [*risk_cols, *ImpactCols.get_noham_impact_cols()]
+
+    _audit_infrastructure_risk(
+        noham_risk,
+        "NoHAM Roads",
+        risk_impact_cols,
+        audit_path / "Road" / "NoHAM",
+        feature_range=feature_range,
+    )
+
+    data_cleaning.write_to_file(
+        noham_risk,
+        config.paths.model_output / "Road" / "NoHAM" / "noham_risk.gpkg",
+    )
+
+    noham_risk = _prepare_model_output(
+        risk_data=noham_risk,
+        drop_cols=[],
+        rename_map={"link_id": "id"},
+        risk_cols_order=risk_impact_cols,
+    )
+
+    _split_csv_shapefile(
+        config, noham_risk, "id", pathlib.Path("Road") / "NoHAM" / "noham_risk"
+    )
+
+    LOG.info("Finished layering NoHAM with hazard risk and calculating impact index.")
+
+
+def _noham_impact_index(
+    noham: gpd.GeoDataFrame, feature_range: tuple[int, int]
+) -> gpd.GeoDataFrame:
+    """Normalise NoHAM demand, then calculate impact index."""
+    noham = _normalise_uc_demand(noham, feature_range)
+    noham = _normalise_total_demand(noham, feature_range)
+    noham = _calculate_noham_impact(noham)
+    return _normalise_noham_impact(noham, feature_range)
+
+
+def _normalise_uc_demand(noham: pd.DataFrame, feature_range: tuple[int, int]) -> pd.DataFrame:
+    """Normalise NoHAM demand for each user class individually."""
+    noham_ucs = UserClasses.get_noham_classes()
+    pairs = [
+        (f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}")
+        for uc in noham_ucs
+    ]
+
+    noham = functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
+
+    rename_map = {
+        col: col.replace("total", "demand")
+        for uc in noham_ucs
+        for col in [f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}"]
+    }
+    return noham.rename(columns=rename_map)
+
+
+def _normalise_total_demand(
+    noham: pd.DataFrame, feature_range: tuple[int, int]
+) -> pd.DataFrame:
+    """Normalise NoHAM demand across all user classes combined."""
+    pairs = [(f"all_vehs_total_{Scenarios.CURRENT}", f"all_vehs_total_{Scenarios.FORECAST}")]
+    noham = functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
+    return noham.rename(
+        columns={
+            f"all_vehs_total_{Scenarios.CURRENT}": f"demand_{Scenarios.CURRENT}",
+            f"all_vehs_total_{Scenarios.FORECAST}": f"demand_{Scenarios.FORECAST}",
+        }
+    )
+
+
+def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
+    """Calculate NoHAM impact score for each user class, and for all vehicles."""
+    # Calculate impact metric for each user class
+    risk_cols = [
+        col for col in MainHazardRiskCols if f"{col}_{Scenarios.CURRENT}" in noham.columns
+    ]
+
+    hazards = [col.removesuffix("_risk") for col in risk_cols]
+    impact_weights = _get_impact_weights(hazards)
+
+    for scenario in Scenarios:
+        hazard_component = sum(
+            noham[f"{risk_col}_{scenario}"] * impact_weights[risk_col.removesuffix("_risk")]
+            for risk_col in risk_cols
+        )
+        for uc in UserClasses.get_noham_classes():
+            impact_component = noham[f"{uc}_demand_{scenario}"] * impact_weights["demand"]
+            noham[f"{uc}_impact_{scenario}"] = impact_component + hazard_component
+
+        impact_component = noham[f"demand_{scenario}"] * impact_weights["demand"]
+        noham[f"impact_{scenario}"] = impact_component + hazard_component
+
+    demand_cols = [col for col in noham.columns if "demand" in col]
+    return noham.drop(columns=demand_cols)
+
+
+def _normalise_noham_impact(
+    noham: pd.DataFrame, feature_range: tuple[int, int]
+) -> pd.DataFrame:
+    """Normalise NoHAM impact scores across all user classes combined."""
+    pairs = [
+        (f"{uc}_impact_{Scenarios.CURRENT}", f"{uc}_impact_{Scenarios.FORECAST}")
+        for uc in UserClasses.get_noham_classes()
+    ] + [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")]
+
+    return functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
+
+
 #### TRANSPORT MODEL ROADS
 
 
@@ -469,6 +611,8 @@ def _model_road_risk(
     model_road_risk = _apply_asset_hazard_weighting(
         model_road_risk, AssetTypes.ROAD, hazards=hazard_layers
     )
+
+    # TODO (DJ): (#26) Apply asset-specific vulnerability modifiers for model roads.
 
     feature_range = (config.constants.score_min, config.constants.score_max)
     model_road_risk = _model_road_impact_index(model_road_risk, feature_range)
@@ -575,12 +719,14 @@ def _get_rail_risk(
     audit_path: pathlib.Path,
 ) -> None:
     """Layer passenger rail and freight rail network with hazard to assign risk."""
-    LOG.info("Calculating rail risk...")
-    if config.switches.passenger_rail:
-        _passenger_rail_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.freight_rail:
-        _freight_rail_risk(config, hazard_layers, risk_cols, audit_path)
-    LOG.info("Rail risk calculation complete.")
+    rail_risk_enabled = any([config.switches.passenger_rail, config.switches.freight_rail])
+    if rail_risk_enabled:
+        LOG.info("Calculating rail risk...")
+        if config.switches.passenger_rail:
+            _passenger_rail_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.freight_rail:
+            _freight_rail_risk(config, hazard_layers, risk_cols, audit_path)
+        LOG.info("Rail risk calculation complete.")
 
 
 #### Passenger Rail
@@ -799,32 +945,47 @@ def _get_other_risk(  # noqa: C901
     audit_path: pathlib.Path,
 ) -> None:
     """Layer other infrastructure with hazards to assign risk."""
-    LOG.info("Calculating risk for other infrastructure...")
-    if config.switches.train_stations:
-        _train_stations_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.charging_sites:
-        _charging_sites_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.airports:
-        _airports_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.bus_coach_stations:
-        _bus_coach_stations_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.bus_stops:
-        _bus_stops_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.tram_stations:
-        _tram_stations_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.rapid_transport_stations:
-        _rapid_transport_stations_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.ferry_terminals:
-        _ferry_terminals_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.petrol_stations:
-        _petrol_stations_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.national_cycle_network:
-        _ncn_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.tram_network:
-        _tram_network_risk(config, hazard_layers, risk_cols, audit_path)
-    if config.switches.rapid_transport_network:
-        _rapid_transport_network_risk(config, hazard_layers, risk_cols, audit_path)
-    LOG.info("Risk calculation for other infrastructure complete.")
+    other_risk_enabled = any([
+        config.switches.train_stations,
+        config.switches.charging_sites,
+        config.switches.airports,
+        config.switches.bus_coach_stations,
+        config.switches.bus_stops,
+        config.switches.tram_stations,
+        config.switches.rapid_transport_stations,
+        config.switches.ferry_terminals,
+        config.switches.petrol_stations,
+        config.switches.national_cycle_network,
+        config.switches.tram_network,
+        config.switches.rapid_transport_network,
+    ])
+    if other_risk_enabled:
+        LOG.info("Calculating risk for other infrastructure...")
+        if config.switches.train_stations:
+            _train_stations_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.charging_sites:
+            _charging_sites_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.airports:
+            _airports_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.bus_coach_stations:
+            _bus_coach_stations_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.bus_stops:
+            _bus_stops_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.tram_stations:
+            _tram_stations_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.rapid_transport_stations:
+            _rapid_transport_stations_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.ferry_terminals:
+            _ferry_terminals_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.petrol_stations:
+            _petrol_stations_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.national_cycle_network:
+            _ncn_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.tram_network:
+            _tram_network_risk(config, hazard_layers, risk_cols, audit_path)
+        if config.switches.rapid_transport_network:
+            _rapid_transport_network_risk(config, hazard_layers, risk_cols, audit_path)
+        LOG.info("Risk calculation for other infrastructure complete.")
 
 
 def _buffer_geometry(infrastructure: gpd.GeoDataFrame, buffer_size_m: int) -> gpd.GeoDataFrame:

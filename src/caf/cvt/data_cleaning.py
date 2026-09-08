@@ -10,6 +10,7 @@ import fiona
 import geopandas as gpd
 import osbng
 import pandas as pd
+import py7zr
 import xarray as xr
 from shapely import geometry
 
@@ -24,6 +25,8 @@ from caf.cvt.definitions import (
     OSRoadCols,
     Scenarios,
     StormCols,
+    TimePeriods,
+    UserClasses,
 )
 
 LOG = logging.getLogger(__name__)
@@ -366,6 +369,9 @@ def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
     if config.switches.all_roads:
         LOG.info("Cleaning all roads data...")
         _clean_os_roads(config, boundary)
+    if config.switches.noham_roads:
+        LOG.info("Cleaning NoHAM roads data...")
+        _clean_noham_roads(config, boundary)
     if config.switches.model_roads:
         LOG.info("Cleaning transport model roads data...")
         _clean_model_roads(config, boundary)
@@ -408,6 +414,43 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     write_to_file(
         os_road,
         config.paths.model_input / file_paths.OS_ROAD_MODEL_INPUT_PATH,
+    )
+
+
+def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+    """Read and clean NoHAM network dataset, then write to file."""
+    year = config.infrastructure.road.noham.year
+    noham_network = gpd.read_file(
+        config.paths.raw_input / config.infrastructure.road.noham.file_path,
+        mask=boundary,
+        columns=["link_id"],
+    )
+    len_before_filter = len(noham_network)
+    noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
+    noham_network_clean[["a", "b"]] = (
+        noham_network_clean["link_id"].str.split("_", expand=True).astype(int)
+    )
+    # Filter out links with a or b less than 10,000 (zone connectors)
+    noham_network_clean = noham_network_clean[
+        (noham_network_clean["a"] >= config.constants.noham_road_id_threshold)
+        & (noham_network_clean["b"] >= config.constants.noham_road_id_threshold)
+    ]
+    noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
+    noham_network_clean = validate_geometries(noham_network_clean)
+    noham_network_clipped = clip_to_boundary(noham_network_clean, boundary)
+    noham_network_clipped = noham_network_clipped.reset_index(drop=True)
+    filter_removed = len_before_filter - len(noham_network_clipped)
+    LOG.info(
+        "NoHAM network filtered - %s of %s (%.1f percent) rows removed",
+        filter_removed,
+        len_before_filter,
+        (filter_removed / len_before_filter) * 100,
+    )
+    write_to_file(
+        noham_network_clipped,
+        config.paths.model_input
+        / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
+        / f"noham_{year}.gpkg",
     )
 
 
@@ -1844,6 +1887,8 @@ def _clean_impact(config: model_config.Config, boundary: gpd.GeoDataFrame) -> No
     LOG.info("Cleaning impact data...")
     if config.switches.freight_rail:
         _clean_freight_demand(config, boundary)
+    if config.switches.noham_roads:
+        _clean_noham_flows(config)
     if config.switches.model_roads:
         _clean_model_road_flows(config)
     LOG.info("Finished cleaning impact data.")
@@ -1921,6 +1966,229 @@ def _map_freight_networks(
     ].fillna(0)
     return os_freight_network_demand.drop(columns=["index_right"])
 
+### NOHAM FLOWS
+
+def _clean_noham_flows(config: model_config.Config) -> None:
+    """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
+    noham_network = gpd.read_file(
+        config.paths.model_input
+        / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
+        / f"noham_{config.infrastructure.road.noham.year}.gpkg"
+    )
+    network_link_ids = set(noham_network["link_id"])
+
+    scenario_flows = {}
+    for year_label, year in config.impact.noham_years.items():
+        if year_label == "baseline":
+            scenario = Scenarios.CURRENT
+        elif year_label == "future":
+            scenario = Scenarios.FORECAST
+        else:
+            raise ValueError(
+                f"Unexpected year label: {year_label}, expects 'baseline' or 'future'."
+            )
+        flows = _aggregate_link_flows_year(config, year, network_link_ids)
+
+        flows = flows.rename(
+            columns={col: f"{col}_{scenario}" for col in flows.columns if col != "link_id"}
+        )
+
+        scenario_flows[scenario] = flows
+
+    current_ids = set(scenario_flows[Scenarios.CURRENT]["link_id"])
+    forecast_ids = set(scenario_flows[Scenarios.FORECAST]["link_id"])
+    common_ids = current_ids & forecast_ids
+    current_only_ids = current_ids - forecast_ids
+    forecast_only_ids = forecast_ids - current_ids
+
+    noham_flows = scenario_flows[Scenarios.CURRENT].merge(
+        scenario_flows[Scenarios.FORECAST], on="link_id", how="inner"
+    )
+
+    LOG.info(
+        "NoHAM flows merged: \n"
+        "Current links: %s, Forecast links: %s \n"
+        "Common links: %s, Current only links: %s, Forecast only links: %s",
+        len(current_ids),
+        len(forecast_ids),
+        len(common_ids),
+        len(current_only_ids),
+        len(forecast_only_ids),
+    )
+
+    noham_net_flows = noham_network.merge(noham_flows, on="link_id", how="left")
+
+    noham_net_flows = gpd.GeoDataFrame(
+        noham_net_flows, geometry="geometry", crs=noham_network.crs
+    )
+
+    write_to_file(
+        noham_net_flows, config.paths.model_input / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
+    )
+
+
+def _read_noham_h5(
+    *,
+    route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
+    year: int,
+    time_period: str,
+    user_class: str,
+    noham_path: pathlib.Path,
+    output_path: pathlib.Path,
+    extract: bool,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Read and clean NoHAM h5 files and extract the link, routes, and od's DataFrames."""
+    if extract:
+        with py7zr.SevenZipFile(noham_path, mode="r") as archive:
+            archive.extract(
+                path=output_path,
+                targets=[
+                    (
+                        f"input h5s/"
+                        f"{year}/"
+                        f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
+                    )
+                ],
+            )
+
+    noham_demand_path = (
+        output_path
+        / "input h5s"
+        / str(year)
+        / f"NoHAM_Decarb_DM_Core_{year!s}_{time_period}_v107_SatPig_{user_class}.h5"
+    )
+
+    if (str(year), time_period) not in route_links_store:
+        noham_routes = pd.read_hdf(noham_demand_path, key="/data/Route")
+        noham_routes = noham_routes.reset_index()[["route", "link_id"]]
+        noham_links = pd.read_hdf(noham_demand_path, key="/data/link")
+        noham_links = noham_links[["a", "b"]]
+        route_links_store[(str(year), time_period)] = (noham_routes, noham_links)
+    else:
+        noham_routes, noham_links = route_links_store[(str(year), time_period)]
+
+    noham_ods = pd.read_hdf(noham_demand_path, key="/data/OD")
+    noham_ods = noham_ods.reset_index()[["route", "abs_demand"]]
+
+    return noham_ods, noham_routes, noham_links
+
+
+def _aggregate_link_flows(
+    ods: pd.DataFrame, routes: pd.DataFrame, links: pd.DataFrame
+) -> pd.DataFrame:
+    """Take NoHAM od's, routes, and link to create aggregated link flows DataFrame."""
+    # Merge OD demand onto routes
+    od_routes = routes.merge(ods[["route", "abs_demand"]], on="route", how="inner")
+
+    link_demand = od_routes.groupby("link_id")["abs_demand"].sum().reset_index()
+
+    return link_demand.merge(links[["a", "b"]], left_on="link_id", right_index=True)
+
+
+def _process_single_noham_layer(
+    config: model_config.Config,
+    *,
+    year: int,
+    route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
+    time_period: str,
+    user_class: str,
+    link_ids: set[str],
+) -> pd.DataFrame:
+    LOG.info("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
+
+    noham_ods, noham_routes, noham_links = _read_noham_h5(
+        route_links_store=route_links_store,
+        year=year,
+        time_period=time_period,
+        user_class=user_class,
+        noham_path=config.paths.raw_input / config.impact.noham_demand,
+        output_path=config.paths.raw_input / file_paths.NOHAM_ZIP_EXTRACT_OUTPUT_PATH,
+        extract=config.switches.noham_zip_extract,
+    )
+    noham_links["noham_link_id"] = (
+        noham_links["a"].astype(str) + "_" + noham_links["b"].astype(str)
+    )
+    noham_links = noham_links[noham_links["noham_link_id"].isin(link_ids)]
+    noham_routes = noham_routes[noham_routes["link_id"].isin(noham_links.index)]
+
+    link_demand = _aggregate_link_flows(
+        noham_ods,
+        noham_routes,
+        noham_links,
+    )
+
+    link_demand["link_id"] = link_demand["a"].astype(str) + "_" + link_demand["b"].astype(str)
+
+    link_demand = link_demand[["link_id", "abs_demand"]]
+    link_demand = link_demand.rename(
+        columns={"abs_demand": f"{user_class}_{time_period}"}
+    )  # Rename demand column
+
+    LOG.info(
+        "%s ODs, %s Routes and %s Links aggregated to %s link flows",
+        len(noham_ods),
+        len(noham_routes),
+        len(noham_links),
+        len(link_demand),
+    )
+
+    return link_demand
+
+
+def _aggregate_link_flows_year(
+    config: model_config.Config, year: int, network_link_ids: set[str]
+) -> pd.DataFrame:
+    """Aggregate link flows for each year, time period, and user class."""
+    route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}
+    noham_ucs = UserClasses.get_noham_classes()
+
+    ts_dfs = []
+    for time_period in TimePeriods:
+        uc_dfs = []
+        for user_class in noham_ucs:
+            uc_dfs.append(
+                _process_single_noham_layer(
+                    config,
+                    year=year,
+                    route_links_store=route_links_store,
+                    time_period=time_period,
+                    user_class=user_class,
+                    link_ids=network_link_ids,
+                )
+            )
+
+        # Merge all user class dataframes
+        combined_uc_df = uc_dfs[0]
+        for df_uc in uc_dfs[1:]:
+            combined_uc_df = combined_uc_df.merge(df_uc, on="link_id", how="outer")
+
+        # Compute total demand for all vehicles for each time period
+        combined_uc_df[f"all_vehs_{time_period}"] = combined_uc_df[
+            [f"{uc}_{time_period}" for uc in noham_ucs]
+        ].sum(axis=1)
+
+        # Store result
+        ts_dfs.append(combined_uc_df)
+
+    # Merge all time period dataframes
+    combined_ts_df = ts_dfs[0]
+    for df_ts in ts_dfs[1:]:
+        combined_ts_df = combined_ts_df.merge(df_ts, on="link_id", how="outer")
+
+    # Compute totals for each user class across all time periods
+    for uc in noham_ucs:
+        combined_ts_df[f"{uc}_total"] = combined_ts_df[
+            [f"{uc}_{tp}" for tp in TimePeriods]
+        ].sum(axis=1)
+
+    # Compute total of each user class across all time periods
+    combined_ts_df["all_vehs_total"] = combined_ts_df[
+        [f"all_vehs_{tp}" for tp in TimePeriods]
+    ].sum(axis=1)
+
+    return combined_ts_df[
+        ["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in noham_ucs]
+    ]
 
 ### TRANSPORT MODEL FLOWS
 

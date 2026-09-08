@@ -109,6 +109,20 @@ class OtherInput(ctk.BaseConfig):
         return v
 
 
+class NoHAMEntry(ctk.BaseConfig):
+    """Configuration for NoHAM road network data.
+
+    Attributes
+    ----------
+    year: int
+        Year of the NoHAM network.
+    file_path: pathlib.Path
+        Path to the NoHAM network file.
+    """
+
+    year: int
+    file_path: pathlib.Path
+
 class ModelRoadsEntry(ctk.BaseConfig):
     """Configuration for the transport model road network data.
 
@@ -134,11 +148,14 @@ class Road(ctk.BaseConfig):
     ----------
     os_road : ZipFileEntry
         Configuration for the OS road zip file entry.
+    noham: NoHAMEntry
+        Configuration for the NoHAM road network data.
     model_roads: ModelRoadsEntry
         Configuration for the transport model road network data.
     """
 
     os_road: ZipFileEntry
+    noham: NoHAMEntry
     model_roads: ModelRoadsEntry
 
 
@@ -319,11 +336,17 @@ class ImpactConfig(ctk.BaseConfig):
     ----------
     freight_demand : pathlib.Path
         Path to the freight demand data.
+    noham_demand : pathlib.Path
+        Path to the NoHAM demand data.
+    noham_years: dict[str, int]
+        Dictionary of years for NoHAM demand scenarios.
     model_road_flows : ModelRoadFlowsEntry
         Configuration for the transport model road flows data.
     """
 
     freight_demand: pathlib.Path
+    noham_demand: pathlib.Path
+    noham_years: dict[str, int]
     model_road_flows: ModelRoadFlowsEntry
 
 
@@ -340,6 +363,8 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to run layering.
     all_roads : bool
         Whether to include all roads in the analysis.
+    noham_roads : bool
+        Whether to include NoHAM roads in the analysis.
     model_roads : bool
         Whether to include transport model roads in the analysis.
     passenger_rail : bool
@@ -380,6 +405,8 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include coastal erosion hazards in the analysis.
     compute_flooding_overlay: bool
         Whether to compute the direct flooding overlay.
+    noham_zip_extract : bool
+        Whether to extract NoHAM zip files.
     """
 
     run_data_cleaning: bool
@@ -387,6 +414,7 @@ class SwitchConfig(ctk.BaseConfig):
     run_layering: bool
 
     all_roads: bool
+    noham_roads: bool
     model_roads: bool
     passenger_rail: bool
     freight_rail: bool
@@ -409,6 +437,7 @@ class SwitchConfig(ctk.BaseConfig):
     coastal_erosion: bool
 
     compute_flooding_overlay: bool = False
+    noham_zip_extract: bool = False
 
     @pydantic.model_validator(mode="after")
     def _check(self) -> Self:
@@ -421,6 +450,7 @@ class SwitchConfig(ctk.BaseConfig):
         if not any(
             [
                 self.all_roads,
+                self.noham_roads,
                 self.model_roads,
                 self.passenger_rail,
                 self.freight_rail,
@@ -484,12 +514,15 @@ class ConstantConfig(ctk.BaseConfig):
 
     Attributes
     ----------
+    noham_road_id_threshold : int
+        Threshold for NoHAM road IDs.
     score_min : float
         Minimum score for risk calculations.
     score_max : float
         Maximum score for risk calculations.
     """
 
+    noham_road_id_threshold: int
     score_min: int
     score_max: int
 
