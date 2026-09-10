@@ -11,8 +11,8 @@ import geopandas as gpd
 import osbng
 import pandas as pd
 import py7zr
+import shapely
 import xarray as xr
-from shapely import geometry
 
 from caf.cvt import file_paths, model_config
 from caf.cvt.definitions import (
@@ -224,9 +224,9 @@ def _df_to_gdf(df: pd.DataFrame, x_col: str, y_col: str, crs: str) -> gpd.GeoDat
     )
 
 
-def _convert_point_to_grid(x: int, y: int, size: int) -> geometry.Polygon:
+def _convert_point_to_grid(x: int, y: int, size: int) -> shapely.geometry.Polygon:
     """Take a point and convert it to a grid of the given size."""
-    return geometry.Polygon(
+    return shapely.geometry.Polygon(
         [
             (x - size, y - size),
             (x + size, y - size),
@@ -249,18 +249,18 @@ def _extract_poly_from_geomcollection(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame
             continue
 
         # If it's already Polygon or MultiPolygon, keep as is
-        if isinstance(geom, (geometry.Polygon, geometry.MultiPolygon)):
+        if isinstance(geom, (shapely.geometry.Polygon, shapely.geometry.MultiPolygon)):
             rows.append(row)
         # If it's a GeometryCollection, extract polygons
-        elif isinstance(geom, geometry.GeometryCollection):
+        elif isinstance(geom, shapely.geometry.GeometryCollection):
             geometry_collection_count += 1
             for sub_geom in geom.geoms:
-                if isinstance(sub_geom, geometry.Polygon):
+                if isinstance(sub_geom, shapely.geometry.Polygon):
                     polygon_count += 1
                     new_row = row.copy()
                     new_row.geometry = sub_geom
                     rows.append(new_row)
-                elif isinstance(sub_geom, geometry.MultiPolygon):
+                elif isinstance(sub_geom, shapely.geometry.MultiPolygon):
                     multipolygon_count += 1
                     new_row = row.copy()
                     new_row.geometry = sub_geom
@@ -351,11 +351,24 @@ def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFram
     LOG.info("Cleaning infrastructure data...")
     _clean_roads(config, boundary)
 
-    rail_links = _get_rail_links(
-        boundary, config.paths.raw_input / config.infrastructure.rail.rail_links
-    )
+    any_rail = any([
+        config.switches.passenger_rail,
+        config.switches.freight_rail,
+        config.switches.tram_network,
+        config.switches.rapid_transport_network
+    ])
+
+    if any_rail:
+        rail_links = _get_rail_links(
+            boundary, config.paths.raw_input / config.infrastructure.rail.rail_links
+        )
+    else:
+        rail_links = None
+
     _clean_rail(config, rail_links)
     _clean_other(config, boundary, rail_links)
+
+    _clean_bespoke(config)
 
     LOG.info("Finished cleaning infrastructure data.")
 
@@ -365,17 +378,23 @@ def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFram
 
 def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all roads datasets ready for analysis."""
-    LOG.info("Cleaning roads data...")
-    if config.switches.all_roads:
-        LOG.info("Cleaning all roads data...")
-        _clean_os_roads(config, boundary)
-    if config.switches.noham_roads:
-        LOG.info("Cleaning NoHAM roads data...")
-        _clean_noham_roads(config, boundary)
-    if config.switches.model_roads:
-        LOG.info("Cleaning transport model roads data...")
-        _clean_model_roads(config, boundary)
-    LOG.info("Finished cleaning roads data.")
+    road_cleaning_enabled = any([
+        config.switches.all_roads,
+        config.switches.noham_roads,
+        config.switches.model_roads,
+    ])
+    if road_cleaning_enabled:
+        LOG.info("Cleaning roads data...")
+        if config.switches.all_roads:
+            LOG.info("Cleaning all roads data...")
+            _clean_os_roads(config, boundary)
+        if config.switches.noham_roads:
+            LOG.info("Cleaning NoHAM roads data...")
+            _clean_noham_roads(config, boundary)
+        if config.switches.model_roads:
+            LOG.info("Cleaning transport model roads data...")
+            _clean_model_roads(config, boundary)
+        LOG.info("Finished cleaning roads data.")
 
 
 def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -529,16 +548,21 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
 ### RAIL
 
 
-def _clean_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
+def _clean_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame | None) -> None:
     """Clean all rail datasets ready for analysis."""
-    LOG.info("Cleaning rail data...")
-    if config.switches.passenger_rail:
-        LOG.info("Cleaning passenger rail data...")
-        _clean_passenger_rail(config, rail_links)
-    if config.switches.freight_rail:
-        LOG.info("Cleaning freight rail data...")
-        _clean_freight_rail(config, rail_links)
-    LOG.info("Finished cleaning rail data.")
+    rail_cleaning_enabled = any([
+        config.switches.passenger_rail,
+        config.switches.freight_rail,
+    ])
+    if rail_cleaning_enabled:
+        LOG.info("Cleaning rail data...")
+        if config.switches.passenger_rail:
+            LOG.info("Cleaning passenger rail data...")
+            _clean_passenger_rail(config, rail_links)
+        if config.switches.freight_rail:
+            LOG.info("Cleaning freight rail data...")
+            _clean_freight_rail(config, rail_links)
+        LOG.info("Finished cleaning rail data.")
 
 
 def _get_rail_links(
@@ -643,50 +667,65 @@ def _clean_freight_rail(config: model_config.Config, rail_links: gpd.GeoDataFram
 ### OTHER
 
 
-def _clean_other(  # noqa: C901
+def _clean_other(  # noqa: C901, PLR0912
     config: model_config.Config,
     boundary: gpd.GeoDataFrame,
-    rail_links: gpd.GeoDataFrame,
+    rail_links: gpd.GeoDataFrame | None,
 ) -> None:
     """Clean all other datasets ready for analysis."""
-    LOG.info("Cleaning other infrastructure data...")
-    if config.switches.airports:
-        LOG.info("Cleaning airports data...")
-        _clean_airports(config, boundary)
-    if config.switches.bus_stops:
-        LOG.info("Cleaning bus stops data...")
-        _clean_bus_stops(config, boundary)
-    if config.switches.petrol_stations:
-        LOG.info("Cleaning petrol stations data...")
-        _clean_petrol_stations(config, boundary)
-    if config.switches.charging_sites:
-        LOG.info("Cleaning charging sites data...")
-        _clean_charging_sites(config, boundary)
-    if config.switches.national_cycle_network:
-        LOG.info("Cleaning NCN data...")
-        _clean_ncn(config, boundary)
-    if config.switches.train_stations:
-        LOG.info("Cleaning train stations data...")
-        _clean_train_stations(config, boundary)
-    if config.switches.tram_stations:
-        LOG.info("Cleaning tram stations data...")
-        _clean_tram_stations(config, boundary)
-    if config.switches.rapid_transport_stations:
-        LOG.info("Cleaning rapid transport stations data...")
-        _clean_rapid_transport_stations(config, boundary)
-    if config.switches.ferry_terminals:
-        LOG.info("Cleaning ferry terminals data...")
-        _clean_ferry_terminals(config, boundary)
-    if config.switches.bus_coach_stations:
-        LOG.info("Cleaning bus coach stations data...")
-        _clean_bus_coach_stations(config, boundary)
-    if config.switches.tram_network:
-        LOG.info("Cleaning tram network data...")
-        _clean_tram_network(config, rail_links)
-    if config.switches.rapid_transport_network:
-        LOG.info("Cleaning rapid transport network data...")
-        _clean_rapid_transport_network(config, rail_links)
-    LOG.info("Finished cleaning other infrastructure data.")
+    other_cleaning_enabled = any([
+        config.switches.airports,
+        config.switches.bus_stops,
+        config.switches.petrol_stations,
+        config.switches.charging_sites,
+        config.switches.national_cycle_network,
+        config.switches.train_stations,
+        config.switches.tram_stations,
+        config.switches.rapid_transport_stations,
+        config.switches.ferry_terminals,
+        config.switches.bus_coach_stations,
+        config.switches.tram_network,
+        config.switches.rapid_transport_network,
+    ])
+    if other_cleaning_enabled:
+        LOG.info("Cleaning other infrastructure data...")
+        if config.switches.airports:
+            LOG.info("Cleaning airports data...")
+            _clean_airports(config, boundary)
+        if config.switches.bus_stops:
+            LOG.info("Cleaning bus stops data...")
+            _clean_bus_stops(config, boundary)
+        if config.switches.petrol_stations:
+            LOG.info("Cleaning petrol stations data...")
+            _clean_petrol_stations(config, boundary)
+        if config.switches.charging_sites:
+            LOG.info("Cleaning charging sites data...")
+            _clean_charging_sites(config, boundary)
+        if config.switches.national_cycle_network:
+            LOG.info("Cleaning NCN data...")
+            _clean_ncn(config, boundary)
+        if config.switches.train_stations:
+            LOG.info("Cleaning train stations data...")
+            _clean_train_stations(config, boundary)
+        if config.switches.tram_stations:
+            LOG.info("Cleaning tram stations data...")
+            _clean_tram_stations(config, boundary)
+        if config.switches.rapid_transport_stations:
+            LOG.info("Cleaning rapid transport stations data...")
+            _clean_rapid_transport_stations(config, boundary)
+        if config.switches.ferry_terminals:
+            LOG.info("Cleaning ferry terminals data...")
+            _clean_ferry_terminals(config, boundary)
+        if config.switches.bus_coach_stations:
+            LOG.info("Cleaning bus coach stations data...")
+            _clean_bus_coach_stations(config, boundary)
+        if config.switches.tram_network:
+            LOG.info("Cleaning tram network data...")
+            _clean_tram_network(config, rail_links)
+        if config.switches.rapid_transport_network:
+            LOG.info("Cleaning rapid transport network data...")
+            _clean_rapid_transport_network(config, rail_links)
+        LOG.info("Finished cleaning other infrastructure data.")
 
 
 def _clean_airports(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -919,6 +958,9 @@ def _clean_rapid_transport_network(
             ["Rapid Transport System", "Main Line And Rapid Transport System"]
         )
     ]
+    rapid_transport_links = rapid_transport_links[
+        ~(rapid_transport_links[OSRailCols.TRACK_REPRESENTATION] == "Siding")
+    ]
     filter_removed = len_before_filter - len(rapid_transport_links)
     LOG.info(
         "Rapid transport links filtered - %s of %s (%.1f percent) rows removed",
@@ -941,7 +983,8 @@ def _clean_charging_sites(config: model_config.Config, boundary: gpd.GeoDataFram
     chg_sites = gpd.GeoDataFrame(
         chg_sites,
         geometry=[
-            geometry.Point(xy) for xy in zip(chg_sites["lon"], chg_sites["lat"], strict=False)
+            shapely.geometry.Point(xy) for xy in zip(chg_sites["lon"], chg_sites["lat"],
+                                                     strict=False)
         ],
         crs="EPSG:4326",
     )
@@ -1009,6 +1052,131 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
         config.paths.model_input / file_paths.NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH,
     )
 
+
+### BESPOKE INFRASTRUCTURE
+
+def _clean_bespoke(config: model_config.Config) -> None:
+    """Clean bespoke infrastructure data ready for analysis."""
+    LOG.info("Cleaning bespoke infrastructure data...")
+
+    _clean_nexus_metro(config)
+
+
+def _clean_nexus_metro(
+        config: model_config.Config,
+) -> None:
+    """Clean Nexus Metro data ready for analysis."""
+    LOG.info("Cleaning Nexus Metro data...")
+    metro_links = _aggregate_metro_links(config)
+
+    metro_stations = _aggregate_metro_stations(config)
+
+    snapped_metro_stations = _snap_stations_to_links(metro_stations, metro_links)
+
+    metro_links = _split_metro_links(metro_links, snapped_metro_stations)
+
+    return metro_links, snapped_metro_stations
+
+
+def _aggregate_metro_links(config: model_config.Config) -> gpd.GeoDataFrame:
+    """Aggregate existing and extension metro links."""
+    metro_links = gpd.read_file(
+        config.infrastructure.bespoke.nexus_metro_lines,
+        columns=["OBJECTID_1", "Ownership"]
+    )
+    metro_links["extension"] = False
+    metro_links = metro_links.rename(columns={"OBJECTID_1": "id"})
+
+    metro_ext_lines = gpd.read_file(
+        config.infrastructure.bespoke.nexus_metro_ext_lines,
+        columns=["Section"]
+    )
+    metro_ext_lines = metro_ext_lines.explode(index_parts=False).reset_index(drop=True)
+    metro_ext_lines["extension"] = True
+    metro_ext_lines["Ownership"] = None
+    metro_ext_lines = metro_ext_lines.drop(columns=["Section"])
+    metro_ext_lines["id"] = range(
+        max(metro_links["id"]) + 1,
+        max(metro_links["id"]) + 1 + len(metro_ext_lines)
+    )
+
+    return pd.concat([metro_links, metro_ext_lines], ignore_index=True)
+
+
+def _aggregate_metro_stations(config: model_config.Config) -> gpd.GeoDataFrame:
+    """Aggregate existing and extension metro stations."""
+    metro_stations = gpd.read_file(
+        config.infrastructure.bespoke.nexus_metro_stations,
+        columns=["OBJECTID", "Name", "Symbol"]
+    )
+    metro_stations = metro_stations.rename(columns={"OBJECTID": "id"})
+    metro_stations["extension"] = False
+
+    metro_ext_stations = gpd.read_file(
+        config.infrastructure.bespoke.nexus_metro_ext_stations,
+        columns=["StationName"]
+    )
+    metro_ext_stations = metro_ext_stations.rename(columns={"StationName": "Name"})
+    metro_ext_stations["id"] = range(
+        max(metro_stations["id"]) + 1,
+        max(metro_stations["id"]) + 1 + len(metro_ext_stations)
+    )
+    metro_ext_stations["extension"] = True
+
+    return pd.concat([metro_stations, metro_ext_stations], ignore_index=True)
+
+
+def _split_metro_links(
+        metro_links: gpd.GeoDataFrame,
+        metro_stations: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """Split metro link geometries at metro station locations."""
+    station_points = shapely.geometry.MultiPoint(metro_stations.geometry.tolist())
+    split_geoms = []
+
+    for _, row in metro_links.iterrows():
+        result = shapely.ops.split(row.geometry, station_points)
+
+        for part in result.geoms:
+            new_row = row.copy()
+            new_row.geometry = part
+            split_geoms.append(new_row)
+
+    split_metro_links = gpd.GeoDataFrame(split_geoms, columns=metro_links.columns, crs=metro_links.crs)
+
+    split_metro_links.to_file("D:/Climate Vulnerability Tool/Localisation/v2/Nexus/split_metro_links.gpkg", driver="GPKG")
+    return split_metro_links
+
+
+def _snap_stations_to_links(
+        metro_stations: gpd.GeoDataFrame,
+        metro_links: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """Snap metro stations to the nearest metro link."""
+    snapped_stations = metro_stations.copy()
+    for idx, station in snapped_stations.iterrows():
+        nearest_line_idx = metro_links.distance(
+            station.geometry
+        ).idxmin()
+
+        nearest_line = metro_links.loc[nearest_line_idx, "geometry"]
+
+        snapped_stations.loc[idx, "geometry"] = (
+            nearest_line.interpolate(
+                nearest_line.project(station.geometry)
+            )
+        )
+
+    # Manually snap Monument to intersection of links 9 and 11
+    monument_id = snapped_stations.loc[snapped_stations["Name"] == "Monument", "id"].to_numpy()[0]
+    link_9 = metro_links.loc[metro_links["id"] == 9, "geometry"].to_numpy()[0]
+    link_11 = metro_links.loc[metro_links["id"] == 11, "geometry"].to_numpy()[0]
+    intersection_point = link_9.intersection(link_11)
+    snapped_stations.loc[snapped_stations["id"] == monument_id, "geometry"] = intersection_point
+
+    snapped_stations.to_file("D:/Climate Vulnerability Tool/Localisation/v2/Nexus/snapped_metro_stations.gpkg", driver="GPKG")
+
+    return snapped_stations
 
 ## HAZARDS
 

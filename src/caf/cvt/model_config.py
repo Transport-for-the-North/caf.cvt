@@ -198,6 +198,27 @@ class Other(ctk.BaseConfig):
     airports: pathlib.Path
 
 
+class Bespoke(ctk.BaseConfig):
+    """Configuration for bespoke infrastructure data.
+
+    Attributes
+    ----------
+    nexus_metro_lines : pathlib.Path
+        Path to the Nexus Metro lines data.
+    nexus_metro_stations : pathlib.Path
+        Path to the Nexus Metro stations data.
+    nexus_metro_ext_lines : pathlib.Path
+        Path to the extended Nexus Metro lines data.
+    nexus_metro_ext_stations : pathlib.Path
+        Path to the extended Nexus Metro stations data.
+    """
+
+    nexus_metro_lines: pathlib.Path
+    nexus_metro_stations: pathlib.Path
+    nexus_metro_ext_lines: pathlib.Path
+    nexus_metro_ext_stations: pathlib.Path
+
+
 class InfrastructureConfig(ctk.BaseConfig):
     """Configuration for infrastructure data.
 
@@ -214,6 +235,7 @@ class InfrastructureConfig(ctk.BaseConfig):
     road: Road
     rail: Rail
     other: Other
+    bespoke: Bespoke
 
 
 class ExtremeWeather(ctk.BaseConfig):
@@ -395,6 +417,8 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include the tram network in the analysis.
     rapid_transport_network : bool
         Whether to include the rapid transport network in the analysis.
+    bespoke: bool
+        Whether to include bespoke infrastructure data in the analysis.
     extreme_weather : bool
         Whether to include extreme weather hazards in the analysis.
     flooding : bool
@@ -431,6 +455,8 @@ class SwitchConfig(ctk.BaseConfig):
     tram_network: bool
     rapid_transport_network: bool
 
+    bespoke: bool
+
     extreme_weather: bool
     flooding: bool
     ground_stability: bool
@@ -466,6 +492,7 @@ class SwitchConfig(ctk.BaseConfig):
                 self.bus_coach_stations,
                 self.tram_network,
                 self.rapid_transport_network,
+                self.bespoke
             ]
         ):
             raise ValueError("At least one infrastructure switch must be True.")
