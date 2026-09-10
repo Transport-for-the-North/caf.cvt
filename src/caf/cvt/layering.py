@@ -365,6 +365,7 @@ def _infrastructure_layering(
     _get_road_risk(config, hazard_layers, risk_cols, audit_path)
     _get_rail_risk(config, hazard_layers, risk_cols, audit_path)
     _get_other_risk(config, hazard_layers, risk_cols, audit_path)
+    _get_bespoke_risk(config, hazard_layers, risk_cols, audit_path)
 
 
 ### ROAD
@@ -938,7 +939,7 @@ def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
 ### OTHER
 
 
-def _get_other_risk(  # noqa: C901
+def _get_other_risk(  # noqa: C901, PLR0912
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
@@ -1693,3 +1694,126 @@ def _rapid_transport_network_risk(
         pathlib.Path("Other") / "Rapid Transport Network" / "rapid_transport_network_risk",
     )
     LOG.info("Finished layering rapid transport network with hazard risk.")
+
+
+### BESPOKE
+
+def _get_bespoke_risk(
+    config: model_config.Config,
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
+    risk_cols: list[RiskColumn],
+    audit_path: pathlib.Path,
+) -> None:
+    """Get bespoke infrastructure risk and write to file."""
+    any_bespoke = any([
+        config.switches.bespoke,
+    ])
+    if any_bespoke:
+        LOG.info("Calculating bespoke infrastructure risk...")
+        _nexus_metro_links_risk(config, hazard_layers, risk_cols, audit_path)
+        _nexus_metro_stations_risk(config, hazard_layers, risk_cols, audit_path)
+        LOG.info("Risk calculation for bespoke infrastructure completed.")
+
+
+def _nexus_metro_links_risk(
+    config: model_config.Config,
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
+    risk_cols: list[RiskColumn],
+    audit_path: pathlib.Path,
+) -> None:
+    """Calculate Nexus Metro bespoke infrastructure risk and write to file."""
+    LOG.info("Calculating Nexus Metro bespoke infrastructure risk...")
+    metro_links = gpd.read_file(
+        config.paths.model_input / file_paths.NEXUS_METRO_LINKS_MODEL_INPUT_PATH
+    )
+
+    if metro_links.empty:
+        LOG.warning("Nexus Metro links layer is empty. Skipping.")
+        return
+
+    metro_links_risk = _infrastructure_risk_intersect(metro_links, hazard_layers)
+
+    feature_range = (config.constants.score_min, config.constants.score_max)
+
+    _audit_infrastructure_risk(
+        metro_links_risk,
+        "Nexus Metro Links",
+        risk_cols,
+        audit_path / "Other" / "Nexus Metro Links",
+        feature_range=feature_range,
+    )
+
+    data_cleaning.write_to_file(
+        metro_links_risk,
+        config.paths.model_output
+        / "Other"
+        / "Nexus Metro Links"
+        / "nexus_metro_links_risk.gpkg",
+    )
+
+    metro_links_risk = _prepare_model_output(
+        risk_data=metro_links_risk,
+        drop_cols=[],
+        rename_map={},
+        risk_cols_order=risk_cols,
+    )
+
+    _split_csv_shapefile(
+        config,
+        metro_links_risk,
+        "id",
+        pathlib.Path("Other") / "Nexus Metro Links" / "nexus_metro_links_risk",
+    )
+    LOG.info("Finished calculating Nexus Metro bespoke infrastructure risk.")
+
+
+def _nexus_metro_stations_risk(
+    config: model_config.Config,
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
+    risk_cols: list[RiskColumn],
+    audit_path: pathlib.Path,
+) -> None:
+    """Calculate Nexus Metro stations bespoke infrastructure risk and write to file."""
+    LOG.info("Calculating Nexus Metro stations bespoke infrastructure risk...")
+    metro_stations = gpd.read_file(
+        config.paths.model_input / file_paths.NEXUS_METRO_STATIONS_MODEL_INPUT_PATH
+    )
+
+    if metro_stations.empty:
+        LOG.warning("Nexus Metro stations layer is empty. Skipping.")
+        return
+
+    metro_stations_risk = _infrastructure_risk_intersect(metro_stations, hazard_layers)
+
+    feature_range = (config.constants.score_min, config.constants.score_max)
+
+    _audit_infrastructure_risk(
+        metro_stations_risk,
+        "Nexus Metro Stations",
+        risk_cols,
+        audit_path / "Other" / "Nexus Metro Stations",
+        feature_range=feature_range,
+    )
+
+    data_cleaning.write_to_file(
+        metro_stations_risk,
+        config.paths.model_output
+        / "Other"
+        / "Nexus Metro Stations"
+        / "nexus_metro_stations_risk.gpkg",
+    )
+
+    metro_stations_risk = _prepare_model_output(
+        risk_data=metro_stations_risk,
+        drop_cols=[],
+        rename_map={},
+        risk_cols_order=risk_cols,
+    )
+
+    _split_csv_shapefile(
+        config,
+        metro_stations_risk,
+        "id",
+        pathlib.Path("Other") / "Nexus Metro Stations" / "nexus_metro_stations_risk",
+    )
+    LOG.info("Finished calculating Nexus Metro stations bespoke infrastructure risk.")

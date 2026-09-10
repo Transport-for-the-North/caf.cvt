@@ -176,6 +176,11 @@ def _nearest_join_infilling(
         int(final_remaining),
     )
 
+    for var in variables:
+        risk_grid[var] = risk_grid[var].fillna(0)
+
+    LOG.info("Filled remaining %s NA values with 0",  final_remaining)
+
     return risk_grid
 
 
