@@ -1085,6 +1085,7 @@ def _flooding_index(
                     / f"{flooding_type}_{scenario}.gpkg"
                 )
 
+        LOG.info("Computing tiled flooding overlay...")
         _tile_polygon_flooding_overlay(
             config,
             boundary,

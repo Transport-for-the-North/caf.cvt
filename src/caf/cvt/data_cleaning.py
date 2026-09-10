@@ -1095,7 +1095,6 @@ def _aggregate_metro_links(config: model_config.Config) -> gpd.GeoDataFrame:
         columns=["OBJECTID_1", "Ownership"]
     )
     metro_links["extension"] = False
-    metro_links = metro_links.rename(columns={"OBJECTID_1": "id"})
 
     metro_ext_lines = gpd.read_file(
         config.infrastructure.bespoke.nexus_metro_ext_lines,
@@ -1105,9 +1104,9 @@ def _aggregate_metro_links(config: model_config.Config) -> gpd.GeoDataFrame:
     metro_ext_lines["extension"] = True
     metro_ext_lines["Ownership"] = None
     metro_ext_lines = metro_ext_lines.drop(columns=["Section"])
-    metro_ext_lines["id"] = range(
-        max(metro_links["id"]) + 1,
-        max(metro_links["id"]) + 1 + len(metro_ext_lines)
+    metro_ext_lines["OBJECTID_1"] = range(
+        max(metro_links["OBJECTID_1"]) + 1,
+        max(metro_links["OBJECTID_1"]) + 1 + len(metro_ext_lines)
     )
 
     return pd.concat([metro_links, metro_ext_lines], ignore_index=True)
@@ -1119,7 +1118,6 @@ def _aggregate_metro_stations(config: model_config.Config) -> gpd.GeoDataFrame:
         config.infrastructure.bespoke.nexus_metro_stations,
         columns=["OBJECTID", "Name", "Symbol"]
     )
-    metro_stations = metro_stations.rename(columns={"OBJECTID": "id"})
     metro_stations["extension"] = False
 
     metro_ext_stations = gpd.read_file(
@@ -1127,9 +1125,9 @@ def _aggregate_metro_stations(config: model_config.Config) -> gpd.GeoDataFrame:
         columns=["StationName"]
     )
     metro_ext_stations = metro_ext_stations.rename(columns={"StationName": "Name"})
-    metro_ext_stations["id"] = range(
-        max(metro_stations["id"]) + 1,
-        max(metro_stations["id"]) + 1 + len(metro_ext_stations)
+    metro_ext_stations["OBJECTID"] = range(
+        max(metro_stations["OBJECTID"]) + 1,
+        max(metro_stations["OBJECTID"]) + 1 + len(metro_ext_stations)
     )
     metro_ext_stations["extension"] = True
 
@@ -1184,8 +1182,6 @@ def _split_metro_links(
     return gpd.GeoDataFrame(split_rows, columns=metro_links.columns, crs=metro_links.crs)
 
 
-
-
 def _snap_stations_to_links(
         metro_stations: gpd.GeoDataFrame,
         metro_links: gpd.GeoDataFrame,
@@ -1208,13 +1204,19 @@ def _snap_stations_to_links(
     # Manually snap Monument to intersection of links 9 and 11
     monument_id = snapped_stations.loc[
         snapped_stations["Name"] == "Monument",
-        "id"
+        "OBJECTID"
     ].to_numpy()[0]
-    link_9 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[0], "geometry"].to_numpy()[0]
-    link_11 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[1], "geometry"].to_numpy()[0]
+    link_9 = metro_links.loc[
+        metro_links["OBJECTID_1"] == MONUMENT_LINKS[0],
+        "geometry"
+    ].to_numpy()[0]
+    link_11 = metro_links.loc[
+        metro_links["OBJECTID_1"] == MONUMENT_LINKS[1],
+        "geometry"
+    ].to_numpy()[0]
     intersection_point = link_9.intersection(link_11)
     snapped_stations.loc[
-        snapped_stations["id"] == monument_id,
+        snapped_stations["OBJECTID"] == monument_id,
         "geometry"
     ] = intersection_point
 
