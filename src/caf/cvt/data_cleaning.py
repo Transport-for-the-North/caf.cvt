@@ -2,6 +2,7 @@
 
 ### LOAD LIBRARIES
 import gc
+import itertools
 import logging
 import os
 import pathlib
@@ -40,6 +41,8 @@ _FREIGHT_DEMAND_NETWORK_MAP_MAX_DISTANCE = int(
 
 _WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
 _WIND_SPEED_PERCENTILE = 0.99
+
+MONUMENT_LINKS = [9, 11]
 
 
 ### GENERAL FUNCTIONS
@@ -1075,7 +1078,14 @@ def _clean_nexus_metro(
 
     metro_links = _split_metro_links(metro_links, snapped_metro_stations)
 
-    return metro_links, snapped_metro_stations
+    write_to_file(
+        metro_links,
+        config.paths.model_input / file_paths.NEXUS_METRO_LINKS_MODEL_INPUT_PATH,
+    )
+    write_to_file(
+        snapped_metro_stations,
+        config.paths.model_input / file_paths.NEXUS_METRO_STATIONS_MODEL_INPUT_PATH,
+    )
 
 
 def _aggregate_metro_links(config: model_config.Config) -> gpd.GeoDataFrame:
@@ -1128,24 +1138,52 @@ def _aggregate_metro_stations(config: model_config.Config) -> gpd.GeoDataFrame:
 
 def _split_metro_links(
         metro_links: gpd.GeoDataFrame,
-        metro_stations: gpd.GeoDataFrame
+        metro_stations: gpd.GeoDataFrame,
+        tolerance: float = 1,
+        min_split_dist: float = 0.01,
 ) -> gpd.GeoDataFrame:
     """Split metro link geometries at metro station locations."""
-    station_points = shapely.geometry.MultiPoint(metro_stations.geometry.tolist())
-    split_geoms = []
+    split_rows = []
 
     for _, row in metro_links.iterrows():
-        result = shapely.ops.split(row.geometry, station_points)
+        line = row.geometry
 
-        for part in result.geoms:
+        # Find stations on this line
+        stations_on_line = metro_stations[
+            metro_stations.geometry.distance(line) < tolerance
+        ]
+
+        # Get stations positions along line
+        positions = []
+        for _, station in stations_on_line.iterrows():
+            pos = line.project(station.geometry)
+            positions.append(pos)
+
+        # Remove duplicates and sort
+        positions = sorted(set(positions))
+
+        # Add line start/end
+        breakpoints = [0, *positions, line.length]
+
+        # Create line segments
+        for start, end in itertools.pairwise(breakpoints):
+            if end - start < min_split_dist:
+                continue
+            segment = shapely.ops.substring(
+                line,
+                start,
+                end
+            )
+
             new_row = row.copy()
-            new_row.geometry = part
-            split_geoms.append(new_row)
+            new_row.geometry = segment
+            split_rows.append(new_row)
 
-    split_metro_links = gpd.GeoDataFrame(split_geoms, columns=metro_links.columns, crs=metro_links.crs)
+    # TODO (DJ): Decide what to do with station-to-station links that are split
+    # For now, we will leave them alone
+    return gpd.GeoDataFrame(split_rows, columns=metro_links.columns, crs=metro_links.crs)
 
-    split_metro_links.to_file("D:/Climate Vulnerability Tool/Localisation/v2/Nexus/split_metro_links.gpkg", driver="GPKG")
-    return split_metro_links
+
 
 
 def _snap_stations_to_links(
@@ -1168,13 +1206,17 @@ def _snap_stations_to_links(
         )
 
     # Manually snap Monument to intersection of links 9 and 11
-    monument_id = snapped_stations.loc[snapped_stations["Name"] == "Monument", "id"].to_numpy()[0]
-    link_9 = metro_links.loc[metro_links["id"] == 9, "geometry"].to_numpy()[0]
-    link_11 = metro_links.loc[metro_links["id"] == 11, "geometry"].to_numpy()[0]
+    monument_id = snapped_stations.loc[
+        snapped_stations["Name"] == "Monument",
+        "id"
+    ].to_numpy()[0]
+    link_9 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[0], "geometry"].to_numpy()[0]
+    link_11 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[1], "geometry"].to_numpy()[0]
     intersection_point = link_9.intersection(link_11)
-    snapped_stations.loc[snapped_stations["id"] == monument_id, "geometry"] = intersection_point
-
-    snapped_stations.to_file("D:/Climate Vulnerability Tool/Localisation/v2/Nexus/snapped_metro_stations.gpkg", driver="GPKG")
+    snapped_stations.loc[
+        snapped_stations["id"] == monument_id,
+        "geometry"
+    ] = intersection_point
 
     return snapped_stations
 

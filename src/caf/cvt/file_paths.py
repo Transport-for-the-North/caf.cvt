@@ -53,6 +53,13 @@ CHARGING_SITES_MODEL_INPUT_PATH = pathlib.Path(
 )
 NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/NCN/ncn.gpkg")
 
+NEXUS_METRO_LINKS_MODEL_INPUT_PATH = pathlib.Path(
+    "Infrastructure/Bespoke/Nexus Metro/metro_links.gpkg"
+)
+NEXUS_METRO_STATIONS_MODEL_INPUT_PATH = pathlib.Path(
+    "Infrastructure/Bespoke/Nexus Metro/metro_stations.gpkg"
+)
+
 # Hazards Model Inputs Paths
 HAZARD_GRID_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Extreme Weather/Hazard Grid/hazard_grid.gpkg"
