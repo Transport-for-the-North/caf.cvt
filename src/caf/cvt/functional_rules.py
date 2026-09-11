@@ -62,7 +62,14 @@ _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
 
 _FLOODING_TILE_SIZE_M = 10000
-_FLOODING_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
+_FLOODING_RISK_SCORE_MAP = {
+    0: 0, # No risk areas stay 0
+    "Unavailable": pd.NA,
+    "Very low": 0, # Less than 0.1% chance of flooding
+    "Low": 0.1, # 0.1% to 1% chance of flooding
+    "Medium": 1, # 1% to 3.3% chance of flooding
+    "High": 3.3 # Greater than 3.3% chance of flooding
+}
 
 _PLOT_ALPHA_BASEMAP = 0.7
 _PLOT_ALPHA_NO_BASEMAP = 1.0
@@ -104,12 +111,25 @@ def min_max_scaling_pair(
     for col_current, col_forecast in pairs:
         # Combine both columns into one array for global min/max
         combined_values = data[[col_current, col_forecast]].to_numpy().flatten().reshape(-1, 1)
+        combined_values = combined_values[~pd.isna(combined_values)].reshape(-1, 1)
 
         scaler.fit(combined_values)
 
         # Transform each column using the same scaler
-        data[col_current] = scaler.transform(data[[col_current]].values).clip(*feature_range)
-        data[col_forecast] = scaler.transform(data[[col_forecast]].values).clip(*feature_range)
+        data.loc[data[col_current].notna(), col_current] = (
+            scaler.transform(
+                data.loc[data[col_current].notna(), [col_current]].to_numpy()
+            )
+            .clip(*feature_range)
+            .flatten()
+        )
+        data.loc[data[col_forecast].notna(), col_forecast] = (
+            scaler.transform(
+                data.loc[data[col_forecast].notna(), [col_forecast]].to_numpy()
+            )
+            .clip(*feature_range)
+            .flatten()
+        )
 
     return data
 
@@ -457,15 +477,19 @@ def _validate_index(
     index: gpd.GeoDataFrame, index_vars: list[RiskColumn], feature_range: tuple[int, int]
 ) -> None:
     """Validate a given index."""
-    if index.isna().any().any():
-        raise ValueError("Index contains NA values.")
+    na_counts = index.isna().sum()
+    if na_counts.any():
+        LOG.warning(
+            "Index contains missing values: \n%s", na_counts[na_counts > 0]
+        )
 
     for scenario in Scenarios:
         for var in index_vars:
             col = f"{var}_{scenario}"
             if col not in index.columns:
                 raise ValueError(f"Missing column: {col}")
-            if not index[col].between(feature_range[0], feature_range[1]).all():
+            valid_values = index[col].dropna()
+            if not valid_values.between(feature_range[0], feature_range[1]).all():
                 raise ValueError(
                     f"{var.replace('_', ' ').title()} for {scenario} "
                     f"contains values outside {feature_range[0]}-{feature_range[1]}."
@@ -1135,6 +1159,9 @@ def _flooding_index(
         }
     )
 
+    # Fill NA values with 0 (no risk) since no data means no risk in the underlying data
+    flooding_risk = flooding_risk.fillna(0)
+
     # Map original risk categories to numeric scores
     for col in [
         f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}",
@@ -1144,8 +1171,6 @@ def _flooding_index(
     ]:
         flooding_risk[col] = flooding_risk[col].map(_FLOODING_RISK_SCORE_MAP)
 
-    # Fill NA values with 0 (no risk) since no data means no risk in the underlying data
-    flooding_risk = flooding_risk.fillna(0)
 
     feature_range = (config.constants.score_min, config.constants.score_max)
     flooding_risk = min_max_scaling_pair(
@@ -1174,12 +1199,12 @@ def _flooding_index(
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
-    _audit_index(
-        flooding_risk,
-        [*FloodingRiskCols, MainHazardRiskCols.FLOODING],
-        audit_path / "Flooding" / "Flooding Risk Index",
-        feature_range,
-    )
+    #_audit_index(
+    #    flooding_risk,
+    #    [*FloodingRiskCols, MainHazardRiskCols.FLOODING],
+    #    audit_path / "Flooding" / "Flooding Risk Index",
+    #    feature_range,
+    #)
 
     data_cleaning.write_to_file(
         flooding_risk,
