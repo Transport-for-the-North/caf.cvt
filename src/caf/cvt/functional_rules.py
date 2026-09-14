@@ -64,7 +64,7 @@ _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenari
 _FLOODING_TILE_SIZE_M = 10000
 _FLOODING_RISK_SCORE_MAP = {
     0: 0, # No risk areas stay 0
-    "Unavailable": pd.NA,
+    "Unavailable": np.nan,
     "Very low": 0, # Less than 0.1% chance of flooding
     "Low": 0.1, # 0.1% to 1% chance of flooding
     "Medium": 1, # 1% to 3.3% chance of flooding
@@ -1159,8 +1159,8 @@ def _flooding_index(
         }
     )
 
-    # Fill NA values with 0 (no risk) since no data means no risk in the underlying data
-    flooding_risk = flooding_risk.fillna(0)
+    # Fill NA values with very low risk since no data means very low risk in the data
+    flooding_risk = flooding_risk.fillna(_FLOODING_RISK_SCORE_MAP["Very low"])
 
     # Map original risk categories to numeric scores
     for col in [
@@ -1169,7 +1169,7 @@ def _flooding_index(
         f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}",
         f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}",
     ]:
-        flooding_risk[col] = flooding_risk[col].map(_FLOODING_RISK_SCORE_MAP)
+        flooding_risk[col] = flooding_risk[col].map(_FLOODING_RISK_SCORE_MAP).astype(float)
 
 
     feature_range = (config.constants.score_min, config.constants.score_max)

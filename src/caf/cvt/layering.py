@@ -4,6 +4,7 @@ import logging
 import pathlib
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
@@ -39,6 +40,12 @@ _PETROL_STATIONS_BUFFER_SIZE_M = 50
 
 # GENERAL FUNCTIONS
 
+def _aggregate_risk(series: pd.Series) -> float | None:
+    """Aggregate risk by taking the maximum value, returning NaN if any values are missing."""
+    if series.isna().any():
+        return np.nan
+    return series.max()
+
 
 def _infrastructure_risk_intersect(
     infrastructure_data: gpd.GeoDataFrame, hazards_dict: dict[str, gpd.GeoDataFrame]
@@ -63,13 +70,33 @@ def _infrastructure_risk_intersect(
             hazard_gdf_match.columns.str.contains("risk", case=False)
         ]
 
-        # Calculate hazard risk score per infrastructure segment as max value of intersection
-        agg = intersections.groupby(intersections.index)[risk_columns].max()
+        # Calculate hazard risk score per infrastructure segment as max value of intersection,
+        # returning NaN if any values are missing.
+        agg = intersections.groupby(intersections.index)[risk_columns].agg(_aggregate_risk)
+
+        # Find which infrastructure segments intersect with any hazard
+        intersected_agg = (
+            intersections
+            .groupby(intersections.index)["index_right"]
+            .apply(lambda x: x.notna().any())
+        )
 
         # Merge back into main DataFrame
         infrastructure_with_risk = infrastructure_with_risk.join(agg, how="left")
+        infrastructure_with_risk = infrastructure_with_risk.join(
+            intersected_agg.rename("matched")
+        )
 
-    return infrastructure_with_risk.fillna(0)
+        # Infill 0 where infrastructure segments did not intersect with any hazard
+        for col in risk_columns:
+            infrastructure_with_risk.loc[
+                ~infrastructure_with_risk["matched"],
+                col
+            ] = 0
+
+        infrastructure_with_risk = infrastructure_with_risk.drop(columns="matched")
+
+    return infrastructure_with_risk
 
 
 def _reshape_for_scenarios(
@@ -110,10 +137,10 @@ def _reshape_for_scenarios(
     melted["variable"] = melted["variable"].str.replace(scenario_pattern, "", regex=True)
 
     # Pivot back so each risk variable becomes a column
-    reshaped = melted.pivot_table(
+    reshaped = melted.pivot(
         index=[id_col, scenario_col, *descriptive_cols],
         columns="variable",
-        values="value",
+        values="value"
     ).reset_index()
 
     # Reorder risk columns based on original order
@@ -1509,7 +1536,7 @@ def _ncn_risk(
 
     Intersect National Cycle Network with hazard risk, clean output, then write to file.
     """
-    LOG.info("Layering National Cycle Network with hazard risk...")
+    LOG.info("Layering national cycle network with hazard risk...")
     ncn = gpd.read_file(
         config.paths.model_input / file_paths.NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH
     )
@@ -1557,7 +1584,7 @@ def _ncn_risk(
         "id",
         pathlib.Path("Other") / "National Cycle Network" / "ncn_risk",
     )
-    LOG.info("Finished layering National Cycle Network with hazard risk.")
+    LOG.info("Finished layering national cycle network with hazard risk.")
 
 
 #### Tram Network
