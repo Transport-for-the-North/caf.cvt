@@ -364,12 +364,15 @@ class ImpactConfig(ctk.BaseConfig):
         Dictionary of years for NoHAM demand scenarios.
     model_road_flows : ModelRoadFlowsEntry
         Configuration for the transport model road flows data.
+    nexus: dict[str, pathlib.Path]
+        Dictionary of paths for nexus demand data.
     """
 
     freight_demand: pathlib.Path
     noham_demand: pathlib.Path
     noham_years: dict[str, int]
     model_road_flows: ModelRoadFlowsEntry
+    nexus: dict[str, pathlib.Path]
 
 
 class SwitchConfig(ctk.BaseConfig):

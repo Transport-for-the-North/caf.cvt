@@ -341,8 +341,8 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = get_boundary(config)
 
-    _clean_infrastructure(config, boundary)
-    _clean_hazards(config, boundary)
+    #_clean_infrastructure(config, boundary)
+    #_clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
 
@@ -2103,6 +2103,8 @@ def _clean_impact(config: model_config.Config, boundary: gpd.GeoDataFrame) -> No
         _clean_noham_flows(config)
     if config.switches.model_roads:
         _clean_model_road_flows(config)
+    if config.switches.bespoke:
+        _clean_bespoke_demand(config)
     LOG.info("Finished cleaning impact data.")
 
 
@@ -2404,7 +2406,6 @@ def _aggregate_link_flows_year(
 
 ### TRANSPORT MODEL FLOWS
 
-
 def _clean_model_road_flows(config: model_config.Config) -> None:
     """Clean model flows data, aggregate link flows, merge with network, then write to file."""
     LOG.info("Cleaning model road flows data...")
@@ -2517,3 +2518,33 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         model_road_uc_link_flows,
         config.paths.model_input / file_paths.MODEL_ROAD_FLOWS_MODEL_INPUT_PATH,
     )
+
+
+### BESPOKE
+
+def _clean_bespoke_demand(config: model_config.Config) -> None:
+    """Clean bespoke infrastructure demand data."""
+    _clean_nexus_demand(config)
+
+
+def _clean_nexus_demand(config: model_config.Config) -> None:
+    """Clean nexus infrastructure demand data."""
+    baseline = pd.read_csv(
+        config.impact.nexus["baseline"],
+        usecols=["Prod Station ID", "Attr Station ID", "Time Period ID", "Demand"]
+    )
+    future = pd.read_csv(
+        config.impact.nexus["future"],
+        usecols=["Prod Station ID", "Attr Station ID", "Time Period ID", "Demand"]
+    )
+
+    # Aggregate OD data by summing over all origin-destination pairs
+
+    # Map onto network links between stations
+    metro_network = gpd.read_file(
+        config.paths.model_input / file_paths.NEXUS_METRO_LINKS_MODEL_INPUT_PATH
+    )
+
+    
+
+
