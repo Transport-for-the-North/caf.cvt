@@ -341,8 +341,9 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = get_boundary(config)
 
-    #_clean_infrastructure(config, boundary)
+    _clean_infrastructure(config, boundary)
     #_clean_hazards(config, boundary)
+
     _clean_impact(config, boundary)
 
 
@@ -2524,27 +2525,78 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
 
 def _clean_bespoke_demand(config: model_config.Config) -> None:
     """Clean bespoke infrastructure demand data."""
+    LOG.info("Cleaning bespoke infrastructure demand data.")
     _clean_nexus_demand(config)
 
 
 def _clean_nexus_demand(config: model_config.Config) -> None:
     """Clean nexus infrastructure demand data."""
+    LOG.info("Cleaning nexus demand data.")
     baseline = pd.read_csv(
         config.impact.nexus["baseline"],
-        usecols=["Prod Station ID", "Attr Station ID", "Time Period ID", "Demand"]
+        usecols=["Prod Station ID", "Prod Station Name",
+                 "Attr Station ID", "Attr Station Name",
+                 "Time Period ID", "Demand"]
     )
     future = pd.read_csv(
         config.impact.nexus["future"],
-        usecols=["Prod Station ID", "Attr Station ID", "Time Period ID", "Demand"]
+        usecols=["Prod Station ID", "Prod Station Name",
+                 "Attr Station ID", "Attr Station Name",
+                 "Time Period ID", "Demand"]
+    )
+
+    # Remove Murton Gap station (not in scope)
+    baseline = baseline[
+        (baseline["Prod Station Name"] != "Murton Gap") |
+        (baseline["Attr Station Name"] != "Murton Gap")
+    ]
+    future = future[
+        (future["Prod Station Name"] != "Murton Gap") |
+        (future["Attr Station Name"] != "Murton Gap")
+    ]
+
+    # Create lookup between demand station IDs and network station IDs and translate
+    snapped_metro_stations = gpd.read_file(
+        config.paths.model_input / file_paths.NEXUS_METRO_STATIONS_MODEL_INPUT_PATH
+    )
+    station_id_lookup = (
+        snapped_metro_stations[["OBJECTID", "Name"]]
+        .merge(
+            baseline[["Prod Station ID", "Prod Station Name"]].drop_duplicates(),
+            left_on="Name",
+            right_on="Prod Station Name",
+            how="left",
+        )
+    )[["OBJECTID", "Prod Station ID"]].rename(columns={"Prod Station ID": "Demand ID"})
+    baseline[["Prod Station ID", "Attr Station ID"]] = (
+        baseline[["Prod Station ID", "Attr Station ID"]]
+        .replace(
+            station_id_lookup.set_index("Demand ID")["OBJECTID"]
+        )
+    )
+    future[["Prod Station ID", "Attr Station ID"]] = (
+        future[["Prod Station ID", "Attr Station ID"]]
+        .replace(
+            station_id_lookup.set_index("Demand ID")["OBJECTID"]
+        )
     )
 
     # Aggregate OD data by summing over all origin-destination pairs
+    baseline = baseline.groupby(
+        ["Prod Station ID", "Attr Station ID"], as_index=False
+    )["Demand"].sum()
+    future = future.groupby(
+        ["Prod Station ID", "Attr Station ID"], as_index=False
+    )["Demand"].sum()
 
     # Map onto network links between stations
     metro_network = gpd.read_file(
         config.paths.model_input / file_paths.NEXUS_METRO_LINKS_MODEL_INPUT_PATH
     )
 
-    
+    write_to_file(
+        metro_network,
+        config.paths.model_input / file_paths.NEXUS_METRO_LINKS_MODEL_INPUT_PATH,
+    )
 
 
