@@ -1153,34 +1153,73 @@ def _split_metro_links(
         ]
 
         # Get stations positions along line
-        positions = []
+        stations = []
         for _, station in stations_on_line.iterrows():
-            pos = line.project(station.geometry)
-            positions.append(pos)
+            stations.append({
+                "position": line.project(station.geometry),
+                "station_id": station["OBJECTID"],
+                "station_name": station["Name"]
+            })
 
         # Remove duplicates and sort
-        positions = sorted(set(positions))
+        stations = sorted(stations, key=lambda x: x["position"])
 
-        # Add line start/end
-        breakpoints = [0, *positions, line.length]
+        if len(stations) == 0:
+            new_row = row.copy()
+
+            new_row["from_station_id"] = None
+            new_row["to_station_id"] = None
+            new_row["from_station_name"] = None
+            new_row["to_station_name"] = None
+            split_rows.append(new_row)
+            continue
+
+        stations.insert(0, {
+                "position": 0,
+                "station_id": None,
+                "station_name": None
+            })
+        stations.insert(len(stations), {
+                "position": line.length,
+                "station_id": None,
+                "station_name": None
+            })
 
         # Create line segments
-        for start, end in itertools.pairwise(breakpoints):
-            if end - start < min_split_dist:
+        for start_station, end_station in itertools.pairwise(stations):
+            if end_station["position"] - start_station["position"] < min_split_dist:
                 continue
             segment = shapely.ops.substring(
                 line,
-                start,
-                end
+                start_station["position"],
+                end_station["position"],
             )
 
             new_row = row.copy()
+
+            new_row["from_station_id"] = start_station["station_id"]
+            new_row["to_station_id"] = end_station["station_id"]
+            new_row["from_station_name"] = start_station["station_name"]
+            new_row["to_station_name"] = end_station["station_name"]
+
             new_row.geometry = segment
             split_rows.append(new_row)
 
     # TODO (DJ): Decide what to do with station-to-station links that are split
     # For now, we will leave them alone
-    return gpd.GeoDataFrame(split_rows, columns=metro_links.columns, crs=metro_links.crs)
+
+    metro_links = gpd.GeoDataFrame(
+        split_rows,
+        columns=[*metro_links.columns,
+                 "from_station_id", "to_station_id", "from_station_name", "to_station_name"],
+        crs=metro_links.crs
+    ).reset_index(drop=True)
+
+    metro_links["metro_link_id"] = range(1, len(metro_links)+1)
+
+    metro_links = _manual_metro_adjustments(metro_links)
+    return metro_links
+
 
 
 def _snap_stations_to_links(
@@ -1222,6 +1261,62 @@ def _snap_stations_to_links(
     ] = intersection_point
 
     return snapped_stations
+
+
+def _manual_metro_adjustments(metro_links: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Apply manual adjustments to the metro links."""
+    # Apply manual adjustments to the metro links
+    merge_link_ids = [
+        (34, 35), (55, 66), (64, 65, 70), (9, 71)
+        # (1, 2), (69, 68) These ones are end of the line past the station, unsure about merging
+    ]
+
+    rows_to_drop = set()
+    new_rows = []
+
+    for merge_group in merge_link_ids:
+        group = metro_links.loc[
+            metro_links["metro_link_id"].isin(merge_group)
+        ].copy()
+
+        if group.empty:
+            continue
+
+        merged_geometry = shapely.MultiLineString(group["geometry"].to_list())
+        new_row = group.iloc[0].copy()
+        new_row["geometry"] = merged_geometry
+
+        new_row["from_station_id"] = _first_not_null(group["from_station_id"])
+        new_row["to_station_id"] = _first_not_null(group["to_station_id"])
+        new_row["from_station_name"] = _first_not_null(group["from_station_name"])
+        new_row["to_station_name"] = _first_not_null(group["to_station_name"])
+        new_row["metro_link_id"] = min(merge_group)
+
+        new_rows.append(new_row)
+        rows_to_drop.update(group.index)
+
+    metro_links = metro_links.drop(index=list(rows_to_drop))
+    metro_links = pd.concat(
+        [
+            metro_links,
+            gpd.GeoDataFrame(
+                new_rows,
+                columns=metro_links.columns,
+                crs=metro_links.crs
+            )
+        ],
+        ignore_index=True
+    )
+
+    # TODO (DJ): Decide what to do about Pelaw junction lines
+
+    return metro_links
+
+
+def _first_not_null(series):
+    """Return the first non-null value in a pandas Series."""
+    values = series.dropna()
+    return values.iloc[0] if len(values) > 0 else None
 
 ## HAZARDS
 
@@ -2582,12 +2677,9 @@ def _clean_nexus_demand(config: model_config.Config) -> None:
     )
 
     # Aggregate OD data by summing over all origin-destination pairs
-    baseline = baseline.groupby(
-        ["Prod Station ID", "Attr Station ID"], as_index=False
-    )["Demand"].sum()
-    future = future.groupby(
-        ["Prod Station ID", "Attr Station ID"], as_index=False
-    )["Demand"].sum()
+    baseline = _aggregate_nexus_demand(baseline)
+    future = _aggregate_nexus_demand(future)
+
 
     # Map onto network links between stations
     metro_network = gpd.read_file(
@@ -2600,3 +2692,19 @@ def _clean_nexus_demand(config: model_config.Config) -> None:
     )
 
 
+def _aggregate_nexus_demand(demand: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate nexus demand data by origin-destination pairs."""
+    demand_agg = demand.groupby(
+        ["Prod Station ID", "Attr Station ID"], as_index=False
+    )["Demand"].sum()
+
+    demand_agg["station_a"] = demand_agg[
+        ["Prod Station ID", "Attr Station ID"]
+    ].min(axis=1)
+    demand_agg["station_b"] = demand_agg[
+        ["Prod Station ID", "Attr Station ID"]
+    ].max(axis=1)
+
+    return demand_agg.groupby(
+        ["station_a", "station_b"], as_index=False
+    )["Demand"].sum()
