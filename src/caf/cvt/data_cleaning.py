@@ -343,8 +343,7 @@ def data_cleaning(config: model_config.Config) -> None:
     boundary = get_boundary(config)
 
     _clean_infrastructure(config, boundary)
-    #_clean_hazards(config, boundary)
-
+    _clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
 
@@ -1991,7 +1990,6 @@ def _clean_ground_stability(config: model_config.Config, boundary: gpd.GeoDataFr
     """Clean ground stability data ready for analysis."""
     LOG.info("Cleaning ground stability data...")
     _clean_geosure(config, boundary)
-    _clean_geoclimate(config, boundary)
     LOG.info("Finished cleaning ground stability data.")
 
 
@@ -1999,50 +1997,32 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
     """Clean GeoSureHexGrids data, merge by nearest centroids, then write to file."""
     geosure_layers = {
         GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_CollapsibleDeposits_v8",
+            config.paths.raw_input / config.hazards.ground_stability.geosure.collapsible_deposits,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.COMPRESSIBLE_GROUND: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_CompressibleGround_v8",
+            config.paths.raw_input / config.hazards.ground_stability.geosure.compressible_ground,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.LANDSLIDES: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_Landslides_v8",
+            config.paths.raw_input / config.hazards.ground_stability.geosure.landslides,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.RUNNING_SAND: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_RunningSand_v8",
+            config.paths.raw_input / config.hazards.ground_stability.geosure.running_sands,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.SHRINK_SWELL: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_ShrinkSwell_v8",
+            config.paths.raw_input / config.hazards.ground_stability.geosure.shrink_swell,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.SOLUBLE_ROCKS: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_SolubleRocks_v8",
+            config.paths.raw_input / config.hazards.ground_stability.geosure.soluble_rocks,
             mask=boundary,
             columns=["CLASS"],
         ),
@@ -2066,57 +2046,12 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
             (filter_removed / len_before_filter) * 100,
         )
         geosure_layers[code] = explode_to_polygons(geosure_layers[code])
-
-    # Merge layers based on nearest centroids
-    base_code = next(iter(geosure_layers.keys()))
-    geosure = geosure_layers[base_code][[base_code, "geometry"]].copy()
-    for code, layer in geosure_layers.items():
-        if code == base_code:
-            continue  # skip the base layer
-        layer_subset = layer[
-            [code, "geometry"]
-        ]  # Select only the relevant class and geometry columns
-        matched = _nearest_centroids(geosure, layer_subset)  # Apply nearest centroid matching
-        geosure[code] = matched[code]  # Add the matched CLASS column to the base dataframe
-
-    geosure_risk_cols = [col for col in geosure.columns if col.endswith("_risk")]
-    geosure = geosure[[*geosure_risk_cols, "geometry"]]
-    write_to_file(
-        geosure,
-        config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH,
-    )
-
-
-def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Read and clean GeoClimate Shrink-Swell data, then write to file."""
-    for year, filepath in config.hazards.ground_stability.geo_shrink_swell.items():
-        geoclimate_data = gpd.read_file(
-            config.paths.raw_input / filepath, mask=boundary, columns=["CLASS"]
-        )
-        if geoclimate_data.empty:
-            LOG.info("GeoClimate shrink-swell %s layer empty. Continuing.", year)
-            continue
-        geoclimate_data = geoclimate_data.rename(
-            columns={"CLASS": GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE}
-        )
-        len_before_filter = len(geoclimate_data)
-        geoclimate_data = clip_to_boundary(geoclimate_data, boundary)
-        filter_removed = len_before_filter - len(geoclimate_data)
-        LOG.info(
-            "GeoClimate %s filtered - %s of %s (%.1f percent) rows removed",
-            year,
-            filter_removed,
-            len_before_filter,
-            (filter_removed / len_before_filter) * 100,
-        )
-        geoclimate_data = explode_to_polygons(geoclimate_data)
-
+        geosure_layers[code] = geosure_layers[code].to_crs(data_cleaning.BNG_CRS)
         write_to_file(
-            geoclimate_data,
-            config.paths.model_input
-            / file_paths.GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH
-            / f"bgs_ss_{year}.gpkg",
+            geosure_layers[code],
+            config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH / f"{code}.gpkg",
         )
+
 
 
 ### COASTAL EROSION

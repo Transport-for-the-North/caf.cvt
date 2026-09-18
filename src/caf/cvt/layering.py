@@ -1723,17 +1723,19 @@ def _nexus_metro_links_risk(
 ) -> None:
     """Calculate Nexus Metro bespoke infrastructure risk and write to file."""
     LOG.info("Calculating Nexus Metro bespoke infrastructure risk...")
-    metro_links = gpd.read_file(
-        config.paths.model_input / file_paths.NEXUS_METRO_LINKS_MODEL_INPUT_PATH
+    metro_link_flows = gpd.read_file(
+        config.paths.model_input / file_paths.NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH
     )
 
-    if metro_links.empty:
+    if metro_link_flows.empty:
         LOG.warning("Nexus Metro links layer is empty. Skipping.")
         return
 
-    metro_links_risk = _infrastructure_risk_intersect(metro_links, hazard_layers)
+    metro_links_risk = _infrastructure_risk_intersect(metro_link_flows, hazard_layers)
 
     feature_range = (config.constants.score_min, config.constants.score_max)
+
+    metro_links_risk = _metro_impact_index(metro_links_risk)
 
     _audit_infrastructure_risk(
         metro_links_risk,
@@ -1767,6 +1769,52 @@ def _nexus_metro_links_risk(
     LOG.info("Finished calculating Nexus Metro bespoke infrastructure risk.")
 
 
+def _metro_impact_index(
+    metro_risk: gpd.GeoDataFrame, feature_range: tuple[int, int]
+) -> gpd.GeoDataFrame:
+    """Normalise metro link demand, then calculate impact index."""
+    # First, normalise demand
+    metro_risk = functional_rules.min_max_scaling_pair(
+        data=metro_risk,
+        pairs=[(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")],
+        feature_range=feature_range,
+    )
+
+    # Then, calculate impact index for total demand
+    metro_risk = _calculate_metro_impact(metro_risk)
+
+    # Finally, normalise the impact index for total demand
+    return functional_rules.min_max_scaling_pair(
+        data=metro_risk,
+        pairs=[(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")],
+        feature_range=feature_range,
+    )
+
+
+def _calculate_metro_impact(metro_risk: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Calculate metro impact score for total demand."""
+    risk_cols = [
+        col
+        for col in MainHazardRiskCols
+        if f"{col}_{Scenarios.CURRENT}" in metro_risk.columns
+    ]
+
+    hazards = [col.removesuffix("_risk") for col in risk_cols]
+    impact_weights = _get_impact_weights(hazards)
+
+    for scenario in Scenarios:
+        hazard_component = sum(
+            metro_risk[f"{risk_col}_{scenario}"]
+            * impact_weights[risk_col.removesuffix("_risk")]
+            for risk_col in risk_cols
+        )
+
+        impact_component = metro_risk[f"demand_{scenario}"] * impact_weights["demand"]
+        metro_risk[f"impact_{scenario}"] = impact_component + hazard_component
+
+    return metro_risk
+
+
 def _nexus_metro_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
@@ -1782,6 +1830,8 @@ def _nexus_metro_stations_risk(
     if metro_stations.empty:
         LOG.warning("Nexus Metro stations layer is empty. Skipping.")
         return
+
+    # TODO (DJ): Consider buffering metro stations to account for surrounding area risk
 
     metro_stations_risk = _infrastructure_risk_intersect(metro_stations, hazard_layers)
 
@@ -1817,3 +1867,5 @@ def _nexus_metro_stations_risk(
         pathlib.Path("Other") / "Nexus Metro Stations" / "nexus_metro_stations_risk",
     )
     LOG.info("Finished calculating Nexus Metro stations bespoke infrastructure risk.")
+
+

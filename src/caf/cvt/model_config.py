@@ -297,19 +297,45 @@ class Flooding(ctk.BaseConfig):
     flooding_path: pathlib.Path
 
 
+class GeoSureEntry(ctk.BaseConfig):
+    """Configuration for GeoSure data.
+
+    Attributes
+    ----------
+    collapsible_deposits : pathlib.Path
+        Path to the collapsible deposits shapefile.
+    compressible_ground : pathlib.Path
+        Path to the compressible ground shapefile.
+    landslides : pathlib.Path
+        Path to the landslides shapefile.
+    running_sands : pathlib.Path
+        Path to the running sands shapefile.
+    shrink_swell : pathlib.Path
+        Path to the shrink swell shapefile.
+    soluble_rocks : pathlib.Path
+        Path to the soluble rocks shapefile.
+    """
+
+    collapsible_deposits: pathlib.Path
+    compressible_ground: pathlib.Path
+    landslides: pathlib.Path
+    running_sands: pathlib.Path
+    shrink_swell: pathlib.Path
+    soluble_rocks: pathlib.Path
+
+
 class GroundStability(ctk.BaseConfig):
     """Configuration for ground stability data.
 
     Attributes
     ----------
-    geo_shrink_swell : dict
-        Dictionary of GeoShrinkSwell data.
     geosure : GeoSure
         Configuration for GeoSure data.
     """
 
-    geo_shrink_swell: dict[str, pathlib.Path]
-    geosure: ZipFileEntry
+    geosure: GeoSureEntry
+
+
 
 
 class HazardsConfig(ctk.BaseConfig):

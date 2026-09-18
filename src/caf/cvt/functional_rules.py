@@ -56,7 +56,6 @@ _GROUND_STABILITY_RISK_SCORE_MAP = {
     "Unavailable": 0.5,  # Assign neutral value
 }
 
-_GEOCLIMATE_YEAR_SCENARIO_MAP = {"2030": Scenarios.CURRENT, "2070": Scenarios.FORECAST}
 
 _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
@@ -1283,50 +1282,26 @@ def _process_flooding_overlay_tile(
 
 
 def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Path) -> None:
-    """Combine GeoSure & GeoClimate risk into a single index, using a spatial overlay."""
+    """Combine GeoSure risk into a single index, using a spatial overlay."""
     LOG.info("Calculating ground stability risk index...")
-    geosure = gpd.read_file(config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH)
-    geosure = geosure.to_crs(data_cleaning.BNG_CRS)
-
-    shrink_swell = {}
-    ground_stability = {}
-    for year, scenario in _GEOCLIMATE_YEAR_SCENARIO_MAP.items():
-        shrink_swell[year] = gpd.read_file(
-            config.paths.model_input
-            / file_paths.GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH
-            / f"bgs_ss_{year}.gpkg"
-        )
-        shrink_swell[year][GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE] = shrink_swell[
-            year
-        ][GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE].map(
-            _GROUND_STABILITY_RISK_SCORE_MAP
-        )
-        shrink_swell[year] = shrink_swell[year][
-            [GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE, "geometry"]
-        ]
-        ground_stability[scenario] = _overlay_and_clean(
-            geosure, shrink_swell[year], target_crs=data_cleaning.BNG_CRS
-        )
-        ground_stability[scenario] = ground_stability[scenario].rename(
-            columns={
-                col: f"{col}_{scenario}"
-                for col in ground_stability[scenario].columns
-                if col != "geometry"
-            }
+    geosure_layers = {}
+    for geosure_hazard in GroundStabilityRiskCols:
+        geosure_layers[geosure_hazard] = gpd.read_file(
+            config.paths.model_input /
+            file_paths.GEOSURE_MODEL_INPUT_PATH / f"{geosure_hazard}.gpkg"
         )
 
     ground_stability = _overlay_and_clean(
-        ground_stability[Scenarios.CURRENT],
-        ground_stability[Scenarios.FORECAST],
+        geosure_layers[GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS],
+        geosure_layers[GroundStabilityRiskCols.COMPRESSIBLE_GROUND],
+        geosure_layers[GroundStabilityRiskCols.LANDSLIDES],
+        geosure_layers[GroundStabilityRiskCols.RUNNING_SAND],
+        geosure_layers[GroundStabilityRiskCols.SHRINK_SWELL],
+        geosure_layers[GroundStabilityRiskCols.SOLUBLE_ROCKS],
         target_crs=data_cleaning.BNG_CRS,
     )
 
-    risk_cols = [
-        f"{hazard}_{suffix}" for hazard in GroundStabilityRiskCols for suffix in Scenarios
-    ]
-
-    for col in risk_cols:
-        ground_stability[col] = pd.to_numeric(ground_stability[col], errors="coerce")
+    # Convert risk columns from A-F to numeric scores
 
     ground_stability = _iterative_spatial_infilling(
         ground_stability, risk_cols, _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE

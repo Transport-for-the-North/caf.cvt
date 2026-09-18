@@ -81,7 +81,6 @@ class GroundStabilityRiskCols(RiskColumn):
     RUNNING_SAND = "running_sand_risk"
     SHRINK_SWELL = "shrink_swell_risk"
     SOLUBLE_ROCKS = "soluble_rocks_risk"
-    SHRINK_SWELL_GEOCLIMATE = "shrink_swell_geoclimate_risk"
 
     def get_cmap(self) -> str:
         """Return the appropriate colormap for a given ground stability subhazard column."""
@@ -91,13 +90,12 @@ class GroundStabilityRiskCols(RiskColumn):
     def get_weights(cls) -> dict[RiskColumn, float]:
         """Return appropriate weights for Ground Stability."""
         return {
-            GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: 0.10,
-            GroundStabilityRiskCols.COMPRESSIBLE_GROUND: 0.10,
-            GroundStabilityRiskCols.LANDSLIDES: 0.10,
-            GroundStabilityRiskCols.RUNNING_SAND: 0.10,
-            GroundStabilityRiskCols.SHRINK_SWELL: 0.10,
-            GroundStabilityRiskCols.SOLUBLE_ROCKS: 0.10,
-            GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE: 0.40,
+            GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: 0.17,
+            GroundStabilityRiskCols.COMPRESSIBLE_GROUND: 0.17,
+            GroundStabilityRiskCols.LANDSLIDES: 0.17,
+            GroundStabilityRiskCols.RUNNING_SAND: 0.17,
+            GroundStabilityRiskCols.SHRINK_SWELL: 0.16,
+            GroundStabilityRiskCols.SOLUBLE_ROCKS: 0.16,
         }
 
 
@@ -360,8 +358,6 @@ class OSRailStructure(enum.StrEnum):
                 FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
                 GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
                 GroundStabilityRiskCols.SHRINK_SWELL: VulnerabilityModifier.VERY_HIGH,
-                GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE:
-                VulnerabilityModifier.VERY_HIGH,
             },
             OSRailStructure.BRIDGE: {
                 ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.VERY_HIGH,
