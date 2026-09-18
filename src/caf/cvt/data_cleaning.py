@@ -9,6 +9,7 @@ import pathlib
 
 import fiona
 import geopandas as gpd
+import networkx as nx
 import osbng
 import pandas as pd
 import py7zr
@@ -1267,7 +1268,7 @@ def _manual_metro_adjustments(metro_links: gpd.GeoDataFrame) -> gpd.GeoDataFrame
     """Apply manual adjustments to the metro links."""
     # Apply manual adjustments to the metro links
     merge_link_ids = [
-        (34, 35), (55, 66), (64, 65, 70), (9, 71)
+        (34, 35), (55, 66), (64, 65, 70), (9, 71), (59, 60), (13, 21, 56), (14, 13)
         # (1, 2), (69, 68) These ones are end of the line past the station, unsure about merging
     ]
 
@@ -1290,7 +1291,7 @@ def _manual_metro_adjustments(metro_links: gpd.GeoDataFrame) -> gpd.GeoDataFrame
         new_row["to_station_id"] = _first_not_null(group["to_station_id"])
         new_row["from_station_name"] = _first_not_null(group["from_station_name"])
         new_row["to_station_name"] = _first_not_null(group["to_station_name"])
-        new_row["metro_link_id"] = min(merge_group)
+        new_row["metro_link_id"] = merge_group[0]
 
         new_rows.append(new_row)
         rows_to_drop.update(group.index)
@@ -1308,12 +1309,32 @@ def _manual_metro_adjustments(metro_links: gpd.GeoDataFrame) -> gpd.GeoDataFrame
         ignore_index=True
     )
 
-    # TODO (DJ): Decide what to do about Pelaw junction lines
+    # Assign from and to stations
+    metro_links.loc[
+        metro_links["metro_link_id"] == 34, "from_station_id"
+    ] = 8
+    metro_links.loc[
+        metro_links["metro_link_id"] == 34, "from_station_name"
+    ] = "South Gosforth"
+
+    metro_links.loc[
+        metro_links["metro_link_id"] == 73, "from_station_id"
+    ] = 19
+    metro_links.loc[
+        metro_links["metro_link_id"] == 73, "from_station_name"
+    ] = "Pelaw"
+
+    metro_links.loc[
+        metro_links["metro_link_id"] == 76, "to_station_id"
+    ] = 31
+    metro_links.loc[
+        metro_links["metro_link_id"] == 76, "to_station_name"
+    ] = "South Hylton"
 
     return metro_links
 
 
-def _first_not_null(series):
+def _first_not_null(series: pd.Series) -> int | None:
     """Return the first non-null value in a pandas Series."""
     values = series.dropna()
     return values.iloc[0] if len(values) > 0 else None
@@ -2631,24 +2652,33 @@ def _clean_nexus_demand(config: model_config.Config) -> None:
         config.impact.nexus["baseline"],
         usecols=["Prod Station ID", "Prod Station Name",
                  "Attr Station ID", "Attr Station Name",
-                 "Time Period ID", "Demand"]
+                 "Ticket ID", "Time Period ID", "Demand"]
     )
     future = pd.read_csv(
         config.impact.nexus["future"],
         usecols=["Prod Station ID", "Prod Station Name",
                  "Attr Station ID", "Attr Station Name",
-                 "Time Period ID", "Demand"]
+                 "Ticket ID", "Time Period ID", "Demand"]
+    )
+
+    demand = baseline.merge(
+        future[["Prod Station ID", "Attr Station ID", "Time Period ID", "Ticket ID", "Demand"]],
+        on=["Prod Station ID", "Attr Station ID", "Time Period ID", "Ticket ID"],
+        how="inner",
+        suffixes=(f"_{Scenarios.CURRENT}", f"_{Scenarios.FORECAST}"),
+        validate="one_to_one"
     )
 
     # Remove Murton Gap station (not in scope)
-    baseline = baseline[
-        (baseline["Prod Station Name"] != "Murton Gap") |
-        (baseline["Attr Station Name"] != "Murton Gap")
+    len_before_filter = len(demand)
+    demand = demand[
+        (demand["Prod Station Name"] != "Murton Gap") |
+        (demand["Attr Station Name"] != "Murton Gap")
     ]
-    future = future[
-        (future["Prod Station Name"] != "Murton Gap") |
-        (future["Attr Station Name"] != "Murton Gap")
-    ]
+    LOG.info(
+        "Filtered out Murton Gap station: %d rows removed.",
+        len_before_filter - len(demand)
+    )
 
     # Create lookup between demand station IDs and network station IDs and translate
     snapped_metro_stations = gpd.read_file(
@@ -2663,32 +2693,31 @@ def _clean_nexus_demand(config: model_config.Config) -> None:
             how="left",
         )
     )[["OBJECTID", "Prod Station ID"]].rename(columns={"Prod Station ID": "Demand ID"})
-    baseline[["Prod Station ID", "Attr Station ID"]] = (
-        baseline[["Prod Station ID", "Attr Station ID"]]
+    demand[["Prod Station ID", "Attr Station ID"]] = (
+        demand[["Prod Station ID", "Attr Station ID"]]
         .replace(
             station_id_lookup.set_index("Demand ID")["OBJECTID"]
         )
     )
-    future[["Prod Station ID", "Attr Station ID"]] = (
-        future[["Prod Station ID", "Attr Station ID"]]
-        .replace(
-            station_id_lookup.set_index("Demand ID")["OBJECTID"]
-        )
-    )
+
 
     # Aggregate OD data by summing over all origin-destination pairs
-    baseline = _aggregate_nexus_demand(baseline)
-    future = _aggregate_nexus_demand(future)
-
-
-    # Map onto network links between stations
-    metro_network = gpd.read_file(
-        config.paths.model_input / file_paths.NEXUS_METRO_LINKS_MODEL_INPUT_PATH
+    len_before_agg = len(demand)
+    demand = _aggregate_nexus_demand(demand)
+    LOG.info(
+        "Aggregated nexus demand: %d rows reduced to %d rows.",
+        len_before_agg,
+        len(demand)
     )
 
+    # Map onto network links between stations
+    metro_flows = _map_demand_to_metro_links(config, demand)
+
+    # TODO (DJ): Pelaw junction lines are overlapping, need to decide what to do with these
+
     write_to_file(
-        metro_network,
-        config.paths.model_input / file_paths.NEXUS_METRO_LINKS_MODEL_INPUT_PATH,
+        metro_flows,
+        config.paths.model_input / file_paths.NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH,
     )
 
 
@@ -2696,7 +2725,7 @@ def _aggregate_nexus_demand(demand: pd.DataFrame) -> pd.DataFrame:
     """Aggregate nexus demand data by origin-destination pairs."""
     demand_agg = demand.groupby(
         ["Prod Station ID", "Attr Station ID"], as_index=False
-    )["Demand"].sum()
+    )[[f"Demand_{Scenarios.CURRENT}", f"Demand_{Scenarios.FORECAST}"]].sum()
 
     demand_agg["station_a"] = demand_agg[
         ["Prod Station ID", "Attr Station ID"]
@@ -2707,4 +2736,74 @@ def _aggregate_nexus_demand(demand: pd.DataFrame) -> pd.DataFrame:
 
     return demand_agg.groupby(
         ["station_a", "station_b"], as_index=False
-    )["Demand"].sum()
+    )[[f"Demand_{Scenarios.CURRENT}", f"Demand_{Scenarios.FORECAST}"]].sum()
+
+
+def _map_demand_to_metro_links(
+        config: model_config.Config,
+        demand: pd.DataFrame
+) -> gpd.GeoDataFrame:
+    """Map aggregated nexus demand onto metro network links."""
+    metro_network = gpd.read_file(
+        config.paths.model_input / file_paths.NEXUS_METRO_LINKS_MODEL_INPUT_PATH
+    )
+
+    routable_network = metro_network[
+        metro_network["from_station_id"].notna()
+        & metro_network["to_station_id"].notna()
+    ].copy()
+
+    metro_graph = nx.Graph()
+    for _, row in routable_network.iterrows():
+        metro_graph.add_edge(
+            row["from_station_id"],
+            row["to_station_id"],
+            metro_link_id=row["metro_link_id"],
+            demand_current=0,
+            demand_forecast=0
+        )
+
+    for _, row in demand.iterrows():
+        origin = row["station_a"]
+        destination = row["station_b"]
+
+        # Find the shortest path between the origin and destination stations
+        try:
+            path = nx.shortest_path(
+                metro_graph,
+                source=origin,
+                target=destination
+            )
+        except nx.NetworkXNoPath:
+            LOG.warning(
+                "No path found between origin %s and destination %s.",
+                origin,
+                destination
+            )
+            continue
+
+        # Add OD demand onto each metro link along the shortest path
+        for u, v in itertools.pairwise(path):
+            metro_graph[u][v][f"demand_{Scenarios.CURRENT}"] += row[
+                f"Demand_{Scenarios.CURRENT}"
+            ]
+            metro_graph[u][v][f"demand_{Scenarios.FORECAST}"] += row[
+                f"Demand_{Scenarios.FORECAST}"
+            ]
+
+    # Write the flows back to the network
+    demand_lookup = {}
+    for u, v, data in metro_graph.edges(data=True):
+        demand_lookup[data["metro_link_id"]] = {
+            f"demand_{Scenarios.CURRENT}": data[f"demand_{Scenarios.CURRENT}"],
+            f"demand_{Scenarios.FORECAST}": data[f"demand_{Scenarios.FORECAST}"]
+        }
+
+    metro_network["demand_current"] = metro_network["metro_link_id"].map(
+        lambda x: demand_lookup.get(x, {}).get(f"demand_{Scenarios.CURRENT}", 0)
+    )
+    metro_network["demand_forecast"] = metro_network["metro_link_id"].map(
+        lambda x: demand_lookup.get(x, {}).get(f"demand_{Scenarios.FORECAST}", 0)
+    )
+
+    return metro_network
