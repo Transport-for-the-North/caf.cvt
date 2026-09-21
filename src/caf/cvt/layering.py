@@ -72,6 +72,21 @@ def _infrastructure_risk_intersect(
     return infrastructure_with_risk.fillna(0)
 
 
+def _duplicate_non_scenario_hazards(risk_data: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Duplicate non-scenario hazard columns for both scenarios."""
+    non_scenario_hazards = [
+        risk_data.columns[~risk_data.columns.str.endswith(
+            (f"_{Scenarios.CURRENT}", f"_{Scenarios.FORECAST}")
+        )]
+    ]
+    for hazard in non_scenario_hazards:
+        LOG.warning(
+            "Duplicating non-scenario hazard '%s' for both scenarios.", hazard)
+        risk_data[f"{hazard}_{Scenarios.CURRENT}"] = risk_data[hazard]
+        risk_data[f"{hazard}_{Scenarios.FORECAST}"] = risk_data[hazard]
+    return risk_data
+
+
 def _reshape_for_scenarios(
     risk_data: gpd.GeoDataFrame, id_col: str, risk_cols_order: list[RiskColumn]
 ) -> gpd.GeoDataFrame:
@@ -135,6 +150,7 @@ def _prepare_model_output(
     risk_data = risk_data.drop_duplicates(subset=["geometry"])
     risk_data = risk_data.rename(columns=rename_map)
     risk_data = risk_data.to_crs(data_cleaning.BNG_CRS)
+    risk_data = _duplicate_non_scenario_hazards(risk_data)
     risk_data = _reshape_for_scenarios(risk_data, "id", risk_cols_order)
     risk_data[risk_cols_order] = risk_data[risk_cols_order].round(1)
     return risk_data.rename(columns={col: f"{col}_score" for col in risk_cols_order})
@@ -180,7 +196,7 @@ def _audit_infrastructure_risk(
     audit_path.mkdir(parents=True, exist_ok=True)
 
     for risk_col in cols:
-        functional_rules.plot_choropleth_current_and_forecast(
+        functional_rules.plot_choropleth(
             risk_data=infrastructure_risk,
             column=risk_col,
             title=f"{infrastructure_name} {risk_col.replace('_', ' ').title()}",
@@ -244,20 +260,16 @@ def _apply_asset_vulnerability(
         mask = risk_data[structure_col] == structure
         vulnerabilities = structure.get_vulnerability()
         for hazard, modifier in structure.get_vulnerability().items():
-            for scenario in Scenarios:
-                risk_col = f"{hazard}_{scenario}"
-                if risk_col not in risk_data.columns:
-                    continue  # Skip if the risk column doesn't exist
+            risk_cols = [col for col in risk_data.columns if col.str.contains(hazard)]
+            for risk_col in risk_cols:
                 risk_data.loc[mask, risk_col] = (
                     risk_data.loc[mask, risk_col] * modifier
                 ).clip(lower=feature_range[0], upper=feature_range[1])
 
         main_hazard_modifiers = _get_main_hazard_modifiers(vulnerabilities)
         for main_hazard, modifier in main_hazard_modifiers.items():
-            for scenario in Scenarios:
-                risk_col = f"{main_hazard}_{scenario}"
-                if risk_col not in risk_data.columns:
-                    continue  # Skip if the risk column doesn't exist
+            risk_cols = [col for col in risk_data.columns if col.str.contains(main_hazard)]
+            for risk_col in risk_cols:
                 risk_data.loc[mask, risk_col] = (
                     risk_data.loc[mask, risk_col] * modifier
                 ).clip(lower=feature_range[0], upper=feature_range[1])
@@ -272,11 +284,18 @@ def _apply_asset_hazard_weighting(
     """Recalculate main hazard risk scores based on sub-hazard risk scores and weights."""
     for main_hazard in hazards:
         weights = asset_type.get_asset_hazard_weights(main_hazard)
-        asset_risk = functional_rules._calculate_composite_score(
-            asset_risk,
-            weights,
-            main_hazard,
-        )
+        if main_hazard == MainHazardRiskCols.GROUND_STABILITY:
+            asset_risk = functional_rules._calculate_composite_score(
+                asset_risk,
+                weights,
+                main_hazard,
+            )
+        else:
+            asset_risk = functional_rules._calculate_composite_score_scenarios(
+                asset_risk,
+                weights,
+                main_hazard,
+            )
     return asset_risk
 
 
@@ -1735,7 +1754,7 @@ def _nexus_metro_links_risk(
 
     feature_range = (config.constants.score_min, config.constants.score_max)
 
-    metro_links_risk = _metro_impact_index(metro_links_risk)
+    metro_links_risk = _metro_impact_index(metro_links_risk, feature_range)
 
     _audit_infrastructure_risk(
         metro_links_risk,

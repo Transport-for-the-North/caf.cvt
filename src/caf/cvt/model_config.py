@@ -285,17 +285,6 @@ class ExtremeWeather(ctk.BaseConfig):
     precip_winter: pathlib.Path
 
 
-class Flooding(ctk.BaseConfig):
-    """Configuration for flooding data.
-
-    Attributes
-    ----------
-    flooding_path : pathlib.Path
-        Path to the flooding data.
-    """
-
-    flooding_path: pathlib.Path
-
 
 class GeoSureEntry(ctk.BaseConfig):
     """Configuration for GeoSure data.

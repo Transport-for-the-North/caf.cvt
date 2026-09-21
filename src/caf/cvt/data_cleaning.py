@@ -342,7 +342,7 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = get_boundary(config)
 
-    _clean_infrastructure(config, boundary)
+    #_clean_infrastructure(config, boundary)
     _clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
@@ -1110,7 +1110,8 @@ def _aggregate_metro_links(config: model_config.Config) -> gpd.GeoDataFrame:
         max(metro_links["OBJECTID_1"]) + 1 + len(metro_ext_lines)
     )
 
-    return pd.concat([metro_links, metro_ext_lines], ignore_index=True)
+    metro_links = pd.concat([metro_links, metro_ext_lines], ignore_index=True)
+    return metro_links.rename(columns={"OBJECTID_1": "id"})
 
 
 def _aggregate_metro_stations(config: model_config.Config) -> gpd.GeoDataFrame:
@@ -1132,7 +1133,8 @@ def _aggregate_metro_stations(config: model_config.Config) -> gpd.GeoDataFrame:
     )
     metro_ext_stations["extension"] = True
 
-    return pd.concat([metro_stations, metro_ext_stations], ignore_index=True)
+    metro_stations = pd.concat([metro_stations, metro_ext_stations], ignore_index=True)
+    return metro_stations.rename(columns={"OBJECTID": "id"})
 
 
 def _split_metro_links(
@@ -1157,7 +1159,7 @@ def _split_metro_links(
         for _, station in stations_on_line.iterrows():
             stations.append({
                 "position": line.project(station.geometry),
-                "station_id": station["OBJECTID"],
+                "station_id": station["id"],
                 "station_name": station["Name"]
             })
 
@@ -1221,7 +1223,6 @@ def _split_metro_links(
     return metro_links
 
 
-
 def _snap_stations_to_links(
         metro_stations: gpd.GeoDataFrame,
         metro_links: gpd.GeoDataFrame,
@@ -1244,19 +1245,19 @@ def _snap_stations_to_links(
     # Manually snap Monument to intersection of links 9 and 11
     monument_id = snapped_stations.loc[
         snapped_stations["Name"] == "Monument",
-        "OBJECTID"
+        "id"
     ].to_numpy()[0]
     link_9 = metro_links.loc[
-        metro_links["OBJECTID_1"] == MONUMENT_LINKS[0],
+        metro_links["id"] == MONUMENT_LINKS[0],
         "geometry"
     ].to_numpy()[0]
     link_11 = metro_links.loc[
-        metro_links["OBJECTID_1"] == MONUMENT_LINKS[1],
+        metro_links["id"] == MONUMENT_LINKS[1],
         "geometry"
     ].to_numpy()[0]
     intersection_point = link_9.intersection(link_11)
     snapped_stations.loc[
-        snapped_stations["OBJECTID"] == monument_id,
+        snapped_stations["id"] == monument_id,
         "geometry"
     ] = intersection_point
 
@@ -2620,18 +2621,18 @@ def _clean_nexus_demand(config: model_config.Config) -> None:
         config.paths.model_input / file_paths.NEXUS_METRO_STATIONS_MODEL_INPUT_PATH
     )
     station_id_lookup = (
-        snapped_metro_stations[["OBJECTID", "Name"]]
+        snapped_metro_stations[["id", "Name"]]
         .merge(
             baseline[["Prod Station ID", "Prod Station Name"]].drop_duplicates(),
             left_on="Name",
             right_on="Prod Station Name",
             how="left",
         )
-    )[["OBJECTID", "Prod Station ID"]].rename(columns={"Prod Station ID": "Demand ID"})
+    )[["id", "Prod Station ID"]].rename(columns={"Prod Station ID": "Demand ID"})
     demand[["Prod Station ID", "Attr Station ID"]] = (
         demand[["Prod Station ID", "Attr Station ID"]]
         .replace(
-            station_id_lookup.set_index("Demand ID")["OBJECTID"]
+            station_id_lookup.set_index("Demand ID")["id"]
         )
     )
 
