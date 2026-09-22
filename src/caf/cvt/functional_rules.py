@@ -1189,23 +1189,6 @@ def _flooding_index(
             layer="flood_overlay",
         )
 
-    # Eventually want to rename columns in input data to 'flooding' rather than 'flood'
-    flooding_risk = flooding_risk.rename(
-        columns={
-            f"rivers_sea_flood_risk_{Scenarios.CURRENT}": (
-                f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}"
-            ),
-            f"rivers_sea_flood_risk_{Scenarios.FORECAST}": (
-                f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FORECAST}"
-            ),
-            f"surface_water_flood_risk_{Scenarios.CURRENT}": (
-                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}"
-            ),
-            f"surface_water_flood_risk_{Scenarios.FORECAST}": (
-                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}"
-            ),
-        }
-    )
 
     # Map original risk categories to numeric scores
     for col in [

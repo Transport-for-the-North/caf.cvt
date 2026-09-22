@@ -36,6 +36,14 @@ _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M = 50
 _FERRY_TERMINALS_BUFFER_SIZE_M = 50
 _PETROL_STATIONS_BUFFER_SIZE_M = 50
 
+_RISK_CATEGORIES = {
+    "Very Low": (0, 20),
+    "Low": (20, 40),
+    "Medium": (40, 60),
+    "High": (60, 80),
+    "Very High": (80, 100)
+}
+
 
 # GENERAL FUNCTIONS
 
@@ -299,6 +307,24 @@ def _apply_asset_hazard_weighting(
     return asset_risk
 
 
+def _create_risk_summary(
+    asset_risk: gpd.GeoDataFrame,
+    out_path: pathlib.Path,
+) -> None:
+    """Output a summary spreadsheet for climate risk for a given asset."""
+    descriptive_cols = [
+        col for col in asset_risk.columns if not (
+            col.str.contains("risk") |
+            col.str.contains("impact") |
+            col.str.contains("demand") |
+            col.isin(["id", "geometry"])
+        )
+    ]
+    asset_risk["length"] = asset_risk.geometry.length
+
+    for category, (lower, upper) in _RISK_CATEGORIES.items():
+
+
 # LAYERING
 
 
@@ -459,6 +485,11 @@ def _os_open_road_risk(
         drop_cols=[],
         rename_map={"identifier": "id"},
         risk_cols_order=risk_cols,
+    )
+
+    _create_risk_summary(
+        os_road_risk,
+        audit_path / "Summary" / "Road" / "OS Roads",
     )
 
     _split_csv_shapefile(

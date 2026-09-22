@@ -22,6 +22,8 @@ from caf.cvt.definitions import (
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
+    FloodingRiskCols,
+    FloodingTypes,
     GroundStabilityRiskCols,
     OSRailCols,
     OSRoadCols,
@@ -287,24 +289,6 @@ def _extract_poly_from_geomcollection(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame
     return gpd.GeoDataFrame(rows, crs=gdf.crs)
 
 
-def _nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Take two GeoDataFrames and merge them on their nearest centroids."""
-    # Ensure both GeoDataFrames are in the same projected CRS
-    gdf1 = gdf1.to_crs(BNG_CRS)
-    gdf2 = gdf2.to_crs(BNG_CRS)
-
-    # Convert both to centroids
-    gdf1_centroids = gdf1.copy()
-    gdf1_centroids["geometry"] = gdf1_centroids.geometry.centroid
-    gdf2_centroids = gdf2.copy()
-    gdf2_centroids["geometry"] = gdf2_centroids.geometry.centroid
-
-    nearest = gpd.sjoin_nearest(gdf1_centroids, gdf2_centroids, how="left")
-
-    # Merge back with original gdf1 to restore original geometry
-    return gdf1.merge(nearest.drop(columns="geometry"), left_index=True, right_index=True)
-
-
 def _get_bng_codes(boundary: gpd.GeoDataFrame) -> list[str]:
     """Clip the 100km BNG to the boundary."""
     bng_100km = gpd.GeoDataFrame.from_features(osbng.grids.bng_grid_100km, crs=BNG_CRS)
@@ -342,8 +326,8 @@ def data_cleaning(config: model_config.Config) -> None:
     """
     boundary = get_boundary(config)
 
-    #_clean_infrastructure(config, boundary)
-    _clean_hazards(config, boundary)
+    _clean_infrastructure(config, boundary)
+    #_clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
 
@@ -1865,9 +1849,14 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
 def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean flooding data ready for analysis."""
     LOG.info("Cleaning flooding data...")
-    bng_codes = _get_bng_codes(boundary)
+    _clean_rofrs_rofsw(config, boundary)
+    #_clean_groundwater(config, boundary)
+    LOG.info("Finished cleaning flooding data.")
 
-    for flooding_type in config.hazards.flooding:
+def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+    """Clean RoFRS and RoFSW data ready for analysis."""
+    bng_codes = _get_bng_codes(boundary)
+    for flooding_type in [FloodingTypes.RIVERS_SEA, FloodingTypes.SURFACE_WATER]:
         for scenario in Scenarios:
             LOG.info("Cleaning %s flooding data for %s scenario...", flooding_type, scenario)
             _clean_flooding_layer(
@@ -1883,7 +1872,26 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
                 bng_codes=bng_codes,
             )
 
-    LOG.info("Finished cleaning flooding data.")
+
+def _clean_groundwater(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+    """Clean groundwater flooding data ready for analysis."""
+    LOG.info("Cleaning groundwater flooding data...")
+    groundwater_flooding = gpd.read_file(
+        config.hazards.flooding.groundwater,
+        columns=["CLASS"],
+        mask=boundary
+    )
+    groundwater_flooding = groundwater_flooding.rename(
+        columns={"CLASS": f"{FloodingRiskCols.GROUNDWATER}"}
+    )
+    groundwater_flooding = clip_to_boundary(groundwater_flooding, boundary)
+    groundwater_flooding = explode_to_polygons(groundwater_flooding)
+    groundwater_flooding = groundwater_flooding.to_crs(BNG_CRS)
+    write_to_file(
+        groundwater_flooding,
+        output_path = config.paths.model_input / file_paths.FLOODING_MODEL_INPUT_PATH /
+                    FloodingTypes.GROUNDWATER / f"{FloodingTypes.GROUNDWATER}.gpkg",
+        )
 
 
 def _clean_flooding_layer(
@@ -2655,6 +2663,8 @@ def _clean_nexus_demand(config: model_config.Config) -> None:
         metro_flows,
         config.paths.model_input / file_paths.NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH,
     )
+
+    return metro_flows
 
 
 def _aggregate_nexus_demand(demand: pd.DataFrame) -> pd.DataFrame:

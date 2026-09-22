@@ -325,6 +325,24 @@ class GroundStability(ctk.BaseConfig):
     geosure: GeoSureEntry
 
 
+class Flooding(ctk.BaseConfig):
+    """Configuration for flooding data.
+
+    Attributes
+    ----------
+    rivers_sea : pathlib.Path
+        Path to the rivers and sea flooding data.
+    surface_water : pathlib.Path
+        Path to the surface water flooding data.
+    groundwater : pathlib.Path
+        Path to the groundwater flooding data.
+    """
+
+    rivers_sea: pathlib.Path
+    surface_water: pathlib.Path
+    groundwater: pathlib.Path
+
+
 
 
 class HazardsConfig(ctk.BaseConfig):
@@ -336,7 +354,7 @@ class HazardsConfig(ctk.BaseConfig):
         Configuration for coastal erosion zip file entry.
     extreme_weather : ExtremeWeather
         Configuration for extreme weather data.
-    flooding : dict[str, pathlib.Path]
+    flooding : Flooding
         Configuration for flooding data.
     ground_stability : GroundStability
         Configuration for ground stability data.
@@ -344,7 +362,7 @@ class HazardsConfig(ctk.BaseConfig):
 
     coastal_erosion: ZipFileEntry
     extreme_weather: ExtremeWeather
-    flooding: dict[str, pathlib.Path]
+    flooding: Flooding
     ground_stability: GroundStability
 
 

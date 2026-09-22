@@ -53,11 +53,20 @@ class ExtremeWeatherRiskCols(RiskColumn):
         }
 
 
+class FloodingTypes(enum.StrEnum):
+    """Enumeration for different types of flooding."""
+
+    RIVERS_SEA = "rivers_sea"
+    SURFACE_WATER = "surface_water"
+    GROUNDWATER = "groundwater"
+
+
 class FloodingRiskCols(RiskColumn):
     """Column definitions for flooding subhazard layers."""
 
     RIVERS_SEA = "rivers_sea_flooding_risk"
     SURFACE_WATER = "surface_water_flooding_risk"
+    GROUNDWATER = "groundwater_flooding_risk"
 
     def get_cmap(self) -> str:
         """Return the appropriate colormap for a given flooding subhazard column."""
@@ -69,6 +78,7 @@ class FloodingRiskCols(RiskColumn):
         return {
             FloodingRiskCols.RIVERS_SEA: 0.5,
             FloodingRiskCols.SURFACE_WATER: 0.5,
+            #FloodingRiskCols.GROUNDWATER: 0.33
         }
 
 
@@ -113,8 +123,8 @@ class CoastalErosionRiskCols(RiskColumn):
     def get_weights(cls) -> dict[RiskColumn, float]:
         """Return appropriate weights for Coastal Erosion."""
         return {
-            CoastalErosionRiskCols.EROSION: 0.9,
-            CoastalErosionRiskCols.GIZ: 0.1,
+            CoastalErosionRiskCols.EROSION: 0.5,
+            CoastalErosionRiskCols.GIZ: 0.5
         }
 
 
