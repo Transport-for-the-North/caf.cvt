@@ -321,8 +321,66 @@ def _create_risk_summary(
         )
     ]
     asset_risk["length"] = asset_risk.geometry.length
+    total_length = asset_risk["length"].sum()
 
-    for category, (lower, upper) in _RISK_CATEGORIES.items():
+    risk_summary = pd.DataFrame(
+        [
+            {
+                "Risk Category": category,
+                "Score": f"{lower}-{upper}",
+            }
+            for category, (lower, upper) in _RISK_CATEGORIES.items()
+        ]
+    )
+
+    length_weighted_avgs = {}
+    pct_increased_risks = {}
+    change_in_risk = {}
+
+    for main_hazard in MainHazardRiskCols:
+        for sub_hazard in MainHazardRiskCols.get_sub_hazards(main_hazard):
+            for scenario in Scenarios:
+                risk_column = f"{scenario.upper()} {sub_hazard.strip('_').capitalize()}"
+                risk_summary[risk_column] = 0
+                for category, (lower, upper) in _RISK_CATEGORIES.items():
+                    if upper == 100:
+                        mask = (
+                            (asset_risk[f"{sub_hazard}_{scenario}"] >= lower) &
+                            (asset_risk[f"{sub_hazard}_{scenario}"] <= upper)
+                        )
+                    else:
+                        mask = (
+                            (asset_risk[f"{sub_hazard}_{scenario}"] >= lower) &
+                            (asset_risk[f"{sub_hazard}_{scenario}"] < upper)
+                        )
+                    risk_length = asset_risk.loc[mask, "length"].sum()
+                    pct_risk_in_category = risk_length / total_length
+                    risk_summary.loc[
+                        risk_summary["Risk Category"] == category,
+                        risk_column
+                    ] = round(pct_risk_in_category)
+
+                length_weighted_avgs[risk_column] = (
+                    asset_risk[f"{sub_hazard}_{scenario}"] * asset_risk["length"]
+                ).sum() / total_length
+
+            increased_risk_length = asset_risk[
+                (
+                    asset_risk[f"{sub_hazard}_{Scenarios.FORECAST}"]
+                    > asset_risk[f"{sub_hazard}_{Scenarios.CURRENT}"]
+                )
+            ]["length"].sum()
+            pct_increased_risks[sub_hazard] = increased_risk_length / total_length
+
+            change_in_risk[sub_hazard] = (
+                length_weighted_avgs[
+                    f"{Scenarios.FORECAST.upper()} {sub_hazard.strip('_').capitalize()}"
+                ] -
+                length_weighted_avgs[
+                    f"{Scenarios.CURRENT.upper()} {sub_hazard.strip('_').capitalize()}"
+                ]
+            )
+
 
 
 # LAYERING
@@ -467,6 +525,11 @@ def _os_open_road_risk(
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
+    _create_risk_summary(
+        os_road_risk,
+        audit_path / "Summary" / "Road" / "OS Roads",
+    )
+
     _audit_infrastructure_risk(
         os_road_risk,
         "All Roads",
@@ -485,11 +548,6 @@ def _os_open_road_risk(
         drop_cols=[],
         rename_map={"identifier": "id"},
         risk_cols_order=risk_cols,
-    )
-
-    _create_risk_summary(
-        os_road_risk,
-        audit_path / "Summary" / "Road" / "OS Roads",
     )
 
     _split_csv_shapefile(

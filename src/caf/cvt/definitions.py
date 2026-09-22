@@ -66,7 +66,7 @@ class FloodingRiskCols(RiskColumn):
 
     RIVERS_SEA = "rivers_sea_flooding_risk"
     SURFACE_WATER = "surface_water_flooding_risk"
-    GROUNDWATER = "groundwater_flooding_risk"
+#    GROUNDWATER = "groundwater_flooding_risk"
 
     def get_cmap(self) -> str:
         """Return the appropriate colormap for a given flooding subhazard column."""
@@ -156,6 +156,16 @@ class MainHazardRiskCols(RiskColumn):
         }
 
         return weights_mapping[self]
+
+    def get_sub_hazards(self) -> list[RiskColumn]:
+        """Return a list of sub-hazard columns for the main hazard."""
+        sub_hazard_mapping = {
+            MainHazardRiskCols.EXTREME_WEATHER: list(ExtremeWeatherRiskCols),
+            MainHazardRiskCols.FLOODING: list(FloodingRiskCols),
+            MainHazardRiskCols.GROUND_STABILITY: list(GroundStabilityRiskCols),
+            MainHazardRiskCols.COASTAL_EROSION: list(CoastalErosionRiskCols),
+        }
+        return sub_hazard_mapping[self]
 
 
 class ExtremeHeatCols(RiskColumn):
