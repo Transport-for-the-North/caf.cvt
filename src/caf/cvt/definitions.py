@@ -157,7 +157,7 @@ class MainHazardRiskCols(RiskColumn):
 
         return weights_mapping[self]
 
-    def get_sub_hazards(self) -> list[RiskColumn]:
+    def get_sub_hazards(self) -> list[str]:
         """Return a list of sub-hazard columns for the main hazard."""
         sub_hazard_mapping = {
             MainHazardRiskCols.EXTREME_WEATHER: list(ExtremeWeatherRiskCols),

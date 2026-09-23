@@ -82,11 +82,10 @@ def _infrastructure_risk_intersect(
 
 def _duplicate_non_scenario_hazards(risk_data: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Duplicate non-scenario hazard columns for both scenarios."""
-    non_scenario_hazards = [
-        risk_data.columns[~risk_data.columns.str.endswith(
-            (f"_{Scenarios.CURRENT}", f"_{Scenarios.FORECAST}")
-        )]
-    ]
+    non_scenario_hazards = risk_data.columns[
+        risk_data.columns.str.contains("risk", case=False)
+        & ~risk_data.columns.str.endswith((f"_{Scenarios.CURRENT}", f"_{Scenarios.FORECAST}"))
+    ].tolist()
     for hazard in non_scenario_hazards:
         LOG.warning(
             "Duplicating non-scenario hazard '%s' for both scenarios.", hazard)
@@ -268,7 +267,7 @@ def _apply_asset_vulnerability(
         mask = risk_data[structure_col] == structure
         vulnerabilities = structure.get_vulnerability()
         for hazard, modifier in structure.get_vulnerability().items():
-            risk_cols = [col for col in risk_data.columns if col.str.contains(hazard)]
+            risk_cols = [col for col in risk_data.columns if hazard in col]
             for risk_col in risk_cols:
                 risk_data.loc[mask, risk_col] = (
                     risk_data.loc[mask, risk_col] * modifier
@@ -276,7 +275,7 @@ def _apply_asset_vulnerability(
 
         main_hazard_modifiers = _get_main_hazard_modifiers(vulnerabilities)
         for main_hazard, modifier in main_hazard_modifiers.items():
-            risk_cols = [col for col in risk_data.columns if col.str.contains(main_hazard)]
+            risk_cols = [col for col in risk_data.columns if main_hazard in col]
             for risk_col in risk_cols:
                 risk_data.loc[mask, risk_col] = (
                     risk_data.loc[mask, risk_col] * modifier
@@ -309,17 +308,10 @@ def _apply_asset_hazard_weighting(
 
 def _create_risk_summary(
     asset_risk: gpd.GeoDataFrame,
+    descriptive_cols: list[str],
     out_path: pathlib.Path,
 ) -> None:
     """Output a summary spreadsheet for climate risk for a given asset."""
-    descriptive_cols = [
-        col for col in asset_risk.columns if not (
-            col.str.contains("risk") |
-            col.str.contains("impact") |
-            col.str.contains("demand") |
-            col.isin(["id", "geometry"])
-        )
-    ]
     asset_risk["length"] = asset_risk.geometry.length
     total_length = asset_risk["length"].sum()
 
@@ -338,48 +330,86 @@ def _create_risk_summary(
     change_in_risk = {}
 
     for main_hazard in MainHazardRiskCols:
+        if main_hazard not in asset_risk.columns.str.replace(f"_{Scenarios.CURRENT}", ""):
+            continue
         for sub_hazard in MainHazardRiskCols.get_sub_hazards(main_hazard):
-            for scenario in Scenarios:
-                risk_column = f"{scenario.upper()} {sub_hazard.strip('_').capitalize()}"
-                risk_summary[risk_column] = 0
-                for category, (lower, upper) in _RISK_CATEGORIES.items():
-                    if upper == 100:
-                        mask = (
-                            (asset_risk[f"{sub_hazard}_{scenario}"] >= lower) &
-                            (asset_risk[f"{sub_hazard}_{scenario}"] <= upper)
-                        )
-                    else:
-                        mask = (
-                            (asset_risk[f"{sub_hazard}_{scenario}"] >= lower) &
-                            (asset_risk[f"{sub_hazard}_{scenario}"] < upper)
-                        )
-                    risk_length = asset_risk.loc[mask, "length"].sum()
-                    pct_risk_in_category = risk_length / total_length
-                    risk_summary.loc[
-                        risk_summary["Risk Category"] == category,
-                        risk_column
-                    ] = round(pct_risk_in_category)
-
-                length_weighted_avgs[risk_column] = (
-                    asset_risk[f"{sub_hazard}_{scenario}"] * asset_risk["length"]
-                ).sum() / total_length
-
-            increased_risk_length = asset_risk[
-                (
-                    asset_risk[f"{sub_hazard}_{Scenarios.FORECAST}"]
-                    > asset_risk[f"{sub_hazard}_{Scenarios.CURRENT}"]
-                )
-            ]["length"].sum()
-            pct_increased_risks[sub_hazard] = increased_risk_length / total_length
-
-            change_in_risk[sub_hazard] = (
-                length_weighted_avgs[
-                    f"{Scenarios.FORECAST.upper()} {sub_hazard.strip('_').capitalize()}"
-                ] -
-                length_weighted_avgs[
-                    f"{Scenarios.CURRENT.upper()} {sub_hazard.strip('_').capitalize()}"
-                ]
+            risk_summary, length_weighted_avgs, pct_increased_risks, change_in_risk = _fill_risk_summary_column(
+                asset_risk,
+                sub_hazard,
+                risk_summary,
+                length_weighted_avgs,
+                pct_increased_risks,
+                change_in_risk,
+                total_length,
             )
+
+        risk_summary, length_weighted_avgs, pct_increased_risks, change_in_risk = _fill_risk_summary_column(
+            asset_risk,
+            main_hazard,
+            risk_summary,
+            length_weighted_avgs,
+            pct_increased_risks,
+            change_in_risk,
+            total_length,
+        )
+
+
+    return length_weighted_avgs, pct_increased_risks, change_in_risk
+
+
+def _fill_risk_summary_column(
+        asset_risk: gpd.GeoDataFrame,
+        hazard: MainHazardRiskCols | str,
+        risk_summary: gpd.GeoDataFrame,
+        length_weighted_avgs: dict[str, float],
+        pct_increased_risks: dict[str, float],
+        change_in_risk: dict[str, float],
+        total_length: float,
+) -> tuple[gpd.GeoDataFrame, dict[str, float], dict[str, float], dict[str, float]]:
+    """Fill the risk summary column for a given main hazard and scenario."""
+    for scenario in Scenarios:
+        risk_column = f"{hazard}_{scenario}"
+        out_risk_column = f"{scenario.capitalize()} {hazard.replace('_', ' ').title()}"
+        risk_summary[out_risk_column] = 0
+        for category, (lower, upper) in _RISK_CATEGORIES.items():
+            if upper == 100:
+                mask = (
+                    (asset_risk[risk_column] >= lower) &
+                    (asset_risk[risk_column] <= upper)
+                )
+            else:
+                mask = (
+                    (asset_risk[risk_column] >= lower) &
+                    (asset_risk[risk_column] < upper)
+                )
+            risk_length = asset_risk.loc[mask, "length"].sum()
+            pct_risk_in_category = (risk_length / total_length) * 100
+            risk_summary.loc[
+                risk_summary["Risk Category"] == category,
+                out_risk_column
+            ] = round(pct_risk_in_category)
+
+        length_weighted_avgs[out_risk_column] = round((
+            asset_risk[risk_column] * asset_risk["length"]
+        ).sum() / total_length, 1)
+
+    increased_risk_length = asset_risk[
+        (
+            asset_risk[f"{hazard}_{Scenarios.FORECAST}"]
+            > asset_risk[f"{hazard}_{Scenarios.CURRENT}"]
+        )]["length"].sum()
+    pct_increased_risks[hazard] = round((increased_risk_length / total_length) * 100)
+
+    change_in_risk[hazard] = round((
+        length_weighted_avgs[
+            f"{Scenarios.FORECAST.capitalize()} {hazard.replace('_', ' ').title()}"
+        ] -
+        length_weighted_avgs[
+            f"{Scenarios.CURRENT.capitalize()} {hazard.replace('_', ' ').title()}"
+        ]
+    ), 1)
+
+    return risk_summary, length_weighted_avgs, pct_increased_risks, change_in_risk
 
 
 
@@ -870,6 +900,12 @@ def _passenger_rail_risk(
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
         feature_range=(config.constants.score_min, config.constants.score_max),
+    )
+
+    _create_risk_summary(
+        passenger_rail_network_risk,
+        [col for col in OSRailCols if col not in OSRailCols.ID],
+        audit_path / "Summary" / "Rail" / "Passenger Rail"
     )
 
     _audit_infrastructure_risk(
