@@ -6,6 +6,7 @@ import pathlib
 import geopandas as gpd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
@@ -317,9 +318,8 @@ def _create_risk_summary(
     """Output a summary spreadsheet for climate risk for a given asset."""
     # TODO (DJ): Allow risk summary to work with point data as well as line data.
     # TODO (DJ): Add handling of case where no scenario distinction exists
-    out_path.mkdir(parents=True, exist_ok=True)
-    asset_risk["length"] = asset_risk.geometry.length
-    total_length = asset_risk["length"].sum()
+    asset_risk["length_m"] = asset_risk.geometry.length
+    total_length = asset_risk["length_m"].sum()
 
     risk_distribution = pd.DataFrame(
         [
@@ -347,7 +347,7 @@ def _create_risk_summary(
             [
                 {
                     descriptive_col: descriptive_feature,
-                    "length": 0
+                    "length_m": 0
                 }
                 for descriptive_feature in asset_risk[descriptive_col].unique()
             ]
@@ -374,7 +374,11 @@ def _create_risk_summary(
                 descriptive_cols,
             )
 
-            _hazard_distribution_plot(risk_distribution, sub_hazard, out_path)
+            _hazard_distribution_plot(
+                risk_distribution,
+                sub_hazard,
+                out_path / "Risk Distribution"
+            )
 
         risk_distribution, risk_averages = _fill_risk_summary_column(
             asset_risk,
@@ -391,7 +395,16 @@ def _create_risk_summary(
             descriptive_cols,
         )
 
-        _hazard_distribution_plot(risk_distribution, main_hazard, out_path)
+        _hazard_distribution_plot(
+            risk_distribution,
+            main_hazard,
+            out_path / "Risk Distribution"
+        )
+
+    _risk_averages_plot(
+        risk_averages,
+        out_path / "Risk Averages"
+    )
 
 
     return risk_distribution, risk_averages, descriptive_risk_averages
@@ -424,7 +437,7 @@ def _fill_risk_summary_column(
                     (asset_risk[risk_column] >= lower) &
                     (asset_risk[risk_column] < upper)
                 )
-            risk_length = asset_risk.loc[mask, "length"].sum()
+            risk_length = asset_risk.loc[mask, "length_m"].sum()
             pct_risk_in_category = (risk_length / total_length) * 100
             risk_distribution.loc[
                 risk_distribution["Risk Category"] == category,
@@ -432,14 +445,14 @@ def _fill_risk_summary_column(
             ] = round(pct_risk_in_category, 1)
 
         length_weighted_avgs[scenario] = round((
-            asset_risk[risk_column] * asset_risk["length"]
+            asset_risk[risk_column] * asset_risk["length_m"]
         ).sum() / total_length, 1)
 
     increased_risk_length = asset_risk[
         (
             asset_risk[f"{hazard}_{Scenarios.FORECAST}"]
             > asset_risk[f"{hazard}_{Scenarios.CURRENT}"]
-        )]["length"].sum()
+        )]["length_m"].sum()
     pct_increased_risks[hazard] = round((increased_risk_length / total_length) * 100)
 
     change_in_risk[hazard] = round((
@@ -469,16 +482,16 @@ def _fill_descriptive_risk_averages(
             asset_descriptive_risk = asset_risk[
                 asset_risk[descriptive_col] == descriptive_feature
             ]
-            total_desc_length = asset_descriptive_risk["length"].sum()
+            total_desc_length = asset_descriptive_risk["length_m"].sum()
             descriptive_risk_averages[descriptive_col].loc[
                 descriptive_risk_averages[descriptive_col][descriptive_col] == descriptive_feature, 
-                "length"
+                "length_m"
             ] = round(total_desc_length)
             for scenario in Scenarios:
                 risk_column = f"{hazard}_{scenario}"
                 out_risk_column = f"{scenario.capitalize()} {hazard.replace('_', ' ').title()}"
                 length_weighted_avg = round(
-                    (asset_descriptive_risk[risk_column] * asset_descriptive_risk["length"]).sum() / total_desc_length
+                    (asset_descriptive_risk[risk_column] * asset_descriptive_risk["length_m"]).sum() / total_desc_length
                 )
                 descriptive_risk_averages[descriptive_col].loc[
                     descriptive_risk_averages[descriptive_col][descriptive_col] == descriptive_feature,
@@ -499,6 +512,7 @@ def _hazard_distribution_plot(
     out_path: pathlib.Path,
 ) -> None:
     """Generate distribution plots for the risk distribution summary."""
+    out_path.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 8))
 
     x = [
@@ -544,6 +558,32 @@ def _hazard_distribution_plot(
     ax.spines["bottom"].set_visible(False)
     fig.tight_layout(pad=2.0)
     fig.savefig(out_path / f"risk_distribution_{hazard}.png")
+
+
+def _risk_averages_plot(
+    risk_averages: pd.DataFrame,
+    out_path: pathlib.Path
+) -> None:
+    """Generate a plot for risk averages."""
+    out_path.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    current = risk_averages[f"Average {Scenarios.CURRENT.capitalize()} Risk"].to_numpy()
+    forecast = risk_averages[f"Average {Scenarios.FORECAST.capitalize()} Risk"].to_numpy()
+    hazards = [hazard.replace(" Risk", "") for hazard in risk_averages["Hazard"].to_list()]
+    x = np.arange(len(hazards))
+
+    width = 0.40
+
+    ax.bar(x-0.2, current, width=width, color="royalblue", label=Scenarios.CURRENT.capitalize())
+    ax.bar(x+0.2, forecast, width=width, color="darkorange", label=Scenarios.FORECAST.capitalize())
+    ax.set_xticks(x)
+    ax.set_xticklabels(hazards)
+    ax.set_xlabel("Hazard")
+    ax.set_ylabel("Length-Weighted Average Risk")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(out_path / "risk_averages.png")
 
 
 # LAYERING
