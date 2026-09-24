@@ -123,6 +123,7 @@ class NoHAMEntry(ctk.BaseConfig):
     year: int
     file_path: pathlib.Path
 
+
 class ModelRoadsEntry(ctk.BaseConfig):
     """Configuration for the transport model road network data.
 
@@ -285,7 +286,6 @@ class ExtremeWeather(ctk.BaseConfig):
     precip_winter: pathlib.Path
 
 
-
 class GeoSureEntry(ctk.BaseConfig):
     """Configuration for GeoSure data.
 
@@ -341,8 +341,6 @@ class Flooding(ctk.BaseConfig):
     rivers_sea: pathlib.Path
     surface_water: pathlib.Path
     groundwater: pathlib.Path
-
-
 
 
 class HazardsConfig(ctk.BaseConfig):
@@ -528,7 +526,7 @@ class SwitchConfig(ctk.BaseConfig):
                 self.bus_coach_stations,
                 self.tram_network,
                 self.rapid_transport_network,
-                self.bespoke
+                self.bespoke,
             ]
         ):
             raise ValueError("At least one infrastructure switch must be True.")

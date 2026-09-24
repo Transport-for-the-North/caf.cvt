@@ -66,7 +66,7 @@ class FloodingRiskCols(RiskColumn):
 
     RIVERS_SEA = "rivers_sea_flooding_risk"
     SURFACE_WATER = "surface_water_flooding_risk"
-#    GROUNDWATER = "groundwater_flooding_risk"
+    #    GROUNDWATER = "groundwater_flooding_risk"
 
     def get_cmap(self) -> str:
         """Return the appropriate colormap for a given flooding subhazard column."""
@@ -78,7 +78,7 @@ class FloodingRiskCols(RiskColumn):
         return {
             FloodingRiskCols.RIVERS_SEA: 0.5,
             FloodingRiskCols.SURFACE_WATER: 0.5,
-            #FloodingRiskCols.GROUNDWATER: 0.33
+            # FloodingRiskCols.GROUNDWATER: 0.33
         }
 
 
@@ -122,10 +122,7 @@ class CoastalErosionRiskCols(RiskColumn):
     @classmethod
     def get_weights(cls) -> dict[RiskColumn, float]:
         """Return appropriate weights for Coastal Erosion."""
-        return {
-            CoastalErosionRiskCols.EROSION: 0.5,
-            CoastalErosionRiskCols.GIZ: 0.5
-        }
+        return {CoastalErosionRiskCols.EROSION: 0.5, CoastalErosionRiskCols.GIZ: 0.5}
 
 
 class MainHazardRiskCols(RiskColumn):
@@ -279,7 +276,7 @@ class ImpactCols(RiskColumn):
             cls.UC3_IMPACT,
             cls.UC4_IMPACT,
             cls.UC5_IMPACT,
-            cls.IMPACT
+            cls.IMPACT,
         ]
 
 

@@ -191,7 +191,7 @@ def _nearest_join_infilling(
     for var in variables:
         risk_grid[var] = risk_grid[var].fillna(0)
 
-    LOG.info("Filled remaining %s NA values with 0",  final_remaining)
+    LOG.info("Filled remaining %s NA values with 0", final_remaining)
 
     return risk_grid
 
@@ -332,9 +332,7 @@ def _calculate_composite_score(
     """Calculate composite score given a dataframe with variables and corresponding weights."""
     # TODO (DJ): Consider alternative approach for calculating composite score,
     # e.g. taking max value, or weighted mean + maximum value
-    risk_data[output_col] = sum(
-        risk_data[col] * weight for col, weight in weights.items()
-    )
+    risk_data[output_col] = sum(risk_data[col] * weight for col, weight in weights.items())
 
     return risk_data
 
@@ -437,9 +435,7 @@ def plot_choropleth(
     current_col = f"{column}_{Scenarios.CURRENT}"
     forecast_col = f"{column}_{Scenarios.FORECAST}"
 
-    has_scenarios = (
-        current_col in risk_data.columns and forecast_col in risk_data.columns
-    )
+    has_scenarios = current_col in risk_data.columns and forecast_col in risk_data.columns
 
     if basemap_source is not None:
         risk_data = risk_data.to_crs(epsg=3857)
@@ -458,8 +454,9 @@ def plot_choropleth(
             legend=True,
             vmin=feature_range[0],
             vmax=feature_range[1],
-            alpha=_PLOT_ALPHA_BASEMAP if basemap_source is not None
-                    else _PLOT_ALPHA_NO_BASEMAP,
+            alpha=_PLOT_ALPHA_BASEMAP
+            if basemap_source is not None
+            else _PLOT_ALPHA_NO_BASEMAP,
         )
 
         risk_data.plot(
@@ -471,7 +468,8 @@ def plot_choropleth(
             legend=True,
             vmin=feature_range[0],
             vmax=feature_range[1],
-            alpha=_PLOT_ALPHA_BASEMAP if basemap_source is not None
+            alpha=_PLOT_ALPHA_BASEMAP
+            if basemap_source is not None
             else _PLOT_ALPHA_NO_BASEMAP,
         )
 
@@ -494,8 +492,9 @@ def plot_choropleth(
             legend=True,
             vmin=feature_range[0],
             vmax=feature_range[1],
-            alpha=_PLOT_ALPHA_BASEMAP if basemap_source is not None
-                    else _PLOT_ALPHA_NO_BASEMAP,
+            alpha=_PLOT_ALPHA_BASEMAP
+            if basemap_source is not None
+            else _PLOT_ALPHA_NO_BASEMAP,
         )
         if basemap_source is not None:
             ctx.add_basemap(ax, source=basemap_source)
@@ -511,7 +510,7 @@ def _validate_index(
     index: gpd.GeoDataFrame,
     index_vars: list[RiskColumn],
     feature_range: tuple[int, int],
-    scenarios: bool = True
+    scenarios: bool = True,
 ) -> None:
     """Validate a given index."""
     if index.isna().any().any():
@@ -1179,16 +1178,15 @@ def _flooding_index(
     except DataSourceError:
         LOG.warning(
             "Flooding Risk overlay not found at %s \n Falling back to default overlay.",
-            overlay_path
+            overlay_path,
         )
         flooding_risk = gpd.read_file(
-            config.paths.raw_input.parent /
-            "model interim outputs" /
-            file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH,
+            config.paths.raw_input.parent
+            / "model interim outputs"
+            / file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH,
             mask=boundary,
             layer="flood_overlay",
         )
-
 
     # Map original risk categories to numeric scores
     for col in [
@@ -1343,8 +1341,9 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
     geosure_layers = {}
     for geosure_hazard in GroundStabilityRiskCols:
         geosure_layers[geosure_hazard] = gpd.read_file(
-            config.paths.model_input /
-            file_paths.GEOSURE_MODEL_INPUT_PATH / f"{geosure_hazard}.gpkg"
+            config.paths.model_input
+            / file_paths.GEOSURE_MODEL_INPUT_PATH
+            / f"{geosure_hazard}.gpkg"
         )
 
     ground_stability = _overlay_and_clean(
@@ -1364,14 +1363,12 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
     ground_stability = _iterative_spatial_infilling(
         ground_stability,
         list(GroundStabilityRiskCols),
-        _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE
+        _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE,
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
     ground_stability = _min_max_scaling(
-        ground_stability,
-        list(GroundStabilityRiskCols),
-        feature_range
+        ground_stability, list(GroundStabilityRiskCols), feature_range
     )
 
     ground_stability = _calculate_composite_score(
@@ -1384,7 +1381,7 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
         ground_stability,
         [*GroundStabilityRiskCols, MainHazardRiskCols.GROUND_STABILITY],
         feature_range,
-        scenarios=False
+        scenarios=False,
     )
 
     _audit_index(

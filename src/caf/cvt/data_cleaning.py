@@ -1203,8 +1203,7 @@ def _split_metro_links(
 
     metro_links["metro_link_id"] = range(1, len(metro_links)+1)
 
-    metro_links = _manual_metro_adjustments(metro_links)
-    return metro_links
+    return _manual_metro_adjustments(metro_links)
 
 
 def _snap_stations_to_links(
@@ -1253,7 +1252,7 @@ def _manual_metro_adjustments(metro_links: gpd.GeoDataFrame) -> gpd.GeoDataFrame
     # Apply manual adjustments to the metro links
     merge_link_ids = [
         (34, 35), (55, 66), (64, 65, 70), (9, 71), (59, 60), (13, 21, 56), (14, 13)
-        # (1, 2), (69, 68) These ones are end of the line past the station, unsure about merging
+        # (1, 2),(69, 68) These ones are end of the line past the station, unsure about merging
     ]
 
     rows_to_drop = set()
@@ -2006,12 +2005,14 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
     """Clean GeoSureHexGrids data, merge by nearest centroids, then write to file."""
     geosure_layers = {
         GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: gpd.read_file(
-            config.paths.raw_input / config.hazards.ground_stability.geosure.collapsible_deposits,
+            config.paths.raw_input /
+            config.hazards.ground_stability.geosure.collapsible_deposits,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.COMPRESSIBLE_GROUND: gpd.read_file(
-            config.paths.raw_input / config.hazards.ground_stability.geosure.compressible_ground,
+            config.paths.raw_input /
+            config.hazards.ground_stability.geosure.compressible_ground,
             mask=boundary,
             columns=["CLASS"],
         ),
@@ -2606,7 +2607,9 @@ def _clean_nexus_demand(config: model_config.Config) -> None:
     )
 
     demand = baseline.merge(
-        future[["Prod Station ID", "Attr Station ID", "Time Period ID", "Ticket ID", "Demand"]],
+        future[
+            ["Prod Station ID", "Attr Station ID", "Time Period ID", "Ticket ID", "Demand"]
+        ],
         on=["Prod Station ID", "Attr Station ID", "Time Period ID", "Ticket ID"],
         how="inner",
         suffixes=(f"_{Scenarios.CURRENT}", f"_{Scenarios.FORECAST}"),
