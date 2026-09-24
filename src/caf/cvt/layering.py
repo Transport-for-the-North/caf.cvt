@@ -4,10 +4,11 @@ import logging
 import pathlib
 
 import geopandas as gpd
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+import openpyxl
 import pandas as pd
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 from caf.cvt.definitions import (
@@ -46,6 +47,14 @@ _RISK_CATEGORIES = {
     "Medium": (40, 60),
     "High": (60, 80),
     "Very High": (80, 100)
+}
+
+_RISK_CATEGORY_COLOURS = {
+    (0, 20): "000080",  # navy
+    (20, 40): "add8e6",  # light blue
+    (40, 60): "FFFF00",  # yellow
+    (60, 80): "c26a77",  # orange
+    (80, 100): "FF0000",  # red
 }
 
 
@@ -406,6 +415,12 @@ def _create_risk_summary(
         out_path / "Risk Averages"
     )
 
+    _write_risk_summary(
+        risk_distribution,
+        risk_averages,
+        descriptive_risk_averages,
+        out_path / "Risk Summary.xlsx"
+    )
 
     return risk_distribution, risk_averages, descriptive_risk_averages
 
@@ -584,6 +599,53 @@ def _risk_averages_plot(
     ax.legend()
     fig.tight_layout()
     fig.savefig(out_path / "risk_averages.png")
+
+
+def _write_risk_summary(
+    risk_distribution: pd.DataFrame,
+    risk_averages: pd.DataFrame,
+    descriptive_risk_averages: pd.DataFrame,
+    out_path: pathlib.Path
+) -> None:
+    """Write a risk summary to an Excel file."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Risk Distribution"
+
+    for r_idx, row in enumerate(dataframe_to_rows(risk_distribution, index=False, header=True), 1):
+        for c_idx, value in enumerate(row, 1):
+            # Create cell
+            cell = ws.cell(row=r_idx, column=c_idx, value=value)
+
+            # Determine formatting dynamically
+            if r_idx == 1:  # Apply fill only to header row:
+                colour = "000000" # black
+                bold = True
+            else:
+                colour = "808080" # medium grey
+                bold = False
+
+            if isinstance(value, (int, float)) and value != 0:
+                for (lower, upper), col_code in _RISK_CATEGORY_COLOURS.items():
+                    if upper == 100 and lower <= value <= upper:
+                        colour = col_code
+                        break
+                    if lower <= value < upper:
+                        colour = col_code
+                        break
+
+                cell.number_format = '0%' # weird formatting from this
+
+            # Format cell
+            cell.fill = openpyxl.styles.PatternFill(
+                start_color=colour, end_color=colour, fill_type="solid"
+            )
+            cell.font = openpyxl.styles.Font(
+                color="FFFFFF", # White text
+                bold=bold
+            )
+
+    wb.save(out_path)
 
 
 # LAYERING
