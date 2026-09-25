@@ -4,9 +4,11 @@ import logging
 import pathlib
 
 import geopandas as gpd
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import openpyxl
+from openpyxl import cell
 import pandas as pd
 from openpyxl.utils.dataframe import dataframe_to_rows
 
@@ -326,8 +328,8 @@ def _create_risk_summary(
     """Output a summary spreadsheet for climate risk for a given asset."""
     # TODO (DJ): Allow risk summary to work with point data as well as line data.
     # TODO (DJ): Add handling of case where no scenario distinction exists
-    asset_risk["length_m"] = asset_risk.geometry.length
-    total_length = asset_risk["length_m"].sum()
+    asset_risk["Length (m)"] = asset_risk.geometry.length
+    total_length = asset_risk["Length (m)"].sum()
 
     risk_distribution = pd.DataFrame(
         [
@@ -353,7 +355,7 @@ def _create_risk_summary(
     descriptive_risk_averages = {
         descriptive_col: pd.DataFrame(
             [
-                {descriptive_col: descriptive_feature, "length_m": 0}
+                {descriptive_col: descriptive_feature, "Length (m)": 0}
                 for descriptive_feature in asset_risk[descriptive_col].unique()
             ]
         )
@@ -430,14 +432,14 @@ def _fill_risk_summary_column(
                 mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] <= upper)
             else:
                 mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] < upper)
-            risk_length = asset_risk.loc[mask, "length_m"].sum()
+            risk_length = asset_risk.loc[mask, "Length (m)"].sum()
             pct_risk_in_category = (risk_length / total_length) * 100
             risk_distribution.loc[
                 risk_distribution["Risk Category"] == category, out_risk_column
             ] = round(pct_risk_in_category, 1)
 
         length_weighted_avgs[scenario] = round(
-            (asset_risk[risk_column] * asset_risk["length_m"]).sum() / total_length, 1
+            (asset_risk[risk_column] * asset_risk["Length (m)"]).sum() / total_length, 1
         )
 
     increased_risk_length = asset_risk[
@@ -445,7 +447,7 @@ def _fill_risk_summary_column(
             asset_risk[f"{hazard}_{Scenarios.FORECAST}"]
             > asset_risk[f"{hazard}_{Scenarios.CURRENT}"]
         )
-    ]["length_m"].sum()
+    ]["Length (m)"].sum()
     pct_increased_risks[hazard] = round((increased_risk_length / total_length) * 100)
 
     change_in_risk[hazard] = round(
@@ -475,11 +477,11 @@ def _fill_descriptive_risk_averages(
             asset_descriptive_risk = asset_risk[
                 asset_risk[descriptive_col] == descriptive_feature
             ]
-            total_desc_length = asset_descriptive_risk["length_m"].sum()
+            total_desc_length = asset_descriptive_risk["Length (m)"].sum()
             descriptive_risk_averages[descriptive_col].loc[
                 descriptive_risk_averages[descriptive_col][descriptive_col]
                 == descriptive_feature,
-                "length_m",
+                "Length (m)",
             ] = round(total_desc_length)
             for scenario in Scenarios:
                 risk_column = f"{hazard}_{scenario}"
@@ -487,7 +489,7 @@ def _fill_descriptive_risk_averages(
                 length_weighted_avg = round(
                     (
                         asset_descriptive_risk[risk_column]
-                        * asset_descriptive_risk["length_m"]
+                        * asset_descriptive_risk["Length (m)"]
                     ).sum()
                     / total_desc_length
                 )
@@ -618,25 +620,6 @@ def _write_risk_summary(
     """Write a risk summary to an Excel file."""
     wb = openpyxl.Workbook()
 
-    wb = _write_risk_distribution(
-        workbook=wb,
-        risk_distribution=risk_distribution,
-        out_path=out_path
-    )
-
-    wb.save(out_path / "Risk Summary.xlsx")
-    wb.close()
-
-
-def _write_risk_distribution(
-    workbook: openpyxl.Workbook,
-    risk_distribution: pd.DataFrame,
-    out_path: pathlib.Path,
-) -> openpyxl.Workbook:
-    """Write risk distribution data and plots to an Excel workbook sheet."""
-    ws = workbook.active
-    ws.title = "Risk Distribution"
-
     thin_border = openpyxl.styles.Side(border_style="thin", color="FFFFFF")
     header_left = openpyxl.styles.Border(left=thin_border, top=thin_border, bottom=thin_border)
     header_right = openpyxl.styles.Border(
@@ -646,32 +629,67 @@ def _write_risk_distribution(
     cell_left = openpyxl.styles.Border(left=thin_border)
     cell_right = openpyxl.styles.Border(right=thin_border)
 
+    wb = _write_risk_distribution(
+        workbook=wb,
+        risk_distribution=risk_distribution,
+        thin_border=thin_border,
+        out_path=out_path
+    )
+
+    wb = _write_risk_averages(
+        workbook=wb,
+        risk_averages=risk_averages,
+        thin_border=thin_border,
+        out_path=out_path
+    )
+
+    wb = _write_descriptive_risk_averages(
+        workbook=wb,
+        thin_border=thin_border,
+        descriptive_risk_averages=descriptive_risk_averages,
+
+    )
+
+    wb.save(out_path / "Risk Summary.xlsx")
+    wb.close()
+
+
+def _write_risk_distribution(
+    workbook: openpyxl.Workbook,
+    risk_distribution: pd.DataFrame,
+    thin_border: openpyxl.styles.Side,
+    out_path: pathlib.Path,
+) -> openpyxl.Workbook:
+    """Write risk distribution data and plots to an Excel workbook sheet."""
+    ws = workbook.active
+    ws.title = "Risk Distribution"
+
     for r_idx, row in enumerate(
         dataframe_to_rows(risk_distribution, index=False, header=True), 1
     ):
         for c_idx, value in enumerate(row, 1):
-            # Create cell
-            cell = ws.cell(row=r_idx, column=c_idx, value=value)
-
             column_letter = openpyxl.utils.get_column_letter(c_idx)
             ws.column_dimensions[column_letter].width = 15
             horizontal_alignment = "left"  # Default alignment for all cells
 
+            text_colour = "FFFFFF"  # White text
+
             # Determine formatting dynamically
             if r_idx == 1:  # Apply fill only to header row:
-                colour = "000000"  # black
+                fill_colour = "000000"  # black
                 bold = True
+                border = openpyxl.styles.Border(bottom=thin_border)
                 if c_idx % 2 != 0:
-                    border = header_left
+                    border = openpyxl.styles.Border(left=thin_border, top=thin_border, bottom=thin_border)
                 else:
-                    border = header_right
+                    border = openpyxl.styles.Border(right=thin_border, top=thin_border, bottom=thin_border)
             else:
-                colour = "808080"  # medium grey
+                fill_colour = "808080"  # medium grey
                 bold = False
                 if c_idx % 2 != 0:
-                    border = cell_left
+                    border = openpyxl.styles.Border(left=thin_border)
                 else:
-                    border = cell_right
+                    border = openpyxl.styles.Border(right=thin_border)
 
             if isinstance(value, (int, float)) and value != 0:
                 cell = ws.cell(row=r_idx, column=c_idx, value=value / 100)
@@ -695,19 +713,14 @@ def _write_risk_distribution(
                 cell = ws.cell(row=r_idx, column=c_idx, value=value)
 
             # Format cell
-            cell.fill = openpyxl.styles.PatternFill(
-                start_color=colour, end_color=colour, fill_type="solid"
-            )
-
-            cell.font = openpyxl.styles.Font(
-                name="Verdana",
-                color="FFFFFF",  # White text
+            _style_cell(
+                cell,
+                fill_colour=fill_colour,
+                text_colour=text_colour,
                 bold=bold,
+                border=border,
+                alignment=horizontal_alignment,
             )
-            cell.alignment = openpyxl.styles.Alignment(
-                wrap_text=True, horizontal=horizontal_alignment
-            )
-            cell.border = border
 
     hazards = list(
         dict.fromkeys(
@@ -740,9 +753,187 @@ def _write_risk_distribution(
             image_column = 2
             image_row += 21
 
-        risk_distribution_image = None
+    return workbook
+
+
+def _write_risk_averages(
+    workbook: openpyxl.Workbook,
+    risk_averages: pd.DataFrame,
+    thin_border: openpyxl.styles.Side,
+    out_path: pathlib.Path,
+) -> openpyxl.Workbook:
+    """Write risk averages data and plots to an Excel workbook sheet."""
+    ws = workbook.create_sheet(title="Risk Averages")
+    gn_yl_red_cmap = mpl.colormaps["RdYlGn_r"]
+    oranges_cmap = mpl.colormaps["Oranges"]
+
+    # Write risk averages data to the sheet
+    for r_idx, row in enumerate(dataframe_to_rows(risk_averages, index=False, header=True), 1):
+        for c_idx, value in enumerate(row, 1):
+            column_letter = openpyxl.utils.get_column_letter(c_idx)
+            ws.column_dimensions[column_letter].width = 15
+            horizontal_alignment = "left"  # Default alignment for all cells
+
+            # Determine formatting dynamically
+            if r_idx == 1:  # Apply fill only to header row:
+                fill_colour = "000000"  # black
+                bold = True
+                text_colour = "FFFFFF" # white
+            elif c_idx == 1:
+                if r_idx % 2 == 0:
+                    fill_colour = "a9a9a9"  # dark grey for even rows
+                else:
+                    fill_colour = "808080"  # grey for odd rows
+                bold = False
+                text_colour = "000000" # black
+
+            if isinstance(value, (int, float)):
+                cell = ws.cell(row=r_idx, column=c_idx, value=value)
+                if c_idx in [2, 3]:
+                    fill_colour = mpl.colors.to_hex(gn_yl_red_cmap(value / 100)).replace("#", "")
+                elif c_idx == 4:
+                    if value > 0:
+                        fill_colour = "90ee90" # light green for positive values
+                    else:
+                        fill_colour = "db7093" # pale violet red for negative values
+                elif c_idx == 5:
+                    fill_colour = mpl.colors.to_hex(oranges_cmap(value / 100)).replace("#", "")
+            else:
+                cell = ws.cell(row=r_idx, column=c_idx, value=value)
+                if r_idx == 1:
+                    border = openpyxl.styles.Border(right=thin_border, top=thin_border, bottom=thin_border)
+                else:
+                    border = openpyxl.styles.Border(right=thin_border)
+
+            # Format cell
+            _style_cell(
+                cell=cell,
+                fill_colour=fill_colour,
+                text_colour=text_colour,
+                bold=bold,
+                alignment=horizontal_alignment,
+                border=border,
+            )
+
+    image_row = len(risk_averages) + 3
+    image_column = 1
+
+    risk_averages_image = openpyxl.drawing.image.Image(
+        out_path / "Risk Averages" / "risk_averages.png"
+    )
+    risk_averages_image.width = 500
+    risk_averages_image.height = 300
+
+    ws.add_image(
+        risk_averages_image,
+        f"{openpyxl.utils.get_column_letter(image_column)}{image_row}",
+    )
 
     return workbook
+
+
+def _write_descriptive_risk_averages(
+    workbook: openpyxl.Workbook,
+    descriptive_risk_averages: dict[str, pd.DataFrame],
+    thin_border: openpyxl.styles.Side,
+) -> openpyxl.Workbook:
+    """Write descriptive risk averages data to the Excel workbook sheet."""
+    # TODO (DJ): Need to clean up the structure column names before they go into this
+    ws = workbook.create_sheet(title="Descriptive Risk Averages")
+    gn_yl_red_cmap = mpl.colormaps["RdYlGn_r"]
+    total_length = 0
+
+    for _, risk_averages in descriptive_risk_averages.items():
+        for r_idx, row in enumerate(dataframe_to_rows(risk_averages, index=False, header=True), 1):
+            for c_idx, value in enumerate(row, 1):
+                column_letter = openpyxl.utils.get_column_letter(c_idx)
+                ws.column_dimensions[column_letter].width = 15
+                horizontal_alignment = "left"  # Default alignment for all cells
+                current_row = total_length + r_idx
+
+                cell = ws.cell(row=current_row, column=c_idx, value=value)
+
+                fill_colour = "FFFFFF"  # default white fill
+                text_colour = "000000"  # default black text
+                bold = False
+                border = None  # default border for all cells
+
+                if r_idx == 1:  # Apply fill only to header row:
+                    fill_colour = "008080"  # teal
+                    bold = True
+                    text_colour = "FFFFFF" # white
+                    border = openpyxl.styles.Border(top=thin_border, bottom=thin_border)
+                    if c_idx == 1:
+                        border = openpyxl.styles.Border(left=thin_border, top=thin_border, bottom=thin_border)
+                    elif c_idx == 2 or (c_idx - 3) % 3 not in [0, 1]:
+                        border = openpyxl.styles.Border(right=thin_border, top=thin_border, bottom=thin_border)
+
+                elif c_idx in [1, 2]:
+                    if r_idx % 2 == 0:
+                        fill_colour = "a9a9a9"  # dark grey for even rows
+                    else:
+                        fill_colour = "808080"  # grey for odd rows
+                    bold = False
+                    if c_idx == 2:
+                        border = openpyxl.styles.Border(right=thin_border)
+                elif (c_idx - 3) % 3 in [0, 1]:
+                    fill_colour = mpl.colors.to_hex(gn_yl_red_cmap(value / 100)).replace("#", "")
+                else:
+                    border = openpyxl.styles.Border(right=thin_border)
+                    if value > 0:
+                        cell.value = f"↑ {value:.1f}"
+                        text_colour = "F8696B" # red
+                    elif value < 0:
+                        cell.value = f"↓ {value:.1f}"
+                        text_colour = "63BE7B" # green
+                    else:
+                        cell.value = f"→ {value:.1f}"
+                        text_colour = "FFEB84" # yellow
+
+
+                # Format cell
+                _style_cell(
+                    cell=cell,
+                    fill_colour=fill_colour,
+                    text_colour=text_colour,
+                    bold=bold,
+                    border=border,
+                    alignment=horizontal_alignment,
+                )
+
+        total_length += len(risk_averages) + 2
+
+
+    return workbook
+
+
+def _style_cell(
+        cell: openpyxl.cell.Cell,
+        *,
+        fill_colour: str,
+        text_colour: str = "000000",
+        bold: bool = False,
+        border: openpyxl.styles.borders.Border | None = None,
+        alignment: str = "left"
+) -> None:
+    """Apply styling to a given cell."""
+    cell.fill = openpyxl.styles.PatternFill(
+        fill_type="solid",
+        start_color=fill_colour,
+        end_color=fill_colour,
+    )
+    cell.font = openpyxl.styles.Font(
+        name="Verdana",
+        color=text_colour,
+        bold=bold,
+    )
+    cell.alignment = openpyxl.styles.Alignment(
+        wrap_text=True,
+        horizontal=alignment
+    )
+    if border:
+        cell.border = border
+
 
 # LAYERING
 
