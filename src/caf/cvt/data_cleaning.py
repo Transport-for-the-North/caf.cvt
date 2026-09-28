@@ -327,7 +327,7 @@ def data_cleaning(config: model_config.Config) -> None:
     boundary = get_boundary(config)
 
     _clean_infrastructure(config, boundary)
-    #_clean_hazards(config, boundary)
+    _clean_hazards(config, boundary)
     _clean_impact(config, boundary)
 
 

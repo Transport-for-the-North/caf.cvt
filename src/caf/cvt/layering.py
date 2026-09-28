@@ -8,7 +8,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import openpyxl
-from openpyxl import cell
 import pandas as pd
 from openpyxl.utils.dataframe import dataframe_to_rows
 
@@ -621,13 +620,6 @@ def _write_risk_summary(
     wb = openpyxl.Workbook()
 
     thin_border = openpyxl.styles.Side(border_style="thin", color="FFFFFF")
-    header_left = openpyxl.styles.Border(left=thin_border, top=thin_border, bottom=thin_border)
-    header_right = openpyxl.styles.Border(
-        right=thin_border, top=thin_border, bottom=thin_border
-    )
-
-    cell_left = openpyxl.styles.Border(left=thin_border)
-    cell_right = openpyxl.styles.Border(right=thin_border)
 
     wb = _write_risk_distribution(
         workbook=wb,
@@ -1079,6 +1071,7 @@ def _os_open_road_risk(
 
     _create_risk_summary(
         os_road_risk,
+        [],
         audit_path / "Summary" / "Road" / "OS Roads",
     )
 
@@ -1133,10 +1126,20 @@ def _noham_road_risk(
 
     noham_risk = _infrastructure_risk_intersect(noham_net_flows, hazard_layers)
 
+    noham_risk = _apply_asset_hazard_weighting(
+        noham_risk, AssetTypes.ROAD, hazards=hazard_layers
+    )
+
     feature_range = (config.constants.score_min, config.constants.score_max)
     noham_risk = _noham_impact_index(noham_risk, feature_range)
 
     risk_impact_cols = [*risk_cols, *ImpactCols.get_noham_impact_cols()]
+
+    _create_risk_summary(
+        noham_risk,
+        [],
+        audit_path / "Summary" / "Road" / "NoHAM",
+    )
 
     _audit_infrastructure_risk(
         noham_risk,
@@ -1280,6 +1283,12 @@ def _model_road_risk(
     model_road_risk = _model_road_impact_index(model_road_risk, feature_range)
 
     risk_impact_cols = [*risk_cols, *ImpactCols]
+
+    _create_risk_summary(
+        model_road_risk,
+        [],
+        audit_path / "Summary" / "Road" / "Model Roads",
+    )
 
     _audit_infrastructure_risk(
         model_road_risk,
@@ -1521,6 +1530,18 @@ def _freight_rail_risk(
     # Set the correct CRS
     freight_rail_network_risk = freight_rail_network_risk.set_crs(
         data_cleaning.BNG_CRS, allow_override=True
+    )
+
+    _create_risk_summary(
+        freight_rail_network_risk,
+        [
+            OSRailCols.DESCRIPTION,
+            OSRailCols.STRUCTURE,
+            OSRailCols.PHYSICAL_LEVEL,
+            OSRailCols.RAILWAY_USE,
+            OSRailCols.TRACK_REPRESENTATION,
+        ],
+        config.paths.audit_path / "Summary" / "Rail" / "Freight Rail",
     )
 
     _audit_infrastructure_risk(
@@ -2195,6 +2216,12 @@ def _ncn_risk(
 
     ncn_risk = _infrastructure_risk_intersect(ncn, hazard_layers)
 
+    _create_risk_summary(
+        ncn_risk,
+        [],
+        config.paths.audit_path / "Summary" / "Other" / "National Cycle Network",
+    )
+
     _audit_infrastructure_risk(
         ncn_risk,
         "National Cycle Network",
@@ -2266,6 +2293,12 @@ def _tram_network_risk(
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
+    _create_risk_summary(
+        tram_risk,
+        [],
+        config.paths.audit_path / "Summary" / "Other" / "Tram Network Risk",
+    )
+
     _audit_infrastructure_risk(
         tram_risk,
         "Tram Network",
@@ -2332,6 +2365,12 @@ def _rapid_transport_network_risk(
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
         feature_range=feature_range,
+    )
+
+    _create_risk_summary(
+        rapid_transport_risk,
+        [],
+        config.paths.audit_path / "Summary" / "Other" / "Rapid Transport Network",
     )
 
     _audit_infrastructure_risk(
@@ -2414,6 +2453,12 @@ def _nexus_metro_links_risk(
     feature_range = (config.constants.score_min, config.constants.score_max)
 
     metro_links_risk = _metro_impact_index(metro_links_risk, feature_range)
+
+    _create_risk_summary(
+        metro_links_risk,
+        [],
+        config.paths.audit_path / "Summary" / "Bespoke" / "Nexus Metro Network",
+    )
 
     _audit_infrastructure_risk(
         metro_links_risk,

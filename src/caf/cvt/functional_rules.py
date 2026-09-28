@@ -1160,6 +1160,7 @@ def _flooding_index(
 
     # Read the direct overlay result, and filter to region
     # Eventually want to rename the layer to 'flooding_overlay'
+    LOG.debug("Reading flooding overlay...")
     try:
         flooding_risk = gpd.read_file(
             overlay_path,
@@ -1188,6 +1189,8 @@ def _flooding_index(
             layer="flood_overlay",
         )
 
+    LOG.debug("Loaded flooding overlay.")
+    LOG.debug("Applying functional rules to flooding overlay...")
     # Map original risk categories to numeric scores
     for col in [
         f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}",
@@ -1227,12 +1230,12 @@ def _flooding_index(
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
-    _audit_index(
-        flooding_risk,
-        [*FloodingRiskCols, MainHazardRiskCols.FLOODING],
-        audit_path / "Flooding" / "Flooding Risk Index",
-        feature_range,
-    )
+    #_audit_index(
+    #    flooding_risk,
+    #    [*FloodingRiskCols, MainHazardRiskCols.FLOODING],
+    #    audit_path / "Flooding" / "Flooding Risk Index",
+    #    feature_range,
+    #)
 
     data_cleaning.write_to_file(
         flooding_risk,
