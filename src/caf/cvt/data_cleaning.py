@@ -2070,44 +2070,9 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
 def _clean_coastal_erosion(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean coastal erosion data ready for analysis."""
     LOG.info("Cleaning coastal erosion data...")
-    _clean_ground_instability_zones(config, boundary)
     _clean_ncerm(config, boundary)
     LOG.info("Finished cleaning coastal erosion data.")
 
-
-def _clean_ground_instability_zones(
-    config: model_config.Config, boundary: gpd.GeoDataFrame
-) -> None:
-    """Clean Ground Instability Zones data from NCERM, then write to file."""
-    ncerm_giz = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.hazards.coastal_erosion.zip_path}"
-        f"!{config.hazards.coastal_erosion.file_path}",
-        layer="NCERM_Ground_Instability_Zone",
-        mask=boundary,
-        columns=["smp_no"],
-    )
-    if ncerm_giz.empty:
-        LOG.info("Ground Instability Zones layer empty after filtering. Writing empty file.")
-        write_to_file(
-            gpd.GeoDataFrame(columns=["smp_no", "geometry"], geometry="geometry", crs=BNG_CRS),
-            config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH,
-        )
-        return
-    len_before_filter = len(ncerm_giz)
-    ncerm_giz = clip_to_boundary(ncerm_giz, boundary)
-    filter_removed = len_before_filter - len(ncerm_giz)
-    LOG.info(
-        "Ground Instability Zones filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    ncerm_giz = explode_to_polygons(ncerm_giz)
-
-    write_to_file(
-        ncerm_giz,
-        config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH,
-    )
 
 
 def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:

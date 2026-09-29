@@ -14,7 +14,6 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 from caf.cvt.definitions import (
     AssetTypes,
-    CoastalErosionRiskCols,
     ExtremeWeatherRiskCols,
     FloodingRiskCols,
     GroundStabilityRiskCols,
@@ -34,13 +33,14 @@ LOG = logging.getLogger(__name__)
 
 _DEMAND_WEIGHT = 0.5
 
-_TRAIN_STATIONS_BUFFER_SIZE_M = 100
+_TRAIN_STATIONS_BUFFER_SIZE_M = 25
 _CHARGING_SITES_BUFFER_SIZE_M = 25
 _BUS_COACH_STATIONS_BUFFER_SIZE_M = 50
 _TRAM_STATIONS_BUFFER_SIZE_M = 25
 _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M = 50
 _FERRY_TERMINALS_BUFFER_SIZE_M = 50
 _PETROL_STATIONS_BUFFER_SIZE_M = 50
+_METRO_STATION_BUFFER_SIZE_M = 25
 
 _RISK_CATEGORIES = {
     "Very Low": (0, 20),
@@ -310,6 +310,9 @@ def _apply_asset_hazard_weighting(
                 weights,
                 main_hazard,
             )
+        elif main_hazard == MainHazardRiskCols.COASTAL_EROSION:
+            # Special case since subhazards not included for coastal erosion
+            continue
         else:
             asset_risk = functional_rules._calculate_composite_score_scenarios(
                 asset_risk,
@@ -516,8 +519,7 @@ def _hazard_distribution_plot(
     hazard: MainHazardRiskCols
     | ExtremeWeatherRiskCols
     | FloodingRiskCols
-    | GroundStabilityRiskCols
-    | CoastalErosionRiskCols,
+    | GroundStabilityRiskCols,
     out_path: pathlib.Path,
 ) -> None:
     """Generate distribution plots for the risk distribution summary."""
@@ -577,6 +579,7 @@ def _hazard_distribution_plot(
     ax.spines["bottom"].set_visible(False)
     fig.tight_layout(pad=2.0)
     fig.savefig(out_path / f"risk_distribution_{hazard}.png")
+    plt.close(fig)
 
 
 def _risk_averages_plot(risk_averages: pd.DataFrame, out_path: pathlib.Path) -> None:
@@ -603,11 +606,13 @@ def _risk_averages_plot(risk_averages: pd.DataFrame, out_path: pathlib.Path) -> 
     )
     ax.set_xticks(x)
     ax.set_xticklabels(hazards)
+    plt.xticks(rotation=45, ha="right")
     ax.set_xlabel("Hazard")
     ax.set_ylabel("Length-Weighted Average Risk")
     ax.legend()
     fig.tight_layout()
     fig.savefig(out_path / "risk_averages.png")
+    plt.close(fig)
 
 
 def _write_risk_summary(
@@ -1069,6 +1074,7 @@ def _os_open_road_risk(
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
+    # TODO (DJ): Add descriptive cols
     _create_risk_summary(
         os_road_risk,
         [],
@@ -1135,6 +1141,7 @@ def _noham_road_risk(
 
     risk_impact_cols = [*risk_cols, *ImpactCols.get_noham_impact_cols()]
 
+    # TODO (DJ): Add descriptive cols
     _create_risk_summary(
         noham_risk,
         [],
@@ -1284,6 +1291,7 @@ def _model_road_risk(
 
     risk_impact_cols = [*risk_cols, *ImpactCols]
 
+    # TODO (DJ): Add descriptive cols
     _create_risk_summary(
         model_road_risk,
         [],
@@ -2216,6 +2224,7 @@ def _ncn_risk(
 
     ncn_risk = _infrastructure_risk_intersect(ncn, hazard_layers)
 
+    # TODO (DJ): Add descriptive cols
     _create_risk_summary(
         ncn_risk,
         [],
@@ -2293,6 +2302,7 @@ def _tram_network_risk(
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
+    # TODO (DJ): Add descriptive risk cols
     _create_risk_summary(
         tram_risk,
         [],
@@ -2369,7 +2379,13 @@ def _rapid_transport_network_risk(
 
     _create_risk_summary(
         rapid_transport_risk,
-        [],
+        [
+            OSRailCols.DESCRIPTION,
+            OSRailCols.STRUCTURE,
+            OSRailCols.PHYSICAL_LEVEL,
+            OSRailCols.RAILWAY_USE,
+            OSRailCols.TRACK_REPRESENTATION
+        ],
         config.paths.audit_path / "Summary" / "Other" / "Rapid Transport Network",
     )
 
@@ -2454,9 +2470,10 @@ def _nexus_metro_links_risk(
 
     metro_links_risk = _metro_impact_index(metro_links_risk, feature_range)
 
+    # TODO (DJ): Add descriptive cols
     _create_risk_summary(
         metro_links_risk,
-        [],
+        ["Ownership", "extension"],
         config.paths.audit_path / "Summary" / "Bespoke" / "Nexus Metro Network",
     )
 
@@ -2551,6 +2568,8 @@ def _nexus_metro_stations_risk(
     if metro_stations.empty:
         LOG.warning("Nexus Metro stations layer is empty. Skipping.")
         return
+
+    metro_stations = _buffer_geometry(metro_stations, _METRO_STATION_BUFFER_SIZE_M)
 
     # TODO (DJ): Consider buffering metro stations to account for surrounding area risk
 

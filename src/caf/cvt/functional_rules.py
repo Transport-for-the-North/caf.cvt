@@ -17,7 +17,6 @@ from shapely.geometry import Polygon, box
 
 from caf.cvt import data_cleaning, file_paths, model_config
 from caf.cvt.definitions import (
-    CoastalErosionRiskCols,
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
@@ -62,7 +61,14 @@ _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
 
 _FLOODING_TILE_SIZE_M = 10000
-_FLOODING_RISK_SCORE_MAP = {"Unavailable": 0, "Very low": 0, "Low": 1, "Medium": 2, "High": 3}
+_FLOODING_RISK_SCORE_MAP = {
+    0: 0, # No risk areas stay 0
+    "Unavailable": np.nan,
+    "Very low": 0, # Less than 0.1% chance of flooding
+    "Low": 0.1, # 0.1% to 1% chance of flooding
+    "Medium": 1, # 1% to 3.3% chance of flooding
+    "High": 3.3 # Greater than 3.3% chance of flooding
+}
 
 _PLOT_ALPHA_BASEMAP = 0.7
 _PLOT_ALPHA_NO_BASEMAP = 1.0
@@ -507,28 +513,26 @@ def plot_choropleth(
 
 
 def _validate_index(
-    index: gpd.GeoDataFrame,
-    index_vars: list[RiskColumn],
-    feature_range: tuple[int, int],
-    scenarios: bool = True,
+    index: gpd.GeoDataFrame, index_vars: list[RiskColumn], feature_range: tuple[int, int]
 ) -> None:
     """Validate a given index."""
-    if index.isna().any().any():
-        raise ValueError("Index contains NA values.")
+    na_counts = index.isna().sum()
+    if na_counts.any():
+        LOG.warning(
+            "Index contains missing values: \n%s", na_counts[na_counts > 0]
+        )
 
-    if scenarios:
-        check_cols = [f"{var}_{scenario}" for var in index_vars for scenario in Scenarios]
-    else:
-        check_cols = list(index_vars)
-
-    for col in check_cols:
-        if col not in index.columns:
-            raise ValueError(f"Missing column: {col}")
-        if not index[col].between(feature_range[0], feature_range[1]).all():
-            raise ValueError(
-                f"{col.replace('_', ' ').title()} "
-                f"contains values outside {feature_range[0]}-{feature_range[1]}."
-            )
+    for scenario in Scenarios:
+        for var in index_vars:
+            col = f"{var}_{scenario}"
+            if col not in index.columns:
+                raise ValueError(f"Missing column: {col}")
+            valid_values = index[col].dropna()
+            if not valid_values.between(feature_range[0], feature_range[1]).all():
+                raise ValueError(
+                    f"{var.replace('_', ' ').title()} for {scenario} "
+                    f"contains values outside {feature_range[0]}-{feature_range[1]}."
+                )
 
 
 def _audit_index(
@@ -1191,6 +1195,10 @@ def _flooding_index(
 
     LOG.debug("Loaded flooding overlay.")
     LOG.debug("Applying functional rules to flooding overlay...")
+
+    # Fill NA values with very low risk since no data means very low risk in the data
+    flooding_risk = flooding_risk.fillna(_FLOODING_RISK_SCORE_MAP["Very low"])
+
     # Map original risk categories to numeric scores
     for col in [
         f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}",
@@ -1198,10 +1206,8 @@ def _flooding_index(
         f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}",
         f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}",
     ]:
-        flooding_risk[col] = flooding_risk[col].map(_FLOODING_RISK_SCORE_MAP)
+        flooding_risk[col] = flooding_risk[col].map(_FLOODING_RISK_SCORE_MAP).astype(float)
 
-    # Fill NA values with 0 (no risk) since no data means no risk in the underlying data
-    flooding_risk = flooding_risk.fillna(0)
 
     feature_range = (config.constants.score_min, config.constants.score_max)
     flooding_risk = min_max_scaling_pair(
@@ -1409,28 +1415,21 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
 def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path) -> None:
     """Combine erosion and ground stability risk into single index using a spatial overlay."""
     LOG.info("Calculating coastal erosion risk index...")
-    # TODO (DJ): Either remove GIZ entirely or reweight it,
-    # because at the moment areas are either 0, 90, or 100 risk score which doesn't make sense
-    ncerm_giz = gpd.read_file(
-        config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH
-    )
-    ncerm_giz[CoastalErosionRiskCols.GIZ] = config.constants.score_max
-
-    ncerm = {}
-    erosion_risk = {}
+    coastal_erosion_risk = {}
     for year, scenario in _COASTAL_EROSION_YEAR_SCENARIO_MAP.items():
-        ncerm[year] = gpd.read_file(
+        coastal_erosion_risk[scenario] = gpd.read_file(
             config.paths.model_input
             / file_paths.NCERM_MODEL_INPUT_PATH
             / f"ncerm_smp_{year}_70CC.gpkg"
         )
-        if ncerm_giz.empty and ncerm[year].empty:
+        if coastal_erosion_risk[scenario].empty:
             LOG.warning(
-                "Both NCERM and GIZ layers are empty for scenario %s. "
+                "NCERM layer is empty for scenario %s. "
                 "Coastal erosion risk will be 0 everywhere.",
                 scenario,
             )
-            if year == "2055":
+            # Create an empty file for the coastal erosion risk index
+            if scenario == Scenarios.CURRENT:
                 continue
             data_cleaning.write_to_file(
                 gpd.GeoDataFrame(
@@ -1447,26 +1446,9 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
             )
             return
 
-        ncerm[year][CoastalErosionRiskCols.EROSION] = config.constants.score_max
+        coastal_erosion_risk[scenario][MainHazardRiskCols.COASTAL_EROSION] = config.constants.score_max
 
-        erosion_risk[scenario] = _overlay_and_clean(
-            ncerm_giz, ncerm[year], target_crs=data_cleaning.BNG_CRS
-        )
-
-        # If either of the layers is empty, fill the missing column with 0 (no risk)
-        for col in [CoastalErosionRiskCols.EROSION, CoastalErosionRiskCols.GIZ]:
-            if col not in erosion_risk[scenario]:
-                erosion_risk[scenario][col] = 0
-
-        # Compute composite risk score
-        erosion_risk[scenario][f"{MainHazardRiskCols.COASTAL_EROSION}"] = (
-            erosion_risk[scenario][CoastalErosionRiskCols.EROSION]
-            * MainHazardRiskCols.COASTAL_EROSION.get_weights()[CoastalErosionRiskCols.EROSION]
-            + erosion_risk[scenario][CoastalErosionRiskCols.GIZ]
-            * MainHazardRiskCols.COASTAL_EROSION.get_weights()[CoastalErosionRiskCols.GIZ]
-        )
-
-        erosion_risk[scenario] = erosion_risk[scenario].rename(
+        coastal_erosion_risk[scenario] = coastal_erosion_risk[scenario].rename(
             columns={
                 f"{MainHazardRiskCols.COASTAL_EROSION}": (
                     f"{MainHazardRiskCols.COASTAL_EROSION}_{scenario}"
@@ -1475,19 +1457,19 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
         )
 
     coastal_erosion_risk = _overlay_and_clean(
-        erosion_risk[Scenarios.CURRENT],
-        erosion_risk[Scenarios.FORECAST],
+        coastal_erosion_risk[Scenarios.CURRENT],
+        coastal_erosion_risk[Scenarios.FORECAST],
         target_crs=data_cleaning.BNG_CRS,
     )
 
-    coastal_erosion_risk = _iterative_spatial_infilling(
-        coastal_erosion_risk,
-        [
-            f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
-            f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FORECAST}",
-        ],
-        nearest_join_max_distance=_COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE,
+    # NA values indicate areas with 0 risk, so we fill them with 0 before further processing.
+    num_na = coastal_erosion_risk.isna().sum()
+    coastal_erosion_risk = coastal_erosion_risk.fillna(0)
+    LOG.debug(
+        "Infilled %s NA values with 0 where there is no risk in coastal erosion index.",
+        num_na
     )
+
     coastal_erosion_risk = gpd.GeoDataFrame(coastal_erosion_risk, geometry="geometry")
     coastal_erosion_risk = coastal_erosion_risk[
         [

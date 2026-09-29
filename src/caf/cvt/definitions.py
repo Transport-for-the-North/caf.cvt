@@ -109,20 +109,6 @@ class GroundStabilityRiskCols(RiskColumn):
         }
 
 
-class CoastalErosionRiskCols(RiskColumn):
-    """Column definitions for coastal erosion subhazard layers."""
-
-    EROSION = "erosion_risk"
-    GIZ = "giz_risk"
-
-    def get_cmap(self) -> str:
-        """Return the appropriate colormap for a given coastal erosion subhazard column."""
-        return "Purples"
-
-    @classmethod
-    def get_weights(cls) -> dict[RiskColumn, float]:
-        """Return appropriate weights for Coastal Erosion."""
-        return {CoastalErosionRiskCols.EROSION: 0.5, CoastalErosionRiskCols.GIZ: 0.5}
 
 
 class MainHazardRiskCols(RiskColumn):
@@ -149,7 +135,7 @@ class MainHazardRiskCols(RiskColumn):
             MainHazardRiskCols.EXTREME_WEATHER: ExtremeWeatherRiskCols.get_weights(),
             MainHazardRiskCols.FLOODING: FloodingRiskCols.get_weights(),
             MainHazardRiskCols.GROUND_STABILITY: GroundStabilityRiskCols.get_weights(),
-            MainHazardRiskCols.COASTAL_EROSION: CoastalErosionRiskCols.get_weights(),
+            MainHazardRiskCols.COASTAL_EROSION: {},
         }
 
         return weights_mapping[self]
@@ -160,7 +146,7 @@ class MainHazardRiskCols(RiskColumn):
             MainHazardRiskCols.EXTREME_WEATHER: list(ExtremeWeatherRiskCols),
             MainHazardRiskCols.FLOODING: list(FloodingRiskCols),
             MainHazardRiskCols.GROUND_STABILITY: list(GroundStabilityRiskCols),
-            MainHazardRiskCols.COASTAL_EROSION: list(CoastalErosionRiskCols),
+            MainHazardRiskCols.COASTAL_EROSION: [],
         }
         return sub_hazard_mapping[self]
 
