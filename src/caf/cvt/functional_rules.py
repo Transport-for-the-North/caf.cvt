@@ -61,6 +61,7 @@ _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
 
 _FLOODING_TILE_SIZE_M = 10000
+_NUM_TILES_DONE = 0
 _FLOODING_RISK_SCORE_MAP = {
     0: 0,  # No risk areas stay 0
     "Unavailable": np.nan,
@@ -110,12 +111,25 @@ def min_max_scaling_pair(
     for col_current, col_forecast in pairs:
         # Combine both columns into one array for global min/max
         combined_values = data[[col_current, col_forecast]].to_numpy().flatten().reshape(-1, 1)
+        combined_values = combined_values[~pd.isna(combined_values)].reshape(-1, 1)
 
         scaler.fit(combined_values)
 
         # Transform each column using the same scaler
-        data[col_current] = scaler.transform(data[[col_current]].values).clip(*feature_range)
-        data[col_forecast] = scaler.transform(data[[col_forecast]].values).clip(*feature_range)
+        data.loc[data[col_current].notna(), col_current] = (
+            scaler.transform(
+                data.loc[data[col_current].notna(), [col_current]].to_numpy()
+            )
+            .clip(*feature_range)
+            .flatten()
+        )
+        data.loc[data[col_forecast].notna(), col_forecast] = (
+            scaler.transform(
+                data.loc[data[col_forecast].notna(), [col_forecast]].to_numpy()
+            )
+            .clip(*feature_range)
+            .flatten()
+        )
 
     return data
 
@@ -518,7 +532,9 @@ def _validate_index(
     """Validate a given index."""
     na_counts = index.isna().sum()
     if na_counts.any():
-        LOG.warning("Index contains missing values: \n%s", na_counts[na_counts > 0])
+        LOG.warning(
+            "Index contains missing values: \n%s", na_counts[na_counts > 0]
+        )
 
     for scenario in Scenarios:
         for var in index_vars:
@@ -1206,6 +1222,7 @@ def _flooding_index(
     ]:
         flooding_risk[col] = flooding_risk[col].map(_FLOODING_RISK_SCORE_MAP).astype(float)
 
+
     feature_range = (config.constants.score_min, config.constants.score_max)
     flooding_risk = min_max_scaling_pair(
         flooding_risk,
@@ -1233,12 +1250,12 @@ def _flooding_index(
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
-    # _audit_index(
+    #_audit_index(
     #    flooding_risk,
     #    [*FloodingRiskCols, MainHazardRiskCols.FLOODING],
     #    audit_path / "Flooding" / "Flooding Risk Index",
     #    feature_range,
-    # )
+    #)
 
     data_cleaning.write_to_file(
         flooding_risk,
@@ -1266,10 +1283,15 @@ def _tile_polygon_flooding_overlay(
         / file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH
     )
     layer_name = "flooding_overlay"
-    first_write = True
+    if _NUM_TILES_DONE == 0:
+        first_write = True
+    else:
+        first_write = False
 
     # For each tile, do spatial filtering and run overlay and clean
     for tile_idx, tile in tiles.iterrows():
+        if tile_idx + 1 <= _NUM_TILES_DONE:
+            continue
         LOG.info("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
 
         tile_overlay = _process_flooding_overlay_tile(
@@ -1335,7 +1357,14 @@ def _process_flooding_overlay_tile(
     if tile_overlay.empty:
         return None
 
-    return tile_overlay
+    expected_cols = []
+    for scenario in Scenarios:
+        for flood_risk in FloodingRiskCols:
+            expected_cols.append(f"{flood_risk}_{scenario}")
+            if f"{flood_risk}_{scenario}" not in tile_overlay.columns:
+                tile_overlay[f"{flood_risk}_{scenario}"] = None
+
+    return tile_overlay[[*expected_cols, "geometry"]]
 
 
 ### GROUND STABILITY

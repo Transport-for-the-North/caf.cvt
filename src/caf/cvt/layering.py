@@ -61,7 +61,6 @@ _RISK_CATEGORY_COLOURS = {
 
 # GENERAL FUNCTIONS
 
-
 def _aggregate_risk(series: pd.Series) -> float | None:
     """Aggregate risk by taking the maximum value, returning NaN if any values are missing."""
     if series.isna().any():
@@ -97,8 +96,10 @@ def _infrastructure_risk_intersect(
         agg = intersections.groupby(intersections.index)[risk_columns].agg(_aggregate_risk)
 
         # Find which infrastructure segments intersect with any hazard
-        intersected_agg = intersections.groupby(intersections.index)["index_right"].apply(
-            lambda x: x.notna().any()
+        intersected_agg = (
+            intersections
+            .groupby(intersections.index)["index_right"]
+            .apply(lambda x: x.notna().any())
         )
 
         # Merge back into main DataFrame
@@ -167,10 +168,10 @@ def _reshape_for_scenarios(
     melted["variable"] = melted["variable"].str.replace(scenario_pattern, "", regex=True)
 
     # Pivot back so each risk variable becomes a column
-    reshaped = melted.pivot_table(
+    reshaped = melted.pivot(
         index=[id_col, scenario_col, *descriptive_cols],
         columns="variable",
-        values="value",
+        values="value"
     ).reset_index()
 
     # Reorder risk columns based on original order
@@ -1630,7 +1631,7 @@ def _freight_impact_index(
         feature_range,
     )
 
-    return _calculate_freight_impact(freight_rail_network_risk)
+    freight_rail_network_risk = _calculate_freight_impact(freight_rail_network_risk)
 
     return gpd.GeoDataFrame(freight_rail_network_risk, geometry="geometry", crs="EPSG:4326")
 
@@ -2235,7 +2236,7 @@ def _ncn_risk(
 
     Intersect National Cycle Network with hazard risk, clean output, then write to file.
     """
-    LOG.info("Layering National Cycle Network with hazard risk...")
+    LOG.info("Layering national cycle network with hazard risk...")
     ncn = gpd.read_file(
         config.paths.model_input / file_paths.NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH
     )
@@ -2292,7 +2293,7 @@ def _ncn_risk(
         "id",
         pathlib.Path("Other") / "National Cycle Network" / "ncn_risk",
     )
-    LOG.info("Finished layering National Cycle Network with hazard risk.")
+    LOG.info("Finished layering national cycle network with hazard risk.")
 
 
 #### Tram Network
