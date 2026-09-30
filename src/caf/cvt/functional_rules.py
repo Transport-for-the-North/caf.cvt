@@ -62,6 +62,7 @@ _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
 
 _FLOODING_TILE_SIZE_M = 10000
+_NUM_TILES_DONE = 0
 _FLOODING_RISK_SCORE_MAP = {
     0: 0, # No risk areas stay 0
     "Unavailable": np.nan,
@@ -1236,6 +1237,8 @@ def _tile_polygon_flooding_overlay(
 
     # For each tile, do spatial filtering and run overlay and clean
     for tile_idx, tile in tiles.iterrows():
+        if tile_idx + 1 <= _NUM_TILES_DONE:
+            continue
         LOG.info("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
 
         tile_overlay = _process_flooding_overlay_tile(
