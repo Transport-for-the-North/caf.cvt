@@ -123,6 +123,7 @@ class NoHAMEntry(ctk.BaseConfig):
     year: int
     file_path: pathlib.Path
 
+
 class ModelRoadsEntry(ctk.BaseConfig):
     """Configuration for the transport model road network data.
 
@@ -198,6 +199,27 @@ class Other(ctk.BaseConfig):
     airports: pathlib.Path
 
 
+class Bespoke(ctk.BaseConfig):
+    """Configuration for bespoke infrastructure data.
+
+    Attributes
+    ----------
+    nexus_metro_lines : pathlib.Path
+        Path to the Nexus Metro lines data.
+    nexus_metro_stations : pathlib.Path
+        Path to the Nexus Metro stations data.
+    nexus_metro_ext_lines : pathlib.Path
+        Path to the extended Nexus Metro lines data.
+    nexus_metro_ext_stations : pathlib.Path
+        Path to the extended Nexus Metro stations data.
+    """
+
+    nexus_metro_lines: pathlib.Path
+    nexus_metro_stations: pathlib.Path
+    nexus_metro_ext_lines: pathlib.Path
+    nexus_metro_ext_stations: pathlib.Path
+
+
 class InfrastructureConfig(ctk.BaseConfig):
     """Configuration for infrastructure data.
 
@@ -214,6 +236,7 @@ class InfrastructureConfig(ctk.BaseConfig):
     road: Road
     rail: Rail
     other: Other
+    bespoke: Bespoke
 
 
 class ExtremeWeather(ctk.BaseConfig):
@@ -263,16 +286,31 @@ class ExtremeWeather(ctk.BaseConfig):
     precip_winter: pathlib.Path
 
 
-class Flooding(ctk.BaseConfig):
-    """Configuration for flooding data.
+class GeoSureEntry(ctk.BaseConfig):
+    """Configuration for GeoSure data.
 
     Attributes
     ----------
-    flooding_path : pathlib.Path
-        Path to the flooding data.
+    collapsible_deposits : pathlib.Path
+        Path to the collapsible deposits shapefile.
+    compressible_ground : pathlib.Path
+        Path to the compressible ground shapefile.
+    landslides : pathlib.Path
+        Path to the landslides shapefile.
+    running_sands : pathlib.Path
+        Path to the running sands shapefile.
+    shrink_swell : pathlib.Path
+        Path to the shrink swell shapefile.
+    soluble_rocks : pathlib.Path
+        Path to the soluble rocks shapefile.
     """
 
-    flooding_path: pathlib.Path
+    collapsible_deposits: pathlib.Path
+    compressible_ground: pathlib.Path
+    landslides: pathlib.Path
+    running_sands: pathlib.Path
+    shrink_swell: pathlib.Path
+    soluble_rocks: pathlib.Path
 
 
 class GroundStability(ctk.BaseConfig):
@@ -280,14 +318,29 @@ class GroundStability(ctk.BaseConfig):
 
     Attributes
     ----------
-    geo_shrink_swell : dict
-        Dictionary of GeoShrinkSwell data.
     geosure : GeoSure
         Configuration for GeoSure data.
     """
 
-    geo_shrink_swell: dict[str, pathlib.Path]
-    geosure: ZipFileEntry
+    geosure: GeoSureEntry
+
+
+class Flooding(ctk.BaseConfig):
+    """Configuration for flooding data.
+
+    Attributes
+    ----------
+    rivers_sea : pathlib.Path
+        Path to the rivers and sea flooding data.
+    surface_water : pathlib.Path
+        Path to the surface water flooding data.
+    groundwater : pathlib.Path
+        Path to the groundwater flooding data.
+    """
+
+    rivers_sea: pathlib.Path
+    surface_water: pathlib.Path
+    groundwater: pathlib.Path
 
 
 class HazardsConfig(ctk.BaseConfig):
@@ -299,7 +352,7 @@ class HazardsConfig(ctk.BaseConfig):
         Configuration for coastal erosion zip file entry.
     extreme_weather : ExtremeWeather
         Configuration for extreme weather data.
-    flooding : dict[str, pathlib.Path]
+    flooding : Flooding
         Configuration for flooding data.
     ground_stability : GroundStability
         Configuration for ground stability data.
@@ -307,7 +360,7 @@ class HazardsConfig(ctk.BaseConfig):
 
     coastal_erosion: ZipFileEntry
     extreme_weather: ExtremeWeather
-    flooding: dict[str, pathlib.Path]
+    flooding: Flooding
     ground_stability: GroundStability
 
 
@@ -342,12 +395,15 @@ class ImpactConfig(ctk.BaseConfig):
         Dictionary of years for NoHAM demand scenarios.
     model_road_flows : ModelRoadFlowsEntry
         Configuration for the transport model road flows data.
+    nexus: dict[str, pathlib.Path]
+        Dictionary of paths for nexus demand data.
     """
 
     freight_demand: pathlib.Path
     noham_demand: pathlib.Path
     noham_years: dict[str, int]
     model_road_flows: ModelRoadFlowsEntry
+    nexus: dict[str, pathlib.Path]
 
 
 class SwitchConfig(ctk.BaseConfig):
@@ -395,6 +451,8 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include the tram network in the analysis.
     rapid_transport_network : bool
         Whether to include the rapid transport network in the analysis.
+    bespoke: bool
+        Whether to include bespoke infrastructure data in the analysis.
     extreme_weather : bool
         Whether to include extreme weather hazards in the analysis.
     flooding : bool
@@ -431,6 +489,8 @@ class SwitchConfig(ctk.BaseConfig):
     tram_network: bool
     rapid_transport_network: bool
 
+    bespoke: bool
+
     extreme_weather: bool
     flooding: bool
     ground_stability: bool
@@ -466,6 +526,7 @@ class SwitchConfig(ctk.BaseConfig):
                 self.bus_coach_stations,
                 self.tram_network,
                 self.rapid_transport_network,
+                self.bespoke,
             ]
         ):
             raise ValueError("At least one infrastructure switch must be True.")

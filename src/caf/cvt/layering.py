@@ -4,7 +4,12 @@ import logging
 import pathlib
 
 import geopandas as gpd
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+import openpyxl
 import pandas as pd
+from openpyxl.utils.dataframe import dataframe_to_rows
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 from caf.cvt.definitions import (
@@ -28,16 +33,40 @@ LOG = logging.getLogger(__name__)
 
 _DEMAND_WEIGHT = 0.5
 
-_TRAIN_STATIONS_BUFFER_SIZE_M = 100
+_TRAIN_STATIONS_BUFFER_SIZE_M = 25
 _CHARGING_SITES_BUFFER_SIZE_M = 25
 _BUS_COACH_STATIONS_BUFFER_SIZE_M = 50
 _TRAM_STATIONS_BUFFER_SIZE_M = 25
 _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M = 50
 _FERRY_TERMINALS_BUFFER_SIZE_M = 50
 _PETROL_STATIONS_BUFFER_SIZE_M = 50
+_METRO_STATION_BUFFER_SIZE_M = 25
+
+_RISK_CATEGORIES = {
+    "Very Low": (0, 20),
+    "Low": (20, 40),
+    "Medium": (40, 60),
+    "High": (60, 80),
+    "Very High": (80, 100),
+}
+
+_RISK_CATEGORY_COLOURS = {
+    "Very Low": "00008b",  # dark blue
+    "Low": "008080",  # teal
+    "Medium": "ffd700",  # gold
+    "High": "ff8c00",  # dark orange
+    "Very High": "8b0000",  # dark red
+}
 
 
 # GENERAL FUNCTIONS
+
+
+def _aggregate_risk(series: pd.Series) -> float | None:
+    """Aggregate risk by taking the maximum value, returning NaN if any values are missing."""
+    if series.isna().any():
+        return np.nan
+    return series.max()
 
 
 def _infrastructure_risk_intersect(
@@ -63,13 +92,41 @@ def _infrastructure_risk_intersect(
             hazard_gdf_match.columns.str.contains("risk", case=False)
         ]
 
-        # Calculate hazard risk score per infrastructure segment as max value of intersection
-        agg = intersections.groupby(intersections.index)[risk_columns].max()
+        # Calculate hazard risk score per infrastructure segment as max value of intersection,
+        # returning NaN if any values are missing.
+        agg = intersections.groupby(intersections.index)[risk_columns].agg(_aggregate_risk)
+
+        # Find which infrastructure segments intersect with any hazard
+        intersected_agg = intersections.groupby(intersections.index)["index_right"].apply(
+            lambda x: x.notna().any()
+        )
 
         # Merge back into main DataFrame
         infrastructure_with_risk = infrastructure_with_risk.join(agg, how="left")
+        infrastructure_with_risk = infrastructure_with_risk.join(
+            intersected_agg.rename("matched")
+        )
 
-    return infrastructure_with_risk.fillna(0)
+        # Infill 0 where infrastructure segments did not intersect with any hazard
+        for col in risk_columns:
+            infrastructure_with_risk.loc[~infrastructure_with_risk["matched"], col] = 0
+
+        infrastructure_with_risk = infrastructure_with_risk.drop(columns="matched")
+
+    return infrastructure_with_risk
+
+
+def _duplicate_non_scenario_hazards(risk_data: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Duplicate non-scenario hazard columns for both scenarios."""
+    non_scenario_hazards = risk_data.columns[
+        risk_data.columns.str.contains("risk", case=False)
+        & ~risk_data.columns.str.endswith((f"_{Scenarios.CURRENT}", f"_{Scenarios.FORECAST}"))
+    ].tolist()
+    for hazard in non_scenario_hazards:
+        LOG.warning("Duplicating non-scenario hazard '%s' for both scenarios.", hazard)
+        risk_data[f"{hazard}_{Scenarios.CURRENT}"] = risk_data[hazard]
+        risk_data[f"{hazard}_{Scenarios.FORECAST}"] = risk_data[hazard]
+    return risk_data
 
 
 def _reshape_for_scenarios(
@@ -135,6 +192,7 @@ def _prepare_model_output(
     risk_data = risk_data.drop_duplicates(subset=["geometry"])
     risk_data = risk_data.rename(columns=rename_map)
     risk_data = risk_data.to_crs(data_cleaning.BNG_CRS)
+    risk_data = _duplicate_non_scenario_hazards(risk_data)
     risk_data = _reshape_for_scenarios(risk_data, "id", risk_cols_order)
     risk_data[risk_cols_order] = risk_data[risk_cols_order].round(1)
     return risk_data.rename(columns={col: f"{col}_score" for col in risk_cols_order})
@@ -180,7 +238,7 @@ def _audit_infrastructure_risk(
     audit_path.mkdir(parents=True, exist_ok=True)
 
     for risk_col in cols:
-        functional_rules.plot_choropleth_current_and_forecast(
+        functional_rules.plot_choropleth(
             risk_data=infrastructure_risk,
             column=risk_col,
             title=f"{infrastructure_name} {risk_col.replace('_', ' ').title()}",
@@ -244,20 +302,16 @@ def _apply_asset_vulnerability(
         mask = risk_data[structure_col] == structure
         vulnerabilities = structure.get_vulnerability()
         for hazard, modifier in structure.get_vulnerability().items():
-            for scenario in Scenarios:
-                risk_col = f"{hazard}_{scenario}"
-                if risk_col not in risk_data.columns:
-                    continue  # Skip if the risk column doesn't exist
+            risk_cols = [col for col in risk_data.columns if hazard in col]
+            for risk_col in risk_cols:
                 risk_data.loc[mask, risk_col] = (
                     risk_data.loc[mask, risk_col] * modifier
                 ).clip(lower=feature_range[0], upper=feature_range[1])
 
         main_hazard_modifiers = _get_main_hazard_modifiers(vulnerabilities)
         for main_hazard, modifier in main_hazard_modifiers.items():
-            for scenario in Scenarios:
-                risk_col = f"{main_hazard}_{scenario}"
-                if risk_col not in risk_data.columns:
-                    continue  # Skip if the risk column doesn't exist
+            risk_cols = [col for col in risk_data.columns if main_hazard in col]
+            for risk_col in risk_cols:
                 risk_data.loc[mask, risk_col] = (
                     risk_data.loc[mask, risk_col] * modifier
                 ).clip(lower=feature_range[0], upper=feature_range[1])
@@ -272,12 +326,652 @@ def _apply_asset_hazard_weighting(
     """Recalculate main hazard risk scores based on sub-hazard risk scores and weights."""
     for main_hazard in hazards:
         weights = asset_type.get_asset_hazard_weights(main_hazard)
-        asset_risk = functional_rules._calculate_composite_score(
-            asset_risk,
-            weights,
-            main_hazard,
-        )
+        if main_hazard == MainHazardRiskCols.GROUND_STABILITY:
+            asset_risk = functional_rules._calculate_composite_score(
+                asset_risk,
+                weights,
+                main_hazard,
+            )
+        elif main_hazard == MainHazardRiskCols.COASTAL_EROSION:
+            # Special case since subhazards not included for coastal erosion
+            continue
+        else:
+            asset_risk = functional_rules._calculate_composite_score_scenarios(
+                asset_risk,
+                weights,
+                main_hazard,
+            )
     return asset_risk
+
+
+def _create_risk_summary(
+    asset_risk: gpd.GeoDataFrame,
+    risk_cols: list[str],
+    descriptive_cols: list[str],
+    out_path: pathlib.Path,
+    out_filename: str,
+) -> None:
+    """Output a summary spreadsheet for climate risk for a given asset."""
+    # TODO (DJ): Allow risk summary to work with point data as well as line data.
+    # TODO (DJ): Add handling of case where no scenario distinction exists
+    # TODO (DJ): Add summary of impact metrics when available
+    asset_risk_summary = asset_risk.copy()
+    asset_risk_summary = asset_risk_summary.dropna(
+        subset=[f"{col}_{Scenarios.CURRENT}" for col in risk_cols]
+        + [f"{col}_{Scenarios.FORECAST}" for col in risk_cols]
+    )
+    asset_risk_summary["Length (m)"] = asset_risk_summary.geometry.length
+    total_length = asset_risk_summary["Length (m)"].sum()
+
+    risk_distribution = pd.DataFrame(
+        [
+            {
+                "Risk Category": category,
+                "Score": f"{lower}-{upper}",
+            }
+            for category, (lower, upper) in _RISK_CATEGORIES.items()
+        ]
+    )
+
+    risk_averages = pd.DataFrame(
+        [],
+        columns=[
+            "Hazard",
+            f"Average {Scenarios.CURRENT.capitalize()} Risk",
+            f"Average {Scenarios.FORECAST.capitalize()} Risk",
+            "Change in Risk",
+            "Percentage of Length with Increased Risk",
+        ],
+    )
+
+    descriptive_risk_averages = {
+        descriptive_col: pd.DataFrame(
+            [
+                {descriptive_col: descriptive_feature, "Length (m)": 0}
+                for descriptive_feature in asset_risk_summary[descriptive_col].unique()
+                if descriptive_feature is not None
+            ]
+        )
+        for descriptive_col in descriptive_cols
+    }
+
+    for main_hazard in MainHazardRiskCols:
+        if main_hazard not in asset_risk_summary.columns.str.replace(
+            f"_{Scenarios.CURRENT}", ""
+        ):
+            continue
+        for sub_hazard in MainHazardRiskCols.get_sub_hazards(main_hazard):
+            risk_distribution, risk_averages = _fill_risk_summary_column(
+                asset_risk_summary,
+                sub_hazard,
+                risk_distribution,
+                risk_averages,
+                total_length,
+            )
+
+            descriptive_risk_averages = _fill_descriptive_risk_averages(
+                asset_risk_summary,
+                sub_hazard,
+                descriptive_risk_averages,
+                descriptive_cols,
+            )
+
+            _hazard_distribution_plot(
+                risk_distribution, sub_hazard, out_path / "Risk Distribution"
+            )
+
+        risk_distribution, risk_averages = _fill_risk_summary_column(
+            asset_risk_summary,
+            main_hazard,
+            risk_distribution,
+            risk_averages,
+            total_length,
+        )
+
+        descriptive_risk_averages = _fill_descriptive_risk_averages(
+            asset_risk_summary,
+            main_hazard,
+            descriptive_risk_averages,
+            descriptive_cols,
+        )
+
+        _hazard_distribution_plot(
+            risk_distribution, main_hazard, out_path / "Risk Distribution"
+        )
+
+    _risk_averages_plot(risk_averages, out_path / "Risk Averages")
+
+    _write_risk_summary(
+        risk_distribution, risk_averages, descriptive_risk_averages, out_path, out_filename
+    )
+
+    return risk_distribution, risk_averages, descriptive_risk_averages
+
+
+def _fill_risk_summary_column(
+    asset_risk: gpd.GeoDataFrame,
+    hazard: MainHazardRiskCols | str,
+    risk_distribution: pd.DataFrame,
+    risk_averages: pd.DataFrame,
+    total_length: float,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fill the risk distribution column for a given main hazard and scenario."""
+    length_weighted_avgs = {}
+    change_in_risk = {}
+    pct_increased_risks = {}
+
+    for scenario in Scenarios:
+        risk_column = f"{hazard}_{scenario}"
+        out_risk_column = f"{scenario.capitalize()} {hazard.replace('_', ' ').title()}"
+        risk_distribution[out_risk_column] = 0.0
+        for category, (lower, upper) in _RISK_CATEGORIES.items():
+            if upper == 100:
+                mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] <= upper)
+            else:
+                mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] < upper)
+            risk_length = asset_risk.loc[mask, "Length (m)"].sum()
+            pct_risk_in_category = (risk_length / total_length) * 100
+            risk_distribution.loc[
+                risk_distribution["Risk Category"] == category, out_risk_column
+            ] = round(pct_risk_in_category, 1)
+
+        length_weighted_avgs[scenario] = round(
+            (asset_risk[risk_column] * asset_risk["Length (m)"]).sum() / total_length, 1
+        )
+
+    increased_risk_length = asset_risk[
+        (
+            asset_risk[f"{hazard}_{Scenarios.FORECAST}"]
+            > asset_risk[f"{hazard}_{Scenarios.CURRENT}"]
+        )
+    ]["Length (m)"].sum()
+    pct_increased_risks[hazard] = round((increased_risk_length / total_length) * 100)
+
+    change_in_risk[hazard] = round(
+        (length_weighted_avgs[Scenarios.FORECAST] - length_weighted_avgs[Scenarios.CURRENT]), 1
+    )
+
+    risk_averages.loc[len(risk_averages)] = [
+        hazard.replace("_", " ").title(),
+        length_weighted_avgs[Scenarios.CURRENT],
+        length_weighted_avgs[Scenarios.FORECAST],
+        change_in_risk[hazard],
+        pct_increased_risks[hazard],
+    ]
+
+    return risk_distribution, risk_averages
+
+
+def _fill_descriptive_risk_averages(
+    asset_risk: gpd.GeoDataFrame,
+    hazard: MainHazardRiskCols | str,
+    descriptive_risk_averages: dict[str, pd.DataFrame],
+    descriptive_cols: list[str],
+) -> dict[str, pd.DataFrame]:
+    """Fill descriptive risk summary for a given hazard and asset risk data."""
+    for descriptive_col in descriptive_cols:
+        for descriptive_feature in asset_risk[descriptive_col].unique():
+            asset_descriptive_risk = asset_risk[
+                asset_risk[descriptive_col] == descriptive_feature
+            ]
+            if asset_descriptive_risk.empty:
+                continue
+            total_desc_length = asset_descriptive_risk["Length (m)"].sum()
+            descriptive_risk_averages[descriptive_col].loc[
+                descriptive_risk_averages[descriptive_col][descriptive_col]
+                == descriptive_feature,
+                "Length (m)",
+            ] = round(total_desc_length)
+            for scenario in Scenarios:
+                risk_column = f"{hazard}_{scenario}"
+                out_risk_column = f"{scenario.capitalize()} {hazard.replace('_', ' ').title()}"
+                length_weighted_avg = round(
+                    (
+                        asset_descriptive_risk[risk_column]
+                        * asset_descriptive_risk["Length (m)"]
+                    ).sum()
+                    / total_desc_length
+                )
+                descriptive_risk_averages[descriptive_col].loc[
+                    descriptive_risk_averages[descriptive_col][descriptive_col]
+                    == descriptive_feature,
+                    out_risk_column,
+                ] = length_weighted_avg
+        descriptive_risk_averages[descriptive_col][
+            f"Change in {hazard.replace('_', ' ').title()}"
+        ] = (
+            descriptive_risk_averages[descriptive_col][
+                f"{Scenarios.FORECAST.capitalize()} {hazard.replace('_', ' ').title()}"
+            ]
+            - descriptive_risk_averages[descriptive_col][
+                f"{Scenarios.CURRENT.capitalize()} {hazard.replace('_', ' ').title()}"
+            ]
+        )
+
+    return descriptive_risk_averages
+
+
+def _hazard_distribution_plot(
+    risk_distribution: pd.DataFrame,
+    hazard: MainHazardRiskCols
+    | ExtremeWeatherRiskCols
+    | FloodingRiskCols
+    | GroundStabilityRiskCols,
+    out_path: pathlib.Path,
+) -> None:
+    """Generate distribution plots for the risk distribution summary."""
+    out_path.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    x = [
+        f"{Scenarios.CURRENT.capitalize()} {hazard.replace('_', ' ').title()}",
+        f"{Scenarios.FORECAST.capitalize()} {hazard.replace('_', ' ').title()}",
+    ]
+
+    x_labels = [Scenarios.CURRENT.capitalize(), Scenarios.FORECAST.capitalize()]
+
+    very_high = (
+        risk_distribution[risk_distribution["Risk Category"] == "Very High"][x]
+        .iloc[0]
+        .to_numpy()
+    )
+    high = (
+        risk_distribution[risk_distribution["Risk Category"] == "High"][x].iloc[0].to_numpy()
+    )
+    medium = (
+        risk_distribution[risk_distribution["Risk Category"] == "Medium"][x].iloc[0].to_numpy()
+    )
+    low = risk_distribution[risk_distribution["Risk Category"] == "Low"][x].iloc[0].to_numpy()
+    very_low = (
+        risk_distribution[risk_distribution["Risk Category"] == "Very Low"][x]
+        .iloc[0]
+        .to_numpy()
+    )
+
+    cmap = hazard.get_cmap()
+    cmap = plt.get_cmap(cmap)
+
+    ax.bar(x_labels, very_low, color=cmap(0.2), label="Very Low")
+    ax.bar(x_labels, low, bottom=very_low, color=cmap(0.4), label="Low")
+    ax.bar(x_labels, medium, bottom=very_low + low, color=cmap(0.6), label="Medium")
+    ax.bar(x_labels, high, bottom=very_low + low + medium, color=cmap(0.8), label="High")
+    ax.bar(
+        x_labels,
+        very_high,
+        bottom=very_low + low + medium + high,
+        color=cmap(1.0),
+        label="Very High",
+    )
+
+    ax.set_xlabel("Scenario")
+    ax.set_ylabel("Percent at Risk")
+    ax.legend(loc="upper left", bbox_to_anchor=(1.05, 1), reverse=True)
+    ax.grid(axis="y", alpha=0.5)
+    ax.set_title(
+        f"Risk Distribution for {hazard.replace('_', ' ').replace('risk', '').title()}"
+    )
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    fig.tight_layout(pad=2.0)
+    fig.savefig(out_path / f"risk_distribution_{hazard}.png")
+    plt.close(fig)
+
+
+def _risk_averages_plot(risk_averages: pd.DataFrame, out_path: pathlib.Path) -> None:
+    """Generate a plot for risk averages."""
+    out_path.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    current = risk_averages[f"Average {Scenarios.CURRENT.capitalize()} Risk"].to_numpy()
+    forecast = risk_averages[f"Average {Scenarios.FORECAST.capitalize()} Risk"].to_numpy()
+    hazards = [hazard.replace(" Risk", "") for hazard in risk_averages["Hazard"].to_list()]
+    x = np.arange(len(hazards))
+
+    width = 0.40
+
+    ax.bar(
+        x - 0.2, current, width=width, color="royalblue", label=Scenarios.CURRENT.capitalize()
+    )
+    ax.bar(
+        x + 0.2,
+        forecast,
+        width=width,
+        color="darkorange",
+        label=Scenarios.FORECAST.capitalize(),
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(hazards)
+    plt.xticks(rotation=45, ha="right")
+    ax.set_xlabel("Hazard")
+    ax.set_ylabel("Length-Weighted Average Risk")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(out_path / "risk_averages.png")
+    plt.close(fig)
+
+
+def _write_risk_summary(
+    risk_distribution: pd.DataFrame,
+    risk_averages: pd.DataFrame,
+    descriptive_risk_averages: pd.DataFrame,
+    out_path: pathlib.Path,
+    out_filename: str,
+) -> None:
+    """Write a risk summary to an Excel file."""
+    wb = openpyxl.Workbook()
+
+    thin_border = openpyxl.styles.Side(border_style="thin", color="FFFFFF")
+
+    wb = _write_risk_distribution(
+        workbook=wb, risk_distribution=risk_distribution, border=thin_border, out_path=out_path
+    )
+
+    wb = _write_risk_averages(
+        workbook=wb, risk_averages=risk_averages, border=thin_border, out_path=out_path
+    )
+
+    wb = _write_descriptive_risk_averages(
+        workbook=wb,
+        border=thin_border,
+        descriptive_risk_averages=descriptive_risk_averages,
+    )
+
+    wb.save(out_path / out_filename)
+    wb.close()
+
+
+def _write_risk_distribution(
+    workbook: openpyxl.Workbook,
+    risk_distribution: pd.DataFrame,
+    border: openpyxl.styles.Side,
+    out_path: pathlib.Path,
+) -> openpyxl.Workbook:
+    """Write risk distribution data and plots to an Excel workbook sheet."""
+    ws = workbook.active
+    ws.title = "Risk Distribution"
+
+    for r_idx, row in enumerate(
+        dataframe_to_rows(risk_distribution, index=False, header=True), 1
+    ):
+        for c_idx, value in enumerate(row, 1):
+            column_letter = openpyxl.utils.get_column_letter(c_idx)
+            ws.column_dimensions[column_letter].width = 15
+            horizontal_alignment = "left"  # Default alignment for all cells
+
+            text_colour = "FFFFFF"  # White text
+
+            # Determine formatting dynamically
+            if r_idx == 1:  # Apply fill only to header row:
+                fill_colour = "000000"  # black
+                bold = True
+                cell_border = openpyxl.styles.Border(bottom=border)
+                if c_idx % 2 != 0:
+                    cell_border = openpyxl.styles.Border(
+                        left=border, top=border, bottom=border
+                    )
+                else:
+                    cell_border = openpyxl.styles.Border(
+                        right=border, top=border, bottom=border
+                    )
+            else:
+                fill_colour = "808080"  # medium grey
+                bold = False
+                if c_idx % 2 != 0:
+                    cell_border = openpyxl.styles.Border(left=border)
+                else:
+                    cell_border = openpyxl.styles.Border(right=border)
+
+            if isinstance(value, (int, float)) and value != 0:
+                cell = ws.cell(row=r_idx, column=c_idx, value=value / 100)
+
+                bar_colour = _RISK_CATEGORY_COLOURS[row[0]]
+                cell.number_format = "0%"
+
+                data_bar = openpyxl.formatting.rule.DataBarRule(
+                    start_type="num",
+                    start_value=0,
+                    end_type="num",
+                    end_value=1,
+                    color=bar_colour,
+                    showValue=True,
+                    minLength=None,
+                    maxLength=None,
+                )
+                ws.conditional_formatting.add(cell.coordinate, data_bar)
+
+            else:
+                cell = ws.cell(row=r_idx, column=c_idx, value=value)
+
+            # Format cell
+            _style_cell(
+                cell,
+                fill_colour=fill_colour,
+                text_colour=text_colour,
+                bold=bold,
+                border=cell_border,
+                alignment=horizontal_alignment,
+            )
+
+    hazards = list(
+        dict.fromkeys(
+            [
+                col.replace(f"{Scenarios.CURRENT.capitalize()} ", "").replace(
+                    f"{Scenarios.FORECAST.capitalize()} ", ""
+                )
+                for col in risk_distribution.columns
+                if " Risk" in col
+            ]
+        )
+    )
+    image_row = len(risk_distribution) + 3
+    image_column = 2
+    for hazard in hazards:
+        risk_distribution_image = openpyxl.drawing.image.Image(
+            out_path
+            / "Risk Distribution"
+            / f"risk_distribution_{hazard.lower().replace(' ', '_')}.png"
+        )
+        risk_distribution_image.width = 400
+        risk_distribution_image.height = 400
+
+        ws.add_image(
+            risk_distribution_image,
+            f"{openpyxl.utils.get_column_letter(image_column)}{image_row}",
+        )
+        image_column += 4
+        if image_column > len(risk_distribution.columns):
+            image_column = 2
+            image_row += 21
+
+    return workbook
+
+
+def _write_risk_averages(
+    workbook: openpyxl.Workbook,
+    risk_averages: pd.DataFrame,
+    border: openpyxl.styles.Side,
+    out_path: pathlib.Path,
+) -> openpyxl.Workbook:
+    """Write risk averages data and plots to an Excel workbook sheet."""
+    ws = workbook.create_sheet(title="Risk Averages")
+    gn_yl_red_cmap = mpl.colormaps["RdYlGn_r"]
+    oranges_cmap = mpl.colormaps["Oranges"]
+
+    # Write risk averages data to the sheet
+    for r_idx, row in enumerate(dataframe_to_rows(risk_averages, index=False, header=True), 1):
+        for c_idx, value in enumerate(row, 1):
+            column_letter = openpyxl.utils.get_column_letter(c_idx)
+            ws.column_dimensions[column_letter].width = 15
+            horizontal_alignment = "left"  # Default alignment for all cells
+
+            # Determine formatting dynamically
+            if r_idx == 1:  # Apply fill only to header row:
+                fill_colour = "000000"  # black
+                bold = True
+                text_colour = "FFFFFF"  # white
+            elif c_idx == 1:
+                if r_idx % 2 == 0:
+                    fill_colour = "a9a9a9"  # dark grey for even rows
+                else:
+                    fill_colour = "808080"  # grey for odd rows
+                bold = False
+                text_colour = "000000"  # black
+
+            if isinstance(value, (int, float)):
+                cell = ws.cell(row=r_idx, column=c_idx, value=value)
+                if c_idx in [2, 3]:
+                    fill_colour = mpl.colors.to_hex(gn_yl_red_cmap(value / 100)).replace(
+                        "#", ""
+                    )
+                elif c_idx == 4:
+                    if value > 0:
+                        fill_colour = "90ee90"  # light green for positive values
+                    else:
+                        fill_colour = "db7093"  # pale violet red for negative values
+                elif c_idx == 5:
+                    fill_colour = mpl.colors.to_hex(oranges_cmap(value / 100)).replace("#", "")
+            else:
+                cell = ws.cell(row=r_idx, column=c_idx, value=value)
+                if r_idx == 1:
+                    cell_border = openpyxl.styles.Border(
+                        right=border, top=border, bottom=border
+                    )
+                else:
+                    cell_border = openpyxl.styles.Border(right=border)
+
+            # Format cell
+            _style_cell(
+                cell=cell,
+                fill_colour=fill_colour,
+                text_colour=text_colour,
+                bold=bold,
+                alignment=horizontal_alignment,
+                border=cell_border,
+            )
+
+    image_row = len(risk_averages) + 3
+    image_column = 1
+
+    risk_averages_image = openpyxl.drawing.image.Image(
+        out_path / "Risk Averages" / "risk_averages.png"
+    )
+    risk_averages_image.width = 500
+    risk_averages_image.height = 300
+
+    ws.add_image(
+        risk_averages_image,
+        f"{openpyxl.utils.get_column_letter(image_column)}{image_row}",
+    )
+
+    return workbook
+
+
+def _write_descriptive_risk_averages(
+    workbook: openpyxl.Workbook,
+    descriptive_risk_averages: dict[str, pd.DataFrame],
+    border: openpyxl.styles.Side,
+) -> openpyxl.Workbook:
+    """Write descriptive risk averages data to the Excel workbook sheet."""
+    # TODO (DJ): Need to clean up the structure column names before they go into this
+    ws = workbook.create_sheet(title="Descriptive Risk Averages")
+    gn_yl_red_cmap = mpl.colormaps["RdYlGn_r"]
+    total_length = 0
+
+    for _, risk_averages in descriptive_risk_averages.items():
+        for r_idx, row in enumerate(
+            dataframe_to_rows(risk_averages, index=False, header=True), 1
+        ):
+            for c_idx, value in enumerate(row, 1):
+                column_letter = openpyxl.utils.get_column_letter(c_idx)
+                ws.column_dimensions[column_letter].width = 15
+                horizontal_alignment = "left"  # Default alignment for all cells
+                current_row = total_length + r_idx
+
+                cell = ws.cell(row=current_row, column=c_idx, value=value)
+
+                fill_colour = "FFFFFF"  # default white fill
+                text_colour = "000000"  # default black text
+                bold = False
+                cell_border = None  # default border for all cells
+
+                if r_idx == 1:  # Apply fill only to header row:
+                    fill_colour = "008080"  # teal
+                    bold = True
+                    text_colour = "FFFFFF"  # white
+                    cell_border = openpyxl.styles.Border(top=border, bottom=border)
+                    if c_idx == 1:
+                        cell_border = openpyxl.styles.Border(
+                            left=border, top=border, bottom=border
+                        )
+                    elif c_idx == 2 or (c_idx - 3) % 3 not in [0, 1]:
+                        cell_border = openpyxl.styles.Border(
+                            right=border, top=border, bottom=border
+                        )
+
+                elif c_idx in [1, 2]:
+                    if r_idx % 2 == 0:
+                        fill_colour = "a9a9a9"  # dark grey for even rows
+                    else:
+                        fill_colour = "808080"  # grey for odd rows
+                    bold = False
+                    if c_idx == 2:
+                        cell_border = openpyxl.styles.Border(right=border)
+                elif (c_idx - 3) % 3 in [0, 1]:
+                    fill_colour = mpl.colors.to_hex(gn_yl_red_cmap(value / 100)).replace(
+                        "#", ""
+                    )
+                else:
+                    cell_border = openpyxl.styles.Border(right=border)
+                    if value > 0:
+                        cell.value = f"↑ {value:.1f}"
+                        text_colour = "F8696B"  # red
+                    elif value < 0:
+                        cell.value = f"↓ {value:.1f}"
+                        text_colour = "63BE7B"  # green
+                    else:
+                        cell.value = f"→ {value:.1f}"
+                        text_colour = "FFEB84"  # yellow
+
+                # Format cell
+                _style_cell(
+                    cell=cell,
+                    fill_colour=fill_colour,
+                    text_colour=text_colour,
+                    bold=bold,
+                    border=cell_border,
+                    alignment=horizontal_alignment,
+                )
+
+        total_length += len(risk_averages) + 2
+
+    return workbook
+
+
+def _style_cell(
+    cell: openpyxl.cell.Cell,
+    *,
+    fill_colour: str,
+    text_colour: str = "000000",
+    bold: bool = False,
+    border: openpyxl.styles.borders.Border | None = None,
+    alignment: str = "left",
+) -> None:
+    """Apply styling to a given cell."""
+    cell.fill = openpyxl.styles.PatternFill(
+        fill_type="solid",
+        start_color=fill_colour,
+        end_color=fill_colour,
+    )
+    cell.font = openpyxl.styles.Font(
+        name="Verdana",
+        color=text_colour,
+        bold=bold,
+    )
+    cell.alignment = openpyxl.styles.Alignment(wrap_text=True, horizontal=alignment)
+    if border:
+        cell.border = border
 
 
 # LAYERING
@@ -365,6 +1059,7 @@ def _infrastructure_layering(
     _get_road_risk(config, hazard_layers, risk_cols, audit_path)
     _get_rail_risk(config, hazard_layers, risk_cols, audit_path)
     _get_other_risk(config, hazard_layers, risk_cols, audit_path)
+    _get_bespoke_risk(config, hazard_layers, risk_cols, audit_path)
 
 
 ### ROAD
@@ -421,6 +1116,15 @@ def _os_open_road_risk(
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
+    # TODO (DJ): Add descriptive cols
+    _create_risk_summary(
+        os_road_risk,
+        risk_cols,
+        [],
+        audit_path / "Summary" / "Road" / "OS Roads",
+        "OS Roads Risk Summary.xlsx",
+    )
+
     _audit_infrastructure_risk(
         os_road_risk,
         "All Roads",
@@ -449,6 +1153,7 @@ def _os_open_road_risk(
 
 #### NoHAM Roads
 
+
 def _noham_road_risk(
     config: model_config.Config,
     hazard_layers: dict[str, gpd.GeoDataFrame],
@@ -471,10 +1176,23 @@ def _noham_road_risk(
 
     noham_risk = _infrastructure_risk_intersect(noham_net_flows, hazard_layers)
 
+    noham_risk = _apply_asset_hazard_weighting(
+        noham_risk, AssetTypes.ROAD, hazards=hazard_layers
+    )
+
     feature_range = (config.constants.score_min, config.constants.score_max)
     noham_risk = _noham_impact_index(noham_risk, feature_range)
 
     risk_impact_cols = [*risk_cols, *ImpactCols.get_noham_impact_cols()]
+
+    # TODO (DJ): Add descriptive cols
+    _create_risk_summary(
+        noham_risk,
+        risk_impact_cols,
+        [],
+        audit_path / "Summary" / "Road" / "NoHAM",
+        "NoHAM Roads Risk Summary.xlsx",
+    )
 
     _audit_infrastructure_risk(
         noham_risk,
@@ -509,8 +1227,7 @@ def _noham_impact_index(
     """Normalise NoHAM demand, then calculate impact index."""
     noham = _normalise_uc_demand(noham, feature_range)
     noham = _normalise_total_demand(noham, feature_range)
-    noham = _calculate_noham_impact(noham)
-    return _normalise_noham_impact(noham, feature_range)
+    return _calculate_noham_impact(noham)
 
 
 def _normalise_uc_demand(noham: pd.DataFrame, feature_range: tuple[int, int]) -> pd.DataFrame:
@@ -571,18 +1288,6 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
     return noham.drop(columns=demand_cols)
 
 
-def _normalise_noham_impact(
-    noham: pd.DataFrame, feature_range: tuple[int, int]
-) -> pd.DataFrame:
-    """Normalise NoHAM impact scores across all user classes combined."""
-    pairs = [
-        (f"{uc}_impact_{Scenarios.CURRENT}", f"{uc}_impact_{Scenarios.FORECAST}")
-        for uc in UserClasses.get_noham_classes()
-    ] + [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")]
-
-    return functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
-
-
 #### TRANSPORT MODEL ROADS
 
 
@@ -618,6 +1323,15 @@ def _model_road_risk(
     model_road_risk = _model_road_impact_index(model_road_risk, feature_range)
 
     risk_impact_cols = [*risk_cols, *ImpactCols]
+
+    # TODO (DJ): Add descriptive cols
+    _create_risk_summary(
+        model_road_risk,
+        risk_impact_cols,
+        [],
+        audit_path / "Summary" / "Road" / "Model Roads",
+        "Model Roads Risk Summary.xlsx",
+    )
 
     _audit_infrastructure_risk(
         model_road_risk,
@@ -664,18 +1378,7 @@ def _model_road_impact_index(
     )
 
     # Then, calculate impact index for each user class and for total demand
-    model_road_risk = _calculate_model_road_impact(model_road_risk)
-
-    # Finally, normalise the impact index for each user class and for total demand
-    return functional_rules.min_max_scaling_pair(
-        data=model_road_risk,
-        pairs=[
-            (f"{uc}_impact_{Scenarios.CURRENT}", f"{uc}_impact_{Scenarios.FORECAST}")
-            for uc in UserClasses
-        ]
-        + [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")],
-        feature_range=feature_range,
-    )
+    return _calculate_model_road_impact(model_road_risk)
 
 
 def _calculate_model_road_impact(model_road_risk: pd.DataFrame) -> pd.DataFrame:
@@ -761,6 +1464,20 @@ def _passenger_rail_risk(
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
         feature_range=(config.constants.score_min, config.constants.score_max),
+    )
+
+    _create_risk_summary(
+        passenger_rail_network_risk,
+        risk_cols,
+        [
+            OSRailCols.DESCRIPTION,
+            OSRailCols.STRUCTURE,
+            OSRailCols.PHYSICAL_LEVEL,
+            OSRailCols.RAILWAY_USE,
+            OSRailCols.TRACK_REPRESENTATION,
+        ],
+        config.paths.audit_path / "Summary" / "Rail" / "Passenger Rail",
+        "Passenger Rail Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
@@ -849,6 +1566,20 @@ def _freight_rail_risk(
         data_cleaning.BNG_CRS, allow_override=True
     )
 
+    _create_risk_summary(
+        freight_rail_network_risk,
+        risk_cols,
+        [
+            OSRailCols.DESCRIPTION,
+            OSRailCols.STRUCTURE,
+            OSRailCols.PHYSICAL_LEVEL,
+            OSRailCols.RAILWAY_USE,
+            OSRailCols.TRACK_REPRESENTATION,
+        ],
+        config.paths.audit_path / "Summary" / "Rail" / "Freight Rail",
+        "Freight Rail Risk Summary.xlsx",
+    )
+
     _audit_infrastructure_risk(
         freight_rail_network_risk,
         "Freight Rail",
@@ -899,13 +1630,7 @@ def _freight_impact_index(
         feature_range,
     )
 
-    freight_rail_network_risk = _calculate_freight_impact(freight_rail_network_risk)
-
-    freight_rail_network_risk = functional_rules.min_max_scaling_pair(
-        freight_rail_network_risk,
-        [(f"impact_{Scenarios.CURRENT}", f"impact_{Scenarios.FORECAST}")],
-        feature_range,
-    )
+    return _calculate_freight_impact(freight_rail_network_risk)
 
     return gpd.GeoDataFrame(freight_rail_network_risk, geometry="geometry", crs="EPSG:4326")
 
@@ -938,27 +1663,29 @@ def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
 ### OTHER
 
 
-def _get_other_risk(  # noqa: C901
+def _get_other_risk(  # noqa: C901, PLR0912
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
     """Layer other infrastructure with hazards to assign risk."""
-    other_risk_enabled = any([
-        config.switches.train_stations,
-        config.switches.charging_sites,
-        config.switches.airports,
-        config.switches.bus_coach_stations,
-        config.switches.bus_stops,
-        config.switches.tram_stations,
-        config.switches.rapid_transport_stations,
-        config.switches.ferry_terminals,
-        config.switches.petrol_stations,
-        config.switches.national_cycle_network,
-        config.switches.tram_network,
-        config.switches.rapid_transport_network,
-    ])
+    other_risk_enabled = any(
+        [
+            config.switches.train_stations,
+            config.switches.charging_sites,
+            config.switches.airports,
+            config.switches.bus_coach_stations,
+            config.switches.bus_stops,
+            config.switches.tram_stations,
+            config.switches.rapid_transport_stations,
+            config.switches.ferry_terminals,
+            config.switches.petrol_stations,
+            config.switches.national_cycle_network,
+            config.switches.tram_network,
+            config.switches.rapid_transport_network,
+        ]
+    )
     if other_risk_enabled:
         LOG.info("Calculating risk for other infrastructure...")
         if config.switches.train_stations:
@@ -1519,6 +2246,15 @@ def _ncn_risk(
 
     ncn_risk = _infrastructure_risk_intersect(ncn, hazard_layers)
 
+    # TODO (DJ): Add descriptive cols
+    _create_risk_summary(
+        ncn_risk,
+        risk_cols,
+        [],
+        config.paths.audit_path / "Summary" / "Other" / "National Cycle Network",
+        "National Cycle Network Risk Summary.xlsx",
+    )
+
     _audit_infrastructure_risk(
         ncn_risk,
         "National Cycle Network",
@@ -1590,6 +2326,15 @@ def _tram_network_risk(
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
+    # TODO (DJ): Add descriptive risk cols
+    _create_risk_summary(
+        tram_risk,
+        risk_cols,
+        [],
+        config.paths.audit_path / "Summary" / "Other" / "Tram Network Risk",
+        "Tram Network Risk Summary.xlsx",
+    )
+
     _audit_infrastructure_risk(
         tram_risk,
         "Tram Network",
@@ -1658,6 +2403,20 @@ def _rapid_transport_network_risk(
         feature_range=feature_range,
     )
 
+    _create_risk_summary(
+        rapid_transport_risk,
+        risk_cols,
+        [
+            OSRailCols.DESCRIPTION,
+            OSRailCols.STRUCTURE,
+            OSRailCols.PHYSICAL_LEVEL,
+            OSRailCols.RAILWAY_USE,
+            OSRailCols.TRACK_REPRESENTATION,
+        ],
+        config.paths.audit_path / "Summary" / "Other" / "Rapid Transport Network",
+        "Rapid Transport Network Risk Summary.xlsx",
+    )
+
     _audit_infrastructure_risk(
         rapid_transport_risk,
         "Rapid Transport Network",
@@ -1693,3 +2452,185 @@ def _rapid_transport_network_risk(
         pathlib.Path("Other") / "Rapid Transport Network" / "rapid_transport_network_risk",
     )
     LOG.info("Finished layering rapid transport network with hazard risk.")
+
+
+### BESPOKE
+
+
+def _get_bespoke_risk(
+    config: model_config.Config,
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
+    risk_cols: list[RiskColumn],
+    audit_path: pathlib.Path,
+) -> None:
+    """Get bespoke infrastructure risk and write to file."""
+    any_bespoke = any(
+        [
+            config.switches.bespoke,
+        ]
+    )
+    if any_bespoke:
+        LOG.info("Calculating bespoke infrastructure risk...")
+        _nexus_metro_links_risk(config, hazard_layers, risk_cols, audit_path)
+        _nexus_metro_stations_risk(config, hazard_layers, risk_cols, audit_path)
+        LOG.info("Risk calculation for bespoke infrastructure completed.")
+
+
+def _nexus_metro_links_risk(
+    config: model_config.Config,
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
+    risk_cols: list[RiskColumn],
+    audit_path: pathlib.Path,
+) -> None:
+    """Calculate Nexus Metro bespoke infrastructure risk and write to file."""
+    LOG.info("Calculating Nexus Metro bespoke infrastructure risk...")
+    metro_link_flows = gpd.read_file(
+        config.paths.model_input / file_paths.NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH
+    )
+
+    if metro_link_flows.empty:
+        LOG.warning("Nexus Metro links layer is empty. Skipping.")
+        return
+
+    metro_link_flows = metro_link_flows.rename(
+        columns={"id": "nexus_id", "metro_link_id": "id"}
+    )
+
+    metro_links_risk = _infrastructure_risk_intersect(metro_link_flows, hazard_layers)
+
+    feature_range = (config.constants.score_min, config.constants.score_max)
+
+    metro_links_risk = _metro_impact_index(metro_links_risk, feature_range)
+
+    # TODO (DJ): Add descriptive cols
+    _create_risk_summary(
+        metro_links_risk,
+        risk_cols,
+        ["Ownership", "extension"],
+        config.paths.audit_path / "Summary" / "Bespoke" / "Nexus Metro Network",
+        "Nexus Metro Network Risk Summary.xlsx",
+    )
+
+    _audit_infrastructure_risk(
+        metro_links_risk,
+        "Nexus Metro Links",
+        risk_cols,
+        audit_path / "Other" / "Nexus Metro Links",
+        feature_range=feature_range,
+    )
+
+    data_cleaning.write_to_file(
+        metro_links_risk,
+        config.paths.model_output
+        / "Other"
+        / "Nexus Metro Links"
+        / "nexus_metro_links_risk.gpkg",
+    )
+
+    metro_links_risk = _prepare_model_output(
+        risk_data=metro_links_risk,
+        drop_cols=[],
+        rename_map={},
+        risk_cols_order=risk_cols,
+    )
+
+    _split_csv_shapefile(
+        config,
+        metro_links_risk,
+        "id",
+        pathlib.Path("Other") / "Nexus Metro Links" / "nexus_metro_links_risk",
+    )
+    LOG.info("Finished calculating Nexus Metro bespoke infrastructure risk.")
+
+
+def _metro_impact_index(
+    metro_risk: gpd.GeoDataFrame, feature_range: tuple[int, int]
+) -> gpd.GeoDataFrame:
+    """Normalise metro link demand, then calculate impact index."""
+    # First, normalise demand
+    metro_risk = functional_rules.min_max_scaling_pair(
+        data=metro_risk,
+        pairs=[(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")],
+        feature_range=feature_range,
+    )
+
+    # Then, calculate impact index for total demand
+    return _calculate_metro_impact(metro_risk)
+
+
+def _calculate_metro_impact(metro_risk: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Calculate metro impact score for total demand."""
+    risk_cols = [
+        col for col in MainHazardRiskCols if f"{col}_{Scenarios.CURRENT}" in metro_risk.columns
+    ]
+
+    hazards = [col.removesuffix("_risk") for col in risk_cols]
+    impact_weights = _get_impact_weights(hazards)
+
+    for scenario in Scenarios:
+        hazard_component = sum(
+            metro_risk[f"{risk_col}_{scenario}"]
+            * impact_weights[risk_col.removesuffix("_risk")]
+            for risk_col in risk_cols
+        )
+
+        impact_component = metro_risk[f"demand_{scenario}"] * impact_weights["demand"]
+        metro_risk[f"impact_{scenario}"] = impact_component + hazard_component
+
+    return metro_risk
+
+
+def _nexus_metro_stations_risk(
+    config: model_config.Config,
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
+    risk_cols: list[RiskColumn],
+    audit_path: pathlib.Path,
+) -> None:
+    """Calculate Nexus Metro stations bespoke infrastructure risk and write to file."""
+    LOG.info("Calculating Nexus Metro stations bespoke infrastructure risk...")
+    metro_stations = gpd.read_file(
+        config.paths.model_input / file_paths.NEXUS_METRO_STATIONS_MODEL_INPUT_PATH
+    )
+
+    if metro_stations.empty:
+        LOG.warning("Nexus Metro stations layer is empty. Skipping.")
+        return
+
+    metro_stations = _buffer_geometry(metro_stations, _METRO_STATION_BUFFER_SIZE_M)
+
+    # TODO (DJ): Consider buffering metro stations to account for surrounding area risk
+
+    metro_stations_risk = _infrastructure_risk_intersect(metro_stations, hazard_layers)
+
+    feature_range = (config.constants.score_min, config.constants.score_max)
+
+    _audit_infrastructure_risk(
+        metro_stations_risk,
+        "Nexus Metro Stations",
+        risk_cols,
+        audit_path / "Other" / "Nexus Metro Stations",
+        feature_range=feature_range,
+    )
+
+    data_cleaning.write_to_file(
+        metro_stations_risk,
+        config.paths.model_output
+        / "Other"
+        / "Nexus Metro Stations"
+        / "nexus_metro_stations_risk.gpkg",
+    )
+
+    metro_stations_risk = _prepare_model_output(
+        risk_data=metro_stations_risk,
+        drop_cols=[],
+        rename_map={},
+        risk_cols_order=risk_cols,
+    )
+
+    _split_csv_shapefile(
+        config,
+        metro_stations_risk,
+        "id",
+        pathlib.Path("Other") / "Nexus Metro Stations" / "nexus_metro_stations_risk",
+    )
+    LOG.info("Finished calculating Nexus Metro stations bespoke infrastructure risk.")

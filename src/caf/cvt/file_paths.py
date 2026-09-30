@@ -53,6 +53,13 @@ CHARGING_SITES_MODEL_INPUT_PATH = pathlib.Path(
 )
 NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/NCN/ncn.gpkg")
 
+NEXUS_METRO_LINKS_MODEL_INPUT_PATH = pathlib.Path(
+    "Infrastructure/Bespoke/Nexus Metro/metro_links.gpkg"
+)
+NEXUS_METRO_STATIONS_MODEL_INPUT_PATH = pathlib.Path(
+    "Infrastructure/Bespoke/Nexus Metro/metro_stations.gpkg"
+)
+
 # Hazards Model Inputs Paths
 HAZARD_GRID_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Extreme Weather/Hazard Grid/hazard_grid.gpkg"
@@ -101,10 +108,8 @@ WIND_DRIVEN_RAIN_MODEL_INPUT_PATH = pathlib.Path(
 FLOODING_MODEL_INPUT_PATH = pathlib.Path("Hazards/Flooding")
 
 
-GEOSURE_MODEL_INPUT_PATH = pathlib.Path("Hazards/Ground Stability/GeoSure/geosure.gpkg")
-GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH = pathlib.Path(
-    "Hazards/Ground Stability/BGS Shrink Swell"
-)
+GEOSURE_MODEL_INPUT_PATH = pathlib.Path("Hazards/Ground Stability/GeoSure")
+
 GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Coastal Erosion/NCERM/ncerm_giz.gpkg"
 )
@@ -121,6 +126,10 @@ NOHAM_ZIP_EXTRACT_OUTPUT_PATH = pathlib.Path("Impact/NoHAM Link Flows/h5 files")
 
 MODEL_ROAD_FLOWS_MODEL_INPUT_PATH = pathlib.Path(
     "Impact/Model Road Flows/model_road_flows.gpkg"
+)
+
+NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH = pathlib.Path(
+    "Impact/Nexus Metro Link Flows/nexus_metro_link_flows.gpkg"
 )
 
 # Model Interim Output Paths
