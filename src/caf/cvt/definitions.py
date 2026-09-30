@@ -53,11 +53,20 @@ class ExtremeWeatherRiskCols(RiskColumn):
         }
 
 
+class FloodingTypes(enum.StrEnum):
+    """Enumeration for different types of flooding."""
+
+    RIVERS_SEA = "rivers_sea"
+    SURFACE_WATER = "surface_water"
+    GROUNDWATER = "groundwater"
+
+
 class FloodingRiskCols(RiskColumn):
     """Column definitions for flooding subhazard layers."""
 
     RIVERS_SEA = "rivers_sea_flooding_risk"
     SURFACE_WATER = "surface_water_flooding_risk"
+    #    GROUNDWATER = "groundwater_flooding_risk"
 
     def get_cmap(self) -> str:
         """Return the appropriate colormap for a given flooding subhazard column."""
@@ -69,6 +78,7 @@ class FloodingRiskCols(RiskColumn):
         return {
             FloodingRiskCols.RIVERS_SEA: 0.5,
             FloodingRiskCols.SURFACE_WATER: 0.5,
+            # FloodingRiskCols.GROUNDWATER: 0.33
         }
 
 
@@ -81,7 +91,6 @@ class GroundStabilityRiskCols(RiskColumn):
     RUNNING_SAND = "running_sand_risk"
     SHRINK_SWELL = "shrink_swell_risk"
     SOLUBLE_ROCKS = "soluble_rocks_risk"
-    SHRINK_SWELL_GEOCLIMATE = "shrink_swell_geoclimate_risk"
 
     def get_cmap(self) -> str:
         """Return the appropriate colormap for a given ground stability subhazard column."""
@@ -91,32 +100,12 @@ class GroundStabilityRiskCols(RiskColumn):
     def get_weights(cls) -> dict[RiskColumn, float]:
         """Return appropriate weights for Ground Stability."""
         return {
-            GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: 0.10,
-            GroundStabilityRiskCols.COMPRESSIBLE_GROUND: 0.10,
-            GroundStabilityRiskCols.LANDSLIDES: 0.10,
-            GroundStabilityRiskCols.RUNNING_SAND: 0.10,
-            GroundStabilityRiskCols.SHRINK_SWELL: 0.10,
-            GroundStabilityRiskCols.SOLUBLE_ROCKS: 0.10,
-            GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE: 0.40,
-        }
-
-
-class CoastalErosionRiskCols(RiskColumn):
-    """Column definitions for coastal erosion subhazard layers."""
-
-    EROSION = "erosion_risk"
-    GIZ = "giz_risk"
-
-    def get_cmap(self) -> str:
-        """Return the appropriate colormap for a given coastal erosion subhazard column."""
-        return "Purples"
-
-    @classmethod
-    def get_weights(cls) -> dict[RiskColumn, float]:
-        """Return appropriate weights for Coastal Erosion."""
-        return {
-            CoastalErosionRiskCols.EROSION: 0.9,
-            CoastalErosionRiskCols.GIZ: 0.1,
+            GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: 0.17,
+            GroundStabilityRiskCols.COMPRESSIBLE_GROUND: 0.17,
+            GroundStabilityRiskCols.LANDSLIDES: 0.17,
+            GroundStabilityRiskCols.RUNNING_SAND: 0.17,
+            GroundStabilityRiskCols.SHRINK_SWELL: 0.16,
+            GroundStabilityRiskCols.SOLUBLE_ROCKS: 0.16,
         }
 
 
@@ -144,10 +133,20 @@ class MainHazardRiskCols(RiskColumn):
             MainHazardRiskCols.EXTREME_WEATHER: ExtremeWeatherRiskCols.get_weights(),
             MainHazardRiskCols.FLOODING: FloodingRiskCols.get_weights(),
             MainHazardRiskCols.GROUND_STABILITY: GroundStabilityRiskCols.get_weights(),
-            MainHazardRiskCols.COASTAL_EROSION: CoastalErosionRiskCols.get_weights(),
+            MainHazardRiskCols.COASTAL_EROSION: {},
         }
 
         return weights_mapping[self]
+
+    def get_sub_hazards(self) -> list[str]:
+        """Return a list of sub-hazard columns for the main hazard."""
+        sub_hazard_mapping = {
+            MainHazardRiskCols.EXTREME_WEATHER: list(ExtremeWeatherRiskCols),
+            MainHazardRiskCols.FLOODING: list(FloodingRiskCols),
+            MainHazardRiskCols.GROUND_STABILITY: list(GroundStabilityRiskCols),
+            MainHazardRiskCols.COASTAL_EROSION: [],
+        }
+        return sub_hazard_mapping[self]
 
 
 class ExtremeHeatCols(RiskColumn):
@@ -261,7 +260,7 @@ class ImpactCols(RiskColumn):
             cls.UC3_IMPACT,
             cls.UC4_IMPACT,
             cls.UC5_IMPACT,
-            cls.IMPACT
+            cls.IMPACT,
         ]
 
 
@@ -360,8 +359,6 @@ class OSRailStructure(enum.StrEnum):
                 FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
                 GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
                 GroundStabilityRiskCols.SHRINK_SWELL: VulnerabilityModifier.VERY_HIGH,
-                GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE:
-                VulnerabilityModifier.VERY_HIGH,
             },
             OSRailStructure.BRIDGE: {
                 ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.VERY_HIGH,

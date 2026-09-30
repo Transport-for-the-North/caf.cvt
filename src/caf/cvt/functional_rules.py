@@ -12,12 +12,11 @@ import numpy as np
 import pandas as pd
 import sklearn
 import xyzservices
-from pyogrio.errors import DataLayerError
+from pyogrio.errors import DataLayerError, DataSourceError
 from shapely.geometry import Polygon, box
 
 from caf.cvt import data_cleaning, file_paths, model_config
 from caf.cvt.definitions import (
-    CoastalErosionRiskCols,
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
@@ -50,26 +49,26 @@ _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE = 10000
 
 _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE = 1000
 _GROUND_STABILITY_RISK_SCORE_MAP = {
-    "Probable": 1,
-    "Possible": 0.66,
-    "Improbable": 0.33,
-    "Unavailable": 0.5,  # Assign neutral value
+    "A": 1,
+    "B": 2,
+    "C": 3,
+    "D": 4,
+    "E": 5,
 }
 
-_GEOCLIMATE_YEAR_SCENARIO_MAP = {"2030": Scenarios.CURRENT, "2070": Scenarios.FORECAST}
 
 _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
 
-FLOODING_TILE_SIZE_M = 5000
-_NUM_TILES_DONE = 82
+_FLOODING_TILE_SIZE_M = 10000
+_NUM_TILES_DONE = 0
 _FLOODING_RISK_SCORE_MAP = {
-    0: 0, # No risk areas stay 0
+    0: 0,  # No risk areas stay 0
     "Unavailable": np.nan,
-    "Very low": 0, # Less than 0.1% chance of flooding
-    "Low": 0.1, # 0.1% to 1% chance of flooding
-    "Medium": 1, # 1% to 3.3% chance of flooding
-    "High": 3.3 # Greater than 3.3% chance of flooding
+    "Very low": 0,  # Less than 0.1% chance of flooding
+    "Low": 0.1,  # 0.1% to 1% chance of flooding
+    "Medium": 1,  # 1% to 3.3% chance of flooding
+    "High": 3.3,  # Greater than 3.3% chance of flooding
 }
 
 _PLOT_ALPHA_BASEMAP = 0.7
@@ -132,6 +131,18 @@ def min_max_scaling_pair(
             .flatten()
         )
 
+    return data
+
+
+def _min_max_scaling(
+    data: pd.DataFrame,
+    columns: list[str],
+    feature_range: tuple[int, int],
+) -> pd.DataFrame:
+    """Scale specified columns using Min-Max scaling."""
+    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=feature_range)
+    for col in columns:
+        data[col] = scaler.fit_transform(data[[col]].values).clip(*feature_range)
     return data
 
 
@@ -200,7 +211,7 @@ def _nearest_join_infilling(
     for var in variables:
         risk_grid[var] = risk_grid[var].fillna(0)
 
-    LOG.info("Filled remaining %s NA values with 0",  final_remaining)
+    LOG.info("Filled remaining %s NA values with 0", final_remaining)
 
     return risk_grid
 
@@ -323,7 +334,7 @@ def _calculate_risk_threshold(
     return risk_data
 
 
-def _calculate_composite_score(
+def _calculate_composite_score_scenarios(
     risk_data: pd.DataFrame, weights: dict[str, float], output_col: RiskColumn
 ) -> pd.DataFrame:
     """Calculate composite score given a dataframe with variables and corresponding weights."""
@@ -331,6 +342,17 @@ def _calculate_composite_score(
         risk_data[f"{output_col}_{scenario}"] = sum(
             risk_data[f"{col}_{scenario}"] * weight for col, weight in weights.items()
         )
+
+    return risk_data
+
+
+def _calculate_composite_score(
+    risk_data: pd.DataFrame, weights: dict[str, float], output_col: str
+) -> pd.DataFrame:
+    """Calculate composite score given a dataframe with variables and corresponding weights."""
+    # TODO (DJ): Consider alternative approach for calculating composite score,
+    # e.g. taking max value, or weighted mean + maximum value
+    risk_data[output_col] = sum(risk_data[col] * weight for col, weight in weights.items())
 
     return risk_data
 
@@ -391,7 +413,7 @@ def _overlay_and_clean(
     return hazard_overlay
 
 
-def plot_choropleth_current_and_forecast(
+def plot_choropleth(
     risk_data: gpd.GeoDataFrame,
     column: RiskColumn,
     title: str,
@@ -430,45 +452,75 @@ def plot_choropleth_current_and_forecast(
     -------
     None
     """
-    _fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+    current_col = f"{column}_{Scenarios.CURRENT}"
+    forecast_col = f"{column}_{Scenarios.FORECAST}"
+
+    has_scenarios = current_col in risk_data.columns and forecast_col in risk_data.columns
 
     if basemap_source is not None:
         risk_data = risk_data.to_crs(epsg=3857)
 
     cmap = column.get_cmap()
 
-    risk_data.plot(
-        column=f"{column}_{Scenarios.CURRENT}",
-        cmap=cmap,
-        linewidth=linewidth,
-        ax=ax[0],
-        edgecolor=edgecolor,
-        legend=True,
-        vmin=feature_range[0],
-        vmax=feature_range[1],
-        alpha=_PLOT_ALPHA_BASEMAP if basemap_source is not None else _PLOT_ALPHA_NO_BASEMAP,
-    )
+    if has_scenarios:
+        _fig, ax = plt.subplots(1, 2, figsize=(16, 8))
 
-    risk_data.plot(
-        column=f"{column}_{Scenarios.FORECAST}",
-        cmap=cmap,
-        linewidth=linewidth,
-        ax=ax[1],
-        edgecolor=edgecolor,
-        legend=True,
-        vmin=feature_range[0],
-        vmax=feature_range[1],
-        alpha=_PLOT_ALPHA_BASEMAP if basemap_source is not None else _PLOT_ALPHA_NO_BASEMAP,
-    )
+        risk_data.plot(
+            column=f"{column}_{Scenarios.CURRENT}",
+            cmap=cmap,
+            linewidth=linewidth,
+            ax=ax[0],
+            edgecolor=edgecolor,
+            legend=True,
+            vmin=feature_range[0],
+            vmax=feature_range[1],
+            alpha=_PLOT_ALPHA_BASEMAP
+            if basemap_source is not None
+            else _PLOT_ALPHA_NO_BASEMAP,
+        )
 
-    if basemap_source is not None:
-        ctx.add_basemap(ax[0], source=basemap_source)
-        ctx.add_basemap(ax[1], source=basemap_source)
+        risk_data.plot(
+            column=f"{column}_{Scenarios.FORECAST}",
+            cmap=cmap,
+            linewidth=linewidth,
+            ax=ax[1],
+            edgecolor=edgecolor,
+            legend=True,
+            vmin=feature_range[0],
+            vmax=feature_range[1],
+            alpha=_PLOT_ALPHA_BASEMAP
+            if basemap_source is not None
+            else _PLOT_ALPHA_NO_BASEMAP,
+        )
 
-    ax[0].set_title(f"{title} - {Scenarios.CURRENT.title()}")
-    ax[1].set_title(f"{title} - {Scenarios.FORECAST.title()}")
-    ax[0].set_axis_off()
-    ax[1].set_axis_off()
+        if basemap_source is not None:
+            ctx.add_basemap(ax[0], source=basemap_source)
+            ctx.add_basemap(ax[1], source=basemap_source)
+
+        ax[0].set_title(f"{title} - {Scenarios.CURRENT.title()}")
+        ax[1].set_title(f"{title} - {Scenarios.FORECAST.title()}")
+        ax[0].set_axis_off()
+        ax[1].set_axis_off()
+    else:
+        _fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        risk_data.plot(
+            column=column,
+            cmap=cmap,
+            linewidth=linewidth,
+            ax=ax,
+            edgecolor=edgecolor,
+            legend=True,
+            vmin=feature_range[0],
+            vmax=feature_range[1],
+            alpha=_PLOT_ALPHA_BASEMAP
+            if basemap_source is not None
+            else _PLOT_ALPHA_NO_BASEMAP,
+        )
+        if basemap_source is not None:
+            ctx.add_basemap(ax, source=basemap_source)
+        ax.set_title(title)
+        ax.set_axis_off()
+
     plt.tight_layout()
     plt.savefig(out_path)
     plt.close()
@@ -508,7 +560,7 @@ def _audit_index(
 
     for var in index_vars:
         # Plot Choropleth Maps for each variable
-        plot_choropleth_current_and_forecast(
+        plot_choropleth(
             risk_data=index,
             column=var,
             title=f"{var.replace('_', ' ').title()}",
@@ -627,7 +679,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
         _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE,
     )
 
-    extreme_weather_risk = _calculate_composite_score(
+    extreme_weather_risk = _calculate_composite_score_scenarios(
         extreme_weather_risk,
         MainHazardRiskCols.EXTREME_WEATHER.get_weights(),
         MainHazardRiskCols.EXTREME_WEATHER,
@@ -704,7 +756,7 @@ def _extreme_heat_index(
         feature_range,
     )
 
-    extreme_heat = _calculate_composite_score(
+    extreme_heat = _calculate_composite_score_scenarios(
         extreme_heat,
         ExtremeHeatCols.get_weights(),
         ExtremeWeatherRiskCols.EXTREME_HEAT,
@@ -782,7 +834,7 @@ def _extreme_cold_index(
         feature_range,
     )
 
-    extreme_cold = _calculate_composite_score(
+    extreme_cold = _calculate_composite_score_scenarios(
         extreme_cold,
         ExtremeColdCols.get_weights(),
         ExtremeWeatherRiskCols.EXTREME_COLD,
@@ -896,7 +948,7 @@ def _drought_index(
         - drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}"]
     )
 
-    drought_risk = _calculate_composite_score(
+    drought_risk = _calculate_composite_score_scenarios(
         drought_risk,
         DroughtCols.get_weights(),
         ExtremeWeatherRiskCols.DROUGHT,
@@ -1043,7 +1095,7 @@ def _storm_index(
         f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}"
     ].clip(*feature_range)
 
-    storm_risk = _calculate_composite_score(
+    storm_risk = _calculate_composite_score_scenarios(
         storm_risk,
         StormCols.get_weights(),
         ExtremeWeatherRiskCols.STORM,
@@ -1116,7 +1168,7 @@ def _flooding_index(
             boundary,
             flooding_paths,
             crs=data_cleaning.BNG_CRS,
-            tile_size_m=FLOODING_TILE_SIZE_M,
+            tile_size_m=_FLOODING_TILE_SIZE_M,
         )
 
     overlay_path = (
@@ -1126,6 +1178,7 @@ def _flooding_index(
 
     # Read the direct overlay result, and filter to region
     # Eventually want to rename the layer to 'flooding_overlay'
+    LOG.debug("Reading flooding overlay...")
     try:
         flooding_risk = gpd.read_file(
             overlay_path,
@@ -1141,6 +1194,21 @@ def _flooding_index(
             mask=boundary,
             layer="flood_overlay",
         )
+    except DataSourceError:
+        LOG.warning(
+            "Flooding Risk overlay not found at %s \n Falling back to default overlay.",
+            overlay_path,
+        )
+        flooding_risk = gpd.read_file(
+            config.paths.raw_input.parent
+            / "model interim outputs"
+            / file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH,
+            mask=boundary,
+            layer="flood_overlay",
+        )
+
+    LOG.debug("Loaded flooding overlay.")
+    LOG.debug("Applying functional rules to flooding overlay...")
 
     # Fill NA values with very low risk since no data means very low risk in the data
     flooding_risk = flooding_risk.fillna(_FLOODING_RISK_SCORE_MAP["Very low"])
@@ -1171,7 +1239,7 @@ def _flooding_index(
         feature_range,
     )
 
-    flooding_risk = _calculate_composite_score(
+    flooding_risk = _calculate_composite_score_scenarios(
         flooding_risk,
         MainHazardRiskCols.FLOODING.get_weights(),
         MainHazardRiskCols.FLOODING,
@@ -1303,62 +1371,40 @@ def _process_flooding_overlay_tile(
 
 
 def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Path) -> None:
-    """Combine GeoSure & GeoClimate risk into a single index, using a spatial overlay."""
+    """Combine GeoSure risk into a single index, using a spatial overlay."""
     LOG.info("Calculating ground stability risk index...")
-    geosure = gpd.read_file(config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH)
-    geosure = geosure.to_crs(data_cleaning.BNG_CRS)
-
-    shrink_swell = {}
-    ground_stability = {}
-    for year, scenario in _GEOCLIMATE_YEAR_SCENARIO_MAP.items():
-        shrink_swell[year] = gpd.read_file(
+    geosure_layers = {}
+    for geosure_hazard in GroundStabilityRiskCols:
+        geosure_layers[geosure_hazard] = gpd.read_file(
             config.paths.model_input
-            / file_paths.GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH
-            / f"bgs_ss_{year}.gpkg"
-        )
-        shrink_swell[year][GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE] = shrink_swell[
-            year
-        ][GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE].map(
-            _GROUND_STABILITY_RISK_SCORE_MAP
-        )
-        shrink_swell[year] = shrink_swell[year][
-            [GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE, "geometry"]
-        ]
-        ground_stability[scenario] = _overlay_and_clean(
-            geosure, shrink_swell[year], target_crs=data_cleaning.BNG_CRS
-        )
-        ground_stability[scenario] = ground_stability[scenario].rename(
-            columns={
-                col: f"{col}_{scenario}"
-                for col in ground_stability[scenario].columns
-                if col != "geometry"
-            }
+            / file_paths.GEOSURE_MODEL_INPUT_PATH
+            / f"{geosure_hazard}.gpkg"
         )
 
     ground_stability = _overlay_and_clean(
-        ground_stability[Scenarios.CURRENT],
-        ground_stability[Scenarios.FORECAST],
+        geosure_layers[GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS],
+        geosure_layers[GroundStabilityRiskCols.COMPRESSIBLE_GROUND],
+        geosure_layers[GroundStabilityRiskCols.LANDSLIDES],
+        geosure_layers[GroundStabilityRiskCols.RUNNING_SAND],
+        geosure_layers[GroundStabilityRiskCols.SHRINK_SWELL],
+        geosure_layers[GroundStabilityRiskCols.SOLUBLE_ROCKS],
         target_crs=data_cleaning.BNG_CRS,
     )
 
-    risk_cols = [
-        f"{hazard}_{suffix}" for hazard in GroundStabilityRiskCols for suffix in Scenarios
-    ]
-
-    for col in risk_cols:
-        ground_stability[col] = pd.to_numeric(ground_stability[col], errors="coerce")
+    # Convert risk columns from A-E to numeric scores
+    for col in GroundStabilityRiskCols:
+        ground_stability[col] = ground_stability[col].map(_GROUND_STABILITY_RISK_SCORE_MAP)
 
     ground_stability = _iterative_spatial_infilling(
-        ground_stability, risk_cols, _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE
+        ground_stability,
+        list(GroundStabilityRiskCols),
+        _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE,
     )
 
-    gs_pairs = [
-        (f"{col}_{Scenarios.CURRENT}", f"{col}_{Scenarios.FORECAST}")
-        for col in GroundStabilityRiskCols
-    ]
-
     feature_range = (config.constants.score_min, config.constants.score_max)
-    ground_stability = min_max_scaling_pair(ground_stability, gs_pairs, feature_range)
+    ground_stability = _min_max_scaling(
+        ground_stability, list(GroundStabilityRiskCols), feature_range
+    )
 
     ground_stability = _calculate_composite_score(
         ground_stability,
@@ -1370,6 +1416,7 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
         ground_stability,
         [*GroundStabilityRiskCols, MainHazardRiskCols.GROUND_STABILITY],
         feature_range,
+        scenarios=False,
     )
 
     _audit_index(
@@ -1394,26 +1441,21 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
 def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path) -> None:
     """Combine erosion and ground stability risk into single index using a spatial overlay."""
     LOG.info("Calculating coastal erosion risk index...")
-    ncerm_giz = gpd.read_file(
-        config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH
-    )
-    ncerm_giz[CoastalErosionRiskCols.GIZ] = config.constants.score_max
-
-    ncerm = {}
-    erosion_risk = {}
+    coastal_erosion_risk = {}
     for year, scenario in _COASTAL_EROSION_YEAR_SCENARIO_MAP.items():
-        ncerm[year] = gpd.read_file(
+        coastal_erosion_risk[scenario] = gpd.read_file(
             config.paths.model_input
             / file_paths.NCERM_MODEL_INPUT_PATH
             / f"ncerm_smp_{year}_70CC.gpkg"
         )
-        if ncerm_giz.empty and ncerm[year].empty:
+        if coastal_erosion_risk[scenario].empty:
             LOG.warning(
-                "Both NCERM and GIZ layers are empty for scenario %s. "
+                "NCERM layer is empty for scenario %s. "
                 "Coastal erosion risk will be 0 everywhere.",
                 scenario,
             )
-            if year == "2055":
+            # Create an empty file for the coastal erosion risk index
+            if scenario == Scenarios.CURRENT:
                 continue
             data_cleaning.write_to_file(
                 gpd.GeoDataFrame(
@@ -1430,26 +1472,11 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
             )
             return
 
-        ncerm[year][CoastalErosionRiskCols.EROSION] = config.constants.score_max
-
-        erosion_risk[scenario] = _overlay_and_clean(
-            ncerm_giz, ncerm[year], target_crs=data_cleaning.BNG_CRS
+        coastal_erosion_risk[scenario][MainHazardRiskCols.COASTAL_EROSION] = (
+            config.constants.score_max
         )
 
-        # If either of the layers is empty, fill the missing column with 0 (no risk)
-        for col in [CoastalErosionRiskCols.EROSION, CoastalErosionRiskCols.GIZ]:
-            if col not in erosion_risk[scenario]:
-                erosion_risk[scenario][col] = 0
-
-        # Compute composite risk score
-        erosion_risk[scenario][f"{MainHazardRiskCols.COASTAL_EROSION}"] = (
-            erosion_risk[scenario][CoastalErosionRiskCols.EROSION]
-            * MainHazardRiskCols.COASTAL_EROSION.get_weights()[CoastalErosionRiskCols.EROSION]
-            + erosion_risk[scenario][CoastalErosionRiskCols.GIZ]
-            * MainHazardRiskCols.COASTAL_EROSION.get_weights()[CoastalErosionRiskCols.GIZ]
-        )
-
-        erosion_risk[scenario] = erosion_risk[scenario].rename(
+        coastal_erosion_risk[scenario] = coastal_erosion_risk[scenario].rename(
             columns={
                 f"{MainHazardRiskCols.COASTAL_EROSION}": (
                     f"{MainHazardRiskCols.COASTAL_EROSION}_{scenario}"
@@ -1458,19 +1485,18 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
         )
 
     coastal_erosion_risk = _overlay_and_clean(
-        erosion_risk[Scenarios.CURRENT],
-        erosion_risk[Scenarios.FORECAST],
+        coastal_erosion_risk[Scenarios.CURRENT],
+        coastal_erosion_risk[Scenarios.FORECAST],
         target_crs=data_cleaning.BNG_CRS,
     )
 
-    coastal_erosion_risk = _iterative_spatial_infilling(
-        coastal_erosion_risk,
-        [
-            f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
-            f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FORECAST}",
-        ],
-        nearest_join_max_distance=_COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE,
+    # NA values indicate areas with 0 risk, so we fill them with 0 before further processing.
+    num_na = coastal_erosion_risk.isna().sum()
+    coastal_erosion_risk = coastal_erosion_risk.fillna(0)
+    LOG.debug(
+        "Infilled %s NA values with 0 where there is no risk in coastal erosion index.", num_na
     )
+
     coastal_erosion_risk = gpd.GeoDataFrame(coastal_erosion_risk, geometry="geometry")
     coastal_erosion_risk = coastal_erosion_risk[
         [

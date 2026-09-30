@@ -9,6 +9,7 @@ import pathlib
 
 import fiona
 import geopandas as gpd
+import networkx as nx
 import osbng
 import pandas as pd
 import py7zr
@@ -21,6 +22,8 @@ from caf.cvt.definitions import (
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
+    FloodingRiskCols,
+    FloodingTypes,
     GroundStabilityRiskCols,
     OSRailCols,
     OSRoadCols,
@@ -286,24 +289,6 @@ def _extract_poly_from_geomcollection(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame
     return gpd.GeoDataFrame(rows, crs=gdf.crs)
 
 
-def _nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Take two GeoDataFrames and merge them on their nearest centroids."""
-    # Ensure both GeoDataFrames are in the same projected CRS
-    gdf1 = gdf1.to_crs(BNG_CRS)
-    gdf2 = gdf2.to_crs(BNG_CRS)
-
-    # Convert both to centroids
-    gdf1_centroids = gdf1.copy()
-    gdf1_centroids["geometry"] = gdf1_centroids.geometry.centroid
-    gdf2_centroids = gdf2.copy()
-    gdf2_centroids["geometry"] = gdf2_centroids.geometry.centroid
-
-    nearest = gpd.sjoin_nearest(gdf1_centroids, gdf2_centroids, how="left")
-
-    # Merge back with original gdf1 to restore original geometry
-    return gdf1.merge(nearest.drop(columns="geometry"), left_index=True, right_index=True)
-
-
 def _get_bng_codes(boundary: gpd.GeoDataFrame) -> list[str]:
     """Clip the 100km BNG to the boundary."""
     bng_100km = gpd.GeoDataFrame.from_features(osbng.grids.bng_grid_100km, crs=BNG_CRS)
@@ -354,12 +339,14 @@ def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFram
     LOG.info("Cleaning infrastructure data...")
     _clean_roads(config, boundary)
 
-    any_rail = any([
-        config.switches.passenger_rail,
-        config.switches.freight_rail,
-        config.switches.tram_network,
-        config.switches.rapid_transport_network
-    ])
+    any_rail = any(
+        [
+            config.switches.passenger_rail,
+            config.switches.freight_rail,
+            config.switches.tram_network,
+            config.switches.rapid_transport_network,
+        ]
+    )
 
     if any_rail:
         rail_links = _get_rail_links(
@@ -381,11 +368,13 @@ def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFram
 
 def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all roads datasets ready for analysis."""
-    road_cleaning_enabled = any([
-        config.switches.all_roads,
-        config.switches.noham_roads,
-        config.switches.model_roads,
-    ])
+    road_cleaning_enabled = any(
+        [
+            config.switches.all_roads,
+            config.switches.noham_roads,
+            config.switches.model_roads,
+        ]
+    )
     if road_cleaning_enabled:
         LOG.info("Cleaning roads data...")
         if config.switches.all_roads:
@@ -553,10 +542,12 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
 
 def _clean_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame | None) -> None:
     """Clean all rail datasets ready for analysis."""
-    rail_cleaning_enabled = any([
-        config.switches.passenger_rail,
-        config.switches.freight_rail,
-    ])
+    rail_cleaning_enabled = any(
+        [
+            config.switches.passenger_rail,
+            config.switches.freight_rail,
+        ]
+    )
     if rail_cleaning_enabled:
         LOG.info("Cleaning rail data...")
         if config.switches.passenger_rail:
@@ -676,20 +667,22 @@ def _clean_other(  # noqa: C901, PLR0912
     rail_links: gpd.GeoDataFrame | None,
 ) -> None:
     """Clean all other datasets ready for analysis."""
-    other_cleaning_enabled = any([
-        config.switches.airports,
-        config.switches.bus_stops,
-        config.switches.petrol_stations,
-        config.switches.charging_sites,
-        config.switches.national_cycle_network,
-        config.switches.train_stations,
-        config.switches.tram_stations,
-        config.switches.rapid_transport_stations,
-        config.switches.ferry_terminals,
-        config.switches.bus_coach_stations,
-        config.switches.tram_network,
-        config.switches.rapid_transport_network,
-    ])
+    other_cleaning_enabled = any(
+        [
+            config.switches.airports,
+            config.switches.bus_stops,
+            config.switches.petrol_stations,
+            config.switches.charging_sites,
+            config.switches.national_cycle_network,
+            config.switches.train_stations,
+            config.switches.tram_stations,
+            config.switches.rapid_transport_stations,
+            config.switches.ferry_terminals,
+            config.switches.bus_coach_stations,
+            config.switches.tram_network,
+            config.switches.rapid_transport_network,
+        ]
+    )
     if other_cleaning_enabled:
         LOG.info("Cleaning other infrastructure data...")
         if config.switches.airports:
@@ -986,8 +979,8 @@ def _clean_charging_sites(config: model_config.Config, boundary: gpd.GeoDataFram
     chg_sites = gpd.GeoDataFrame(
         chg_sites,
         geometry=[
-            shapely.geometry.Point(xy) for xy in zip(chg_sites["lon"], chg_sites["lat"],
-                                                     strict=False)
+            shapely.geometry.Point(xy)
+            for xy in zip(chg_sites["lon"], chg_sites["lat"], strict=False)
         ],
         crs="EPSG:4326",
     )
@@ -1058,6 +1051,7 @@ def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
 
 ### BESPOKE INFRASTRUCTURE
 
+
 def _clean_bespoke(config: model_config.Config) -> None:
     """Clean bespoke infrastructure data ready for analysis."""
     LOG.info("Cleaning bespoke infrastructure data...")
@@ -1066,7 +1060,7 @@ def _clean_bespoke(config: model_config.Config) -> None:
 
 
 def _clean_nexus_metro(
-        config: model_config.Config,
+    config: model_config.Config,
 ) -> None:
     """Clean Nexus Metro data ready for analysis."""
     LOG.info("Cleaning Nexus Metro data...")
@@ -1091,14 +1085,12 @@ def _clean_nexus_metro(
 def _aggregate_metro_links(config: model_config.Config) -> gpd.GeoDataFrame:
     """Aggregate existing and extension metro links."""
     metro_links = gpd.read_file(
-        config.infrastructure.bespoke.nexus_metro_lines,
-        columns=["OBJECTID_1", "Ownership"]
+        config.infrastructure.bespoke.nexus_metro_lines, columns=["OBJECTID_1", "Ownership"]
     )
     metro_links["extension"] = False
 
     metro_ext_lines = gpd.read_file(
-        config.infrastructure.bespoke.nexus_metro_ext_lines,
-        columns=["Section"]
+        config.infrastructure.bespoke.nexus_metro_ext_lines, columns=["Section"]
     )
     metro_ext_lines = metro_ext_lines.explode(index_parts=False).reset_index(drop=True)
     metro_ext_lines["extension"] = True
@@ -1106,39 +1098,40 @@ def _aggregate_metro_links(config: model_config.Config) -> gpd.GeoDataFrame:
     metro_ext_lines = metro_ext_lines.drop(columns=["Section"])
     metro_ext_lines["OBJECTID_1"] = range(
         max(metro_links["OBJECTID_1"]) + 1,
-        max(metro_links["OBJECTID_1"]) + 1 + len(metro_ext_lines)
+        max(metro_links["OBJECTID_1"]) + 1 + len(metro_ext_lines),
     )
 
-    return pd.concat([metro_links, metro_ext_lines], ignore_index=True)
+    metro_links = pd.concat([metro_links, metro_ext_lines], ignore_index=True)
+    return metro_links.rename(columns={"OBJECTID_1": "id"})
 
 
 def _aggregate_metro_stations(config: model_config.Config) -> gpd.GeoDataFrame:
     """Aggregate existing and extension metro stations."""
     metro_stations = gpd.read_file(
         config.infrastructure.bespoke.nexus_metro_stations,
-        columns=["OBJECTID", "Name", "Symbol"]
+        columns=["OBJECTID", "Name", "Symbol"],
     )
     metro_stations["extension"] = False
 
     metro_ext_stations = gpd.read_file(
-        config.infrastructure.bespoke.nexus_metro_ext_stations,
-        columns=["StationName"]
+        config.infrastructure.bespoke.nexus_metro_ext_stations, columns=["StationName"]
     )
     metro_ext_stations = metro_ext_stations.rename(columns={"StationName": "Name"})
     metro_ext_stations["OBJECTID"] = range(
         max(metro_stations["OBJECTID"]) + 1,
-        max(metro_stations["OBJECTID"]) + 1 + len(metro_ext_stations)
+        max(metro_stations["OBJECTID"]) + 1 + len(metro_ext_stations),
     )
     metro_ext_stations["extension"] = True
 
-    return pd.concat([metro_stations, metro_ext_stations], ignore_index=True)
+    metro_stations = pd.concat([metro_stations, metro_ext_stations], ignore_index=True)
+    return metro_stations.rename(columns={"OBJECTID": "id"})
 
 
 def _split_metro_links(
-        metro_links: gpd.GeoDataFrame,
-        metro_stations: gpd.GeoDataFrame,
-        tolerance: float = 1,
-        min_split_dist: float = 0.01,
+    metro_links: gpd.GeoDataFrame,
+    metro_stations: gpd.GeoDataFrame,
+    tolerance: float = 1,
+    min_split_dist: float = 0.01,
 ) -> gpd.GeoDataFrame:
     """Split metro link geometries at metro station locations."""
     split_rows = []
@@ -1147,80 +1140,167 @@ def _split_metro_links(
         line = row.geometry
 
         # Find stations on this line
-        stations_on_line = metro_stations[
-            metro_stations.geometry.distance(line) < tolerance
-        ]
+        stations_on_line = metro_stations[metro_stations.geometry.distance(line) < tolerance]
 
         # Get stations positions along line
-        positions = []
+        stations = []
         for _, station in stations_on_line.iterrows():
-            pos = line.project(station.geometry)
-            positions.append(pos)
+            stations.append(
+                {
+                    "position": line.project(station.geometry),
+                    "station_id": station["id"],
+                    "station_name": station["Name"],
+                }
+            )
 
         # Remove duplicates and sort
-        positions = sorted(set(positions))
+        stations = sorted(stations, key=lambda x: x["position"])
 
-        # Add line start/end
-        breakpoints = [0, *positions, line.length]
+        if len(stations) == 0:
+            new_row = row.copy()
+
+            new_row["from_station_id"] = None
+            new_row["to_station_id"] = None
+            new_row["from_station_name"] = None
+            new_row["to_station_name"] = None
+            split_rows.append(new_row)
+            continue
+
+        stations.insert(0, {"position": 0, "station_id": None, "station_name": None})
+        stations.insert(
+            len(stations), {"position": line.length, "station_id": None, "station_name": None}
+        )
 
         # Create line segments
-        for start, end in itertools.pairwise(breakpoints):
-            if end - start < min_split_dist:
+        for start_station, end_station in itertools.pairwise(stations):
+            if end_station["position"] - start_station["position"] < min_split_dist:
                 continue
             segment = shapely.ops.substring(
                 line,
-                start,
-                end
+                start_station["position"],
+                end_station["position"],
             )
 
             new_row = row.copy()
+
+            new_row["from_station_id"] = start_station["station_id"]
+            new_row["to_station_id"] = end_station["station_id"]
+            new_row["from_station_name"] = start_station["station_name"]
+            new_row["to_station_name"] = end_station["station_name"]
+
             new_row.geometry = segment
             split_rows.append(new_row)
 
-    # TODO (DJ): Decide what to do with station-to-station links that are split
-    # For now, we will leave them alone
-    return gpd.GeoDataFrame(split_rows, columns=metro_links.columns, crs=metro_links.crs)
+
+    metro_links = gpd.GeoDataFrame(
+        split_rows,
+        columns=[
+            *metro_links.columns,
+            "from_station_id",
+            "to_station_id",
+            "from_station_name",
+            "to_station_name",
+        ],
+        crs=metro_links.crs,
+    ).reset_index(drop=True)
+
+    metro_links["metro_link_id"] = range(1, len(metro_links) + 1)
+
+    return _manual_metro_adjustments(metro_links)
 
 
 def _snap_stations_to_links(
-        metro_stations: gpd.GeoDataFrame,
-        metro_links: gpd.GeoDataFrame,
+    metro_stations: gpd.GeoDataFrame,
+    metro_links: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """Snap metro stations to the nearest metro link."""
     snapped_stations = metro_stations.copy()
     for idx, station in snapped_stations.iterrows():
-        nearest_line_idx = metro_links.distance(
-            station.geometry
-        ).idxmin()
+        nearest_line_idx = metro_links.distance(station.geometry).idxmin()
 
         nearest_line = metro_links.loc[nearest_line_idx, "geometry"]
 
-        snapped_stations.loc[idx, "geometry"] = (
-            nearest_line.interpolate(
-                nearest_line.project(station.geometry)
-            )
+        snapped_stations.loc[idx, "geometry"] = nearest_line.interpolate(
+            nearest_line.project(station.geometry)
         )
 
     # Manually snap Monument to intersection of links 9 and 11
     monument_id = snapped_stations.loc[
-        snapped_stations["Name"] == "Monument",
-        "OBJECTID"
+        snapped_stations["Name"] == "Monument", "id"
     ].to_numpy()[0]
-    link_9 = metro_links.loc[
-        metro_links["OBJECTID_1"] == MONUMENT_LINKS[0],
-        "geometry"
-    ].to_numpy()[0]
-    link_11 = metro_links.loc[
-        metro_links["OBJECTID_1"] == MONUMENT_LINKS[1],
-        "geometry"
-    ].to_numpy()[0]
+    link_9 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[0], "geometry"].to_numpy()[0]
+    link_11 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[1], "geometry"].to_numpy()[0]
     intersection_point = link_9.intersection(link_11)
-    snapped_stations.loc[
-        snapped_stations["OBJECTID"] == monument_id,
-        "geometry"
-    ] = intersection_point
+    snapped_stations.loc[snapped_stations["id"] == monument_id, "geometry"] = (
+        intersection_point
+    )
 
     return snapped_stations
+
+
+def _manual_metro_adjustments(metro_links: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Apply manual adjustments to the metro links."""
+    # Apply manual adjustments to the metro links
+    merge_link_ids = [
+        (34, 35),
+        (55, 66),
+        (64, 65, 70),
+        (9, 71),
+        (59, 60),
+        (13, 21, 56),
+        (14, 13),
+        # (1, 2),(69, 68) These ones are end of the line past the station, unsure about merging
+    ]
+
+    rows_to_drop = set()
+    new_rows = []
+
+    for merge_group in merge_link_ids:
+        group = metro_links.loc[metro_links["metro_link_id"].isin(merge_group)].copy()
+
+        if group.empty:
+            continue
+
+        merged_geometry = shapely.MultiLineString(group["geometry"].to_list())
+        new_row = group.iloc[0].copy()
+        new_row["geometry"] = merged_geometry
+
+        new_row["from_station_id"] = _first_not_null(group["from_station_id"])
+        new_row["to_station_id"] = _first_not_null(group["to_station_id"])
+        new_row["from_station_name"] = _first_not_null(group["from_station_name"])
+        new_row["to_station_name"] = _first_not_null(group["to_station_name"])
+        new_row["metro_link_id"] = merge_group[0]
+
+        new_rows.append(new_row)
+        rows_to_drop.update(group.index)
+
+    metro_links = metro_links.drop(index=list(rows_to_drop))
+    metro_links = pd.concat(
+        [
+            metro_links,
+            gpd.GeoDataFrame(new_rows, columns=metro_links.columns, crs=metro_links.crs),
+        ],
+        ignore_index=True,
+    )
+
+    # Assign from and to stations
+    metro_links.loc[metro_links["metro_link_id"] == 34, "from_station_id"] = 8
+    metro_links.loc[metro_links["metro_link_id"] == 34, "from_station_name"] = "South Gosforth"
+
+    metro_links.loc[metro_links["metro_link_id"] == 73, "from_station_id"] = 19
+    metro_links.loc[metro_links["metro_link_id"] == 73, "from_station_name"] = "Pelaw"
+
+    metro_links.loc[metro_links["metro_link_id"] == 76, "to_station_id"] = 31
+    metro_links.loc[metro_links["metro_link_id"] == 76, "to_station_name"] = "South Hylton"
+
+    return metro_links
+
+
+def _first_not_null(series: pd.Series) -> int | None:
+    """Return the first non-null value in a pandas Series."""
+    values = series.dropna()
+    return values.iloc[0] if len(values) > 0 else None
+
 
 ## HAZARDS
 
@@ -1748,9 +1828,15 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
 def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean flooding data ready for analysis."""
     LOG.info("Cleaning flooding data...")
-    bng_codes = _get_bng_codes(boundary)
+    _clean_rofrs_rofsw(config, boundary)
+    # _clean_groundwater(config, boundary)
+    LOG.info("Finished cleaning flooding data.")
 
-    for flooding_type in config.hazards.flooding:
+
+def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+    """Clean RoFRS and RoFSW data ready for analysis."""
+    bng_codes = _get_bng_codes(boundary)
+    for flooding_type in [FloodingTypes.RIVERS_SEA, FloodingTypes.SURFACE_WATER]:
         for scenario in Scenarios:
             LOG.info("Cleaning %s flooding data for %s scenario...", flooding_type, scenario)
             _clean_flooding_layer(
@@ -1766,7 +1852,26 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
                 bng_codes=bng_codes,
             )
 
-    LOG.info("Finished cleaning flooding data.")
+
+def _clean_groundwater(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+    """Clean groundwater flooding data ready for analysis."""
+    LOG.info("Cleaning groundwater flooding data...")
+    groundwater_flooding = gpd.read_file(
+        config.hazards.flooding.groundwater, columns=["CLASS"], mask=boundary
+    )
+    groundwater_flooding = groundwater_flooding.rename(
+        columns={"CLASS": f"{FloodingRiskCols.GROUNDWATER}"}
+    )
+    groundwater_flooding = clip_to_boundary(groundwater_flooding, boundary)
+    groundwater_flooding = explode_to_polygons(groundwater_flooding)
+    groundwater_flooding = groundwater_flooding.to_crs(BNG_CRS)
+    write_to_file(
+        groundwater_flooding,
+        output_path=config.paths.model_input
+        / file_paths.FLOODING_MODEL_INPUT_PATH
+        / FloodingTypes.GROUNDWATER
+        / f"{FloodingTypes.GROUNDWATER}.gpkg",
+    )
 
 
 def _clean_flooding_layer(
@@ -1874,7 +1979,6 @@ def _clean_ground_stability(config: model_config.Config, boundary: gpd.GeoDataFr
     """Clean ground stability data ready for analysis."""
     LOG.info("Cleaning ground stability data...")
     _clean_geosure(config, boundary)
-    _clean_geoclimate(config, boundary)
     LOG.info("Finished cleaning ground stability data.")
 
 
@@ -1882,50 +1986,34 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
     """Clean GeoSureHexGrids data, merge by nearest centroids, then write to file."""
     geosure_layers = {
         GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_CollapsibleDeposits_v8",
+            config.paths.raw_input
+            / config.hazards.ground_stability.geosure.collapsible_deposits,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.COMPRESSIBLE_GROUND: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_CompressibleGround_v8",
+            config.paths.raw_input
+            / config.hazards.ground_stability.geosure.compressible_ground,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.LANDSLIDES: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_Landslides_v8",
+            config.paths.raw_input / config.hazards.ground_stability.geosure.landslides,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.RUNNING_SAND: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_RunningSand_v8",
+            config.paths.raw_input / config.hazards.ground_stability.geosure.running_sands,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.SHRINK_SWELL: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_ShrinkSwell_v8",
+            config.paths.raw_input / config.hazards.ground_stability.geosure.shrink_swell,
             mask=boundary,
             columns=["CLASS"],
         ),
         GroundStabilityRiskCols.SOLUBLE_ROCKS: gpd.read_file(
-            f"zip://"
-            f"{config.paths.raw_input / config.hazards.ground_stability.geosure.zip_path}!"
-            f"{config.hazards.ground_stability.geosure.file_path}",
-            layer="GB_Hex_5km_GS_SolubleRocks_v8",
+            config.paths.raw_input / config.hazards.ground_stability.geosure.soluble_rocks,
             mask=boundary,
             columns=["CLASS"],
         ),
@@ -1949,56 +2037,10 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
             (filter_removed / len_before_filter) * 100,
         )
         geosure_layers[code] = explode_to_polygons(geosure_layers[code])
-
-    # Merge layers based on nearest centroids
-    base_code = next(iter(geosure_layers.keys()))
-    geosure = geosure_layers[base_code][[base_code, "geometry"]].copy()
-    for code, layer in geosure_layers.items():
-        if code == base_code:
-            continue  # skip the base layer
-        layer_subset = layer[
-            [code, "geometry"]
-        ]  # Select only the relevant class and geometry columns
-        matched = _nearest_centroids(geosure, layer_subset)  # Apply nearest centroid matching
-        geosure[code] = matched[code]  # Add the matched CLASS column to the base dataframe
-
-    geosure_risk_cols = [col for col in geosure.columns if col.endswith("_risk")]
-    geosure = geosure[[*geosure_risk_cols, "geometry"]]
-    write_to_file(
-        geosure,
-        config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH,
-    )
-
-
-def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Read and clean GeoClimate Shrink-Swell data, then write to file."""
-    for year, filepath in config.hazards.ground_stability.geo_shrink_swell.items():
-        geoclimate_data = gpd.read_file(
-            config.paths.raw_input / filepath, mask=boundary, columns=["CLASS"]
-        )
-        if geoclimate_data.empty:
-            LOG.info("GeoClimate shrink-swell %s layer empty. Continuing.", year)
-            continue
-        geoclimate_data = geoclimate_data.rename(
-            columns={"CLASS": GroundStabilityRiskCols.SHRINK_SWELL_GEOCLIMATE}
-        )
-        len_before_filter = len(geoclimate_data)
-        geoclimate_data = clip_to_boundary(geoclimate_data, boundary)
-        filter_removed = len_before_filter - len(geoclimate_data)
-        LOG.info(
-            "GeoClimate %s filtered - %s of %s (%.1f percent) rows removed",
-            year,
-            filter_removed,
-            len_before_filter,
-            (filter_removed / len_before_filter) * 100,
-        )
-        geoclimate_data = explode_to_polygons(geoclimate_data)
-
+        geosure_layers[code] = geosure_layers[code].to_crs(data_cleaning.BNG_CRS)
         write_to_file(
-            geoclimate_data,
-            config.paths.model_input
-            / file_paths.GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH
-            / f"bgs_ss_{year}.gpkg",
+            geosure_layers[code],
+            config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH / f"{code}.gpkg",
         )
 
 
@@ -2008,44 +2050,8 @@ def _clean_geoclimate(config: model_config.Config, boundary: gpd.GeoDataFrame) -
 def _clean_coastal_erosion(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean coastal erosion data ready for analysis."""
     LOG.info("Cleaning coastal erosion data...")
-    _clean_ground_instability_zones(config, boundary)
     _clean_ncerm(config, boundary)
     LOG.info("Finished cleaning coastal erosion data.")
-
-
-def _clean_ground_instability_zones(
-    config: model_config.Config, boundary: gpd.GeoDataFrame
-) -> None:
-    """Clean Ground Instability Zones data from NCERM, then write to file."""
-    ncerm_giz = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.hazards.coastal_erosion.zip_path}"
-        f"!{config.hazards.coastal_erosion.file_path}",
-        layer="NCERM_Ground_Instability_Zone",
-        mask=boundary,
-        columns=["smp_no"],
-    )
-    if ncerm_giz.empty:
-        LOG.info("Ground Instability Zones layer empty after filtering. Writing empty file.")
-        write_to_file(
-            gpd.GeoDataFrame(columns=["smp_no", "geometry"], geometry="geometry", crs=BNG_CRS),
-            config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH,
-        )
-        return
-    len_before_filter = len(ncerm_giz)
-    ncerm_giz = clip_to_boundary(ncerm_giz, boundary)
-    filter_removed = len_before_filter - len(ncerm_giz)
-    LOG.info(
-        "Ground Instability Zones filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    ncerm_giz = explode_to_polygons(ncerm_giz)
-
-    write_to_file(
-        ncerm_giz,
-        config.paths.model_input / file_paths.GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH,
-    )
 
 
 def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -2103,6 +2109,8 @@ def _clean_impact(config: model_config.Config, boundary: gpd.GeoDataFrame) -> No
         _clean_noham_flows(config)
     if config.switches.model_roads:
         _clean_model_road_flows(config)
+    if config.switches.bespoke:
+        _clean_bespoke_demand(config)
     LOG.info("Finished cleaning impact data.")
 
 
@@ -2178,7 +2186,9 @@ def _map_freight_networks(
     ].fillna(0)
     return os_freight_network_demand.drop(columns=["index_right"])
 
+
 ### NOHAM FLOWS
+
 
 def _clean_noham_flows(config: model_config.Config) -> None:
     """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
@@ -2398,9 +2408,8 @@ def _aggregate_link_flows_year(
         [f"all_vehs_{tp}" for tp in TimePeriods]
     ].sum(axis=1)
 
-    return combined_ts_df[
-        ["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in noham_ucs]
-    ]
+    return combined_ts_df[["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in noham_ucs]]
+
 
 ### TRANSPORT MODEL FLOWS
 
@@ -2517,3 +2526,172 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         model_road_uc_link_flows,
         config.paths.model_input / file_paths.MODEL_ROAD_FLOWS_MODEL_INPUT_PATH,
     )
+
+
+### BESPOKE
+
+
+def _clean_bespoke_demand(config: model_config.Config) -> None:
+    """Clean bespoke infrastructure demand data."""
+    LOG.info("Cleaning bespoke infrastructure demand data.")
+    _clean_nexus_demand(config)
+
+
+def _clean_nexus_demand(config: model_config.Config) -> None:
+    """Clean nexus infrastructure demand data."""
+    LOG.info("Cleaning nexus demand data.")
+    baseline = pd.read_csv(
+        config.impact.nexus["baseline"],
+        usecols=[
+            "Prod Station ID",
+            "Prod Station Name",
+            "Attr Station ID",
+            "Attr Station Name",
+            "Ticket ID",
+            "Time Period ID",
+            "Demand",
+        ],
+    )
+    future = pd.read_csv(
+        config.impact.nexus["future"],
+        usecols=[
+            "Prod Station ID",
+            "Prod Station Name",
+            "Attr Station ID",
+            "Attr Station Name",
+            "Ticket ID",
+            "Time Period ID",
+            "Demand",
+        ],
+    )
+
+    demand = baseline.merge(
+        future[
+            ["Prod Station ID", "Attr Station ID", "Time Period ID", "Ticket ID", "Demand"]
+        ],
+        on=["Prod Station ID", "Attr Station ID", "Time Period ID", "Ticket ID"],
+        how="inner",
+        suffixes=(f"_{Scenarios.CURRENT}", f"_{Scenarios.FORECAST}"),
+        validate="one_to_one",
+    )
+
+    # Remove Murton Gap station (not in scope)
+    len_before_filter = len(demand)
+    demand = demand[
+        (demand["Prod Station Name"] != "Murton Gap")
+        | (demand["Attr Station Name"] != "Murton Gap")
+    ]
+    LOG.info(
+        "Filtered out Murton Gap station: %d rows removed.", len_before_filter - len(demand)
+    )
+
+    # Create lookup between demand station IDs and network station IDs and translate
+    snapped_metro_stations = gpd.read_file(
+        config.paths.model_input / file_paths.NEXUS_METRO_STATIONS_MODEL_INPUT_PATH
+    )
+    station_id_lookup = (
+        snapped_metro_stations[["id", "Name"]].merge(
+            baseline[["Prod Station ID", "Prod Station Name"]].drop_duplicates(),
+            left_on="Name",
+            right_on="Prod Station Name",
+            how="left",
+        )
+    )[["id", "Prod Station ID"]].rename(columns={"Prod Station ID": "Demand ID"})
+    demand[["Prod Station ID", "Attr Station ID"]] = demand[
+        ["Prod Station ID", "Attr Station ID"]
+    ].replace(station_id_lookup.set_index("Demand ID")["id"])
+
+    # Aggregate OD data by summing over all origin-destination pairs
+    len_before_agg = len(demand)
+    demand = _aggregate_nexus_demand(demand)
+    LOG.info(
+        "Aggregated nexus demand: %d rows reduced to %d rows.", len_before_agg, len(demand)
+    )
+
+    # Map onto network links between stations
+    metro_flows = _map_demand_to_metro_links(config, demand)
+
+    # TODO (DJ): Pelaw junction lines are overlapping, need to decide what to do with these
+
+    write_to_file(
+        metro_flows,
+        config.paths.model_input / file_paths.NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH,
+    )
+
+    return metro_flows
+
+
+def _aggregate_nexus_demand(demand: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate nexus demand data by origin-destination pairs."""
+    demand_agg = demand.groupby(["Prod Station ID", "Attr Station ID"], as_index=False)[
+        [f"Demand_{Scenarios.CURRENT}", f"Demand_{Scenarios.FORECAST}"]
+    ].sum()
+
+    demand_agg["station_a"] = demand_agg[["Prod Station ID", "Attr Station ID"]].min(axis=1)
+    demand_agg["station_b"] = demand_agg[["Prod Station ID", "Attr Station ID"]].max(axis=1)
+
+    return demand_agg.groupby(["station_a", "station_b"], as_index=False)[
+        [f"Demand_{Scenarios.CURRENT}", f"Demand_{Scenarios.FORECAST}"]
+    ].sum()
+
+
+def _map_demand_to_metro_links(
+    config: model_config.Config, demand: pd.DataFrame
+) -> gpd.GeoDataFrame:
+    """Map aggregated nexus demand onto metro network links."""
+    metro_network = gpd.read_file(
+        config.paths.model_input / file_paths.NEXUS_METRO_LINKS_MODEL_INPUT_PATH
+    )
+
+    routable_network = metro_network[
+        metro_network["from_station_id"].notna() & metro_network["to_station_id"].notna()
+    ].copy()
+
+    metro_graph = nx.Graph()
+    for _, row in routable_network.iterrows():
+        metro_graph.add_edge(
+            row["from_station_id"],
+            row["to_station_id"],
+            metro_link_id=row["metro_link_id"],
+            demand_current=0,
+            demand_forecast=0,
+        )
+
+    for _, row in demand.iterrows():
+        origin = row["station_a"]
+        destination = row["station_b"]
+
+        # Find the shortest path between the origin and destination stations
+        try:
+            path = nx.shortest_path(metro_graph, source=origin, target=destination)
+        except nx.NetworkXNoPath:
+            LOG.warning(
+                "No path found between origin %s and destination %s.", origin, destination
+            )
+            continue
+
+        # Add OD demand onto each metro link along the shortest path
+        for u, v in itertools.pairwise(path):
+            metro_graph[u][v][f"demand_{Scenarios.CURRENT}"] += row[
+                f"Demand_{Scenarios.CURRENT}"
+            ]
+            metro_graph[u][v][f"demand_{Scenarios.FORECAST}"] += row[
+                f"Demand_{Scenarios.FORECAST}"
+            ]
+
+    # Write the flows back to the network
+    demand_lookup = {}
+    for u, v, data in metro_graph.edges(data=True):
+        demand_lookup[data["metro_link_id"]] = {
+            f"demand_{Scenarios.CURRENT}": data[f"demand_{Scenarios.CURRENT}"],
+            f"demand_{Scenarios.FORECAST}": data[f"demand_{Scenarios.FORECAST}"],
+        }
+
+    metro_network["demand_current"] = metro_network["metro_link_id"].map(
+        lambda x: demand_lookup.get(x, {}).get(f"demand_{Scenarios.CURRENT}", 0)
+    )
+    metro_network["demand_forecast"] = metro_network["metro_link_id"].map(
+        lambda x: demand_lookup.get(x, {}).get(f"demand_{Scenarios.FORECAST}", 0)
+    )
+
+    return metro_network
