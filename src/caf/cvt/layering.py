@@ -61,6 +61,7 @@ _RISK_CATEGORY_COLOURS = {
 
 # GENERAL FUNCTIONS
 
+
 def _aggregate_risk(series: pd.Series) -> float | None:
     """Aggregate risk by taking the maximum value, returning NaN if any values are missing."""
     if series.isna().any():
@@ -96,10 +97,8 @@ def _infrastructure_risk_intersect(
         agg = intersections.groupby(intersections.index)[risk_columns].agg(_aggregate_risk)
 
         # Find which infrastructure segments intersect with any hazard
-        intersected_agg = (
-            intersections
-            .groupby(intersections.index)["index_right"]
-            .apply(lambda x: x.notna().any())
+        intersected_agg = intersections.groupby(intersections.index)["index_right"].apply(
+            lambda x: x.notna().any()
         )
 
         # Merge back into main DataFrame
@@ -110,14 +109,12 @@ def _infrastructure_risk_intersect(
 
         # Infill 0 where infrastructure segments did not intersect with any hazard
         for col in risk_columns:
-            infrastructure_with_risk.loc[
-                ~infrastructure_with_risk["matched"],
-                col
-            ] = 0
+            infrastructure_with_risk.loc[~infrastructure_with_risk["matched"], col] = 0
 
         infrastructure_with_risk = infrastructure_with_risk.drop(columns="matched")
 
     return infrastructure_with_risk
+
 
 def _duplicate_non_scenario_hazards(risk_data: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Duplicate non-scenario hazard columns for both scenarios."""
@@ -360,11 +357,8 @@ def _create_risk_summary(
     # TODO (DJ): Add summary of impact metrics when available
     asset_risk_summary = asset_risk.copy()
     asset_risk_summary = asset_risk_summary.dropna(
-        subset=[
-            f"{col}_{Scenarios.CURRENT}" for col in risk_cols
-        ] + [
-            f"{col}_{Scenarios.FORECAST}" for col in risk_cols
-        ]
+        subset=[f"{col}_{Scenarios.CURRENT}" for col in risk_cols]
+        + [f"{col}_{Scenarios.FORECAST}" for col in risk_cols]
     )
     asset_risk_summary["Length (m)"] = asset_risk_summary.geometry.length
     total_length = asset_risk_summary["Length (m)"].sum()
@@ -402,7 +396,9 @@ def _create_risk_summary(
     }
 
     for main_hazard in MainHazardRiskCols:
-        if main_hazard not in asset_risk_summary.columns.str.replace(f"_{Scenarios.CURRENT}", ""):
+        if main_hazard not in asset_risk_summary.columns.str.replace(
+            f"_{Scenarios.CURRENT}", ""
+        ):
             continue
         for sub_hazard in MainHazardRiskCols.get_sub_hazards(main_hazard):
             risk_distribution, risk_averages = _fill_risk_summary_column(
@@ -446,11 +442,7 @@ def _create_risk_summary(
     _risk_averages_plot(risk_averages, out_path / "Risk Averages")
 
     _write_risk_summary(
-        risk_distribution,
-        risk_averages,
-        descriptive_risk_averages,
-        out_path,
-        out_filename
+        risk_distribution, risk_averages, descriptive_risk_averages, out_path, out_filename
     )
 
     return risk_distribution, risk_averages, descriptive_risk_averages
@@ -673,17 +665,11 @@ def _write_risk_summary(
     thin_border = openpyxl.styles.Side(border_style="thin", color="FFFFFF")
 
     wb = _write_risk_distribution(
-        workbook=wb,
-        risk_distribution=risk_distribution,
-        border=thin_border,
-        out_path=out_path
+        workbook=wb, risk_distribution=risk_distribution, border=thin_border, out_path=out_path
     )
 
     wb = _write_risk_averages(
-        workbook=wb,
-        risk_averages=risk_averages,
-        border=thin_border,
-        out_path=out_path
+        workbook=wb, risk_averages=risk_averages, border=thin_border, out_path=out_path
     )
 
     wb = _write_descriptive_risk_averages(
@@ -722,9 +708,13 @@ def _write_risk_distribution(
                 bold = True
                 cell_border = openpyxl.styles.Border(bottom=border)
                 if c_idx % 2 != 0:
-                    cell_border = openpyxl.styles.Border(left=border, top=border, bottom=border)
+                    cell_border = openpyxl.styles.Border(
+                        left=border, top=border, bottom=border
+                    )
                 else:
-                    cell_border = openpyxl.styles.Border(right=border, top=border, bottom=border)
+                    cell_border = openpyxl.styles.Border(
+                        right=border, top=border, bottom=border
+                    )
             else:
                 fill_colour = "808080"  # medium grey
                 bold = False
@@ -820,30 +810,34 @@ def _write_risk_averages(
             if r_idx == 1:  # Apply fill only to header row:
                 fill_colour = "000000"  # black
                 bold = True
-                text_colour = "FFFFFF" # white
+                text_colour = "FFFFFF"  # white
             elif c_idx == 1:
                 if r_idx % 2 == 0:
                     fill_colour = "a9a9a9"  # dark grey for even rows
                 else:
                     fill_colour = "808080"  # grey for odd rows
                 bold = False
-                text_colour = "000000" # black
+                text_colour = "000000"  # black
 
             if isinstance(value, (int, float)):
                 cell = ws.cell(row=r_idx, column=c_idx, value=value)
                 if c_idx in [2, 3]:
-                    fill_colour = mpl.colors.to_hex(gn_yl_red_cmap(value / 100)).replace("#", "")
+                    fill_colour = mpl.colors.to_hex(gn_yl_red_cmap(value / 100)).replace(
+                        "#", ""
+                    )
                 elif c_idx == 4:
                     if value > 0:
-                        fill_colour = "90ee90" # light green for positive values
+                        fill_colour = "90ee90"  # light green for positive values
                     else:
-                        fill_colour = "db7093" # pale violet red for negative values
+                        fill_colour = "db7093"  # pale violet red for negative values
                 elif c_idx == 5:
                     fill_colour = mpl.colors.to_hex(oranges_cmap(value / 100)).replace("#", "")
             else:
                 cell = ws.cell(row=r_idx, column=c_idx, value=value)
                 if r_idx == 1:
-                    cell_border = openpyxl.styles.Border(right=border, top=border, bottom=border)
+                    cell_border = openpyxl.styles.Border(
+                        right=border, top=border, bottom=border
+                    )
                 else:
                     cell_border = openpyxl.styles.Border(right=border)
 
@@ -886,7 +880,9 @@ def _write_descriptive_risk_averages(
     total_length = 0
 
     for _, risk_averages in descriptive_risk_averages.items():
-        for r_idx, row in enumerate(dataframe_to_rows(risk_averages, index=False, header=True), 1):
+        for r_idx, row in enumerate(
+            dataframe_to_rows(risk_averages, index=False, header=True), 1
+        ):
             for c_idx, value in enumerate(row, 1):
                 column_letter = openpyxl.utils.get_column_letter(c_idx)
                 ws.column_dimensions[column_letter].width = 15
@@ -903,12 +899,16 @@ def _write_descriptive_risk_averages(
                 if r_idx == 1:  # Apply fill only to header row:
                     fill_colour = "008080"  # teal
                     bold = True
-                    text_colour = "FFFFFF" # white
+                    text_colour = "FFFFFF"  # white
                     cell_border = openpyxl.styles.Border(top=border, bottom=border)
                     if c_idx == 1:
-                        cell_border = openpyxl.styles.Border(left=border, top=border, bottom=border)
+                        cell_border = openpyxl.styles.Border(
+                            left=border, top=border, bottom=border
+                        )
                     elif c_idx == 2 or (c_idx - 3) % 3 not in [0, 1]:
-                        cell_border = openpyxl.styles.Border(right=border, top=border, bottom=border)
+                        cell_border = openpyxl.styles.Border(
+                            right=border, top=border, bottom=border
+                        )
 
                 elif c_idx in [1, 2]:
                     if r_idx % 2 == 0:
@@ -919,19 +919,20 @@ def _write_descriptive_risk_averages(
                     if c_idx == 2:
                         cell_border = openpyxl.styles.Border(right=border)
                 elif (c_idx - 3) % 3 in [0, 1]:
-                    fill_colour = mpl.colors.to_hex(gn_yl_red_cmap(value / 100)).replace("#", "")
+                    fill_colour = mpl.colors.to_hex(gn_yl_red_cmap(value / 100)).replace(
+                        "#", ""
+                    )
                 else:
                     cell_border = openpyxl.styles.Border(right=border)
                     if value > 0:
                         cell.value = f"↑ {value:.1f}"
-                        text_colour = "F8696B" # red
+                        text_colour = "F8696B"  # red
                     elif value < 0:
                         cell.value = f"↓ {value:.1f}"
-                        text_colour = "63BE7B" # green
+                        text_colour = "63BE7B"  # green
                     else:
                         cell.value = f"→ {value:.1f}"
-                        text_colour = "FFEB84" # yellow
-
+                        text_colour = "FFEB84"  # yellow
 
                 # Format cell
                 _style_cell(
@@ -945,18 +946,17 @@ def _write_descriptive_risk_averages(
 
         total_length += len(risk_averages) + 2
 
-
     return workbook
 
 
 def _style_cell(
-        cell: openpyxl.cell.Cell,
-        *,
-        fill_colour: str,
-        text_colour: str = "000000",
-        bold: bool = False,
-        border: openpyxl.styles.borders.Border | None = None,
-        alignment: str = "left"
+    cell: openpyxl.cell.Cell,
+    *,
+    fill_colour: str,
+    text_colour: str = "000000",
+    bold: bool = False,
+    border: openpyxl.styles.borders.Border | None = None,
+    alignment: str = "left",
 ) -> None:
     """Apply styling to a given cell."""
     cell.fill = openpyxl.styles.PatternFill(
@@ -969,10 +969,7 @@ def _style_cell(
         color=text_colour,
         bold=bold,
     )
-    cell.alignment = openpyxl.styles.Alignment(
-        wrap_text=True,
-        horizontal=alignment
-    )
+    cell.alignment = openpyxl.styles.Alignment(wrap_text=True, horizontal=alignment)
     if border:
         cell.border = border
 
@@ -1125,7 +1122,7 @@ def _os_open_road_risk(
         risk_cols,
         [],
         audit_path / "Summary" / "Road" / "OS Roads",
-        "OS Roads Risk Summary.xlsx"
+        "OS Roads Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
@@ -1289,7 +1286,6 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
 
     demand_cols = [col for col in noham.columns if "demand" in col]
     return noham.drop(columns=demand_cols)
-
 
 
 #### TRANSPORT MODEL ROADS
@@ -2415,7 +2411,7 @@ def _rapid_transport_network_risk(
             OSRailCols.STRUCTURE,
             OSRailCols.PHYSICAL_LEVEL,
             OSRailCols.RAILWAY_USE,
-            OSRailCols.TRACK_REPRESENTATION
+            OSRailCols.TRACK_REPRESENTATION,
         ],
         config.paths.audit_path / "Summary" / "Other" / "Rapid Transport Network",
         "Rapid Transport Network Risk Summary.xlsx",
@@ -2497,10 +2493,7 @@ def _nexus_metro_links_risk(
         return
 
     metro_link_flows = metro_link_flows.rename(
-        columns={
-            "id": "nexus_id",
-            "metro_link_id": "id"
-        }
+        columns={"id": "nexus_id", "metro_link_id": "id"}
     )
 
     metro_links_risk = _infrastructure_risk_intersect(metro_link_flows, hazard_layers)

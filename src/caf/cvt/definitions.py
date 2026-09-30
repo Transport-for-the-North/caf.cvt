@@ -109,8 +109,6 @@ class GroundStabilityRiskCols(RiskColumn):
         }
 
 
-
-
 class MainHazardRiskCols(RiskColumn):
     """Column definitions for main hazard layers."""
 

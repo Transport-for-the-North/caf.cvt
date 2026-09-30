@@ -62,12 +62,12 @@ _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenari
 
 _FLOODING_TILE_SIZE_M = 10000
 _FLOODING_RISK_SCORE_MAP = {
-    0: 0, # No risk areas stay 0
+    0: 0,  # No risk areas stay 0
     "Unavailable": np.nan,
-    "Very low": 0, # Less than 0.1% chance of flooding
-    "Low": 0.1, # 0.1% to 1% chance of flooding
-    "Medium": 1, # 1% to 3.3% chance of flooding
-    "High": 3.3 # Greater than 3.3% chance of flooding
+    "Very low": 0,  # Less than 0.1% chance of flooding
+    "Low": 0.1,  # 0.1% to 1% chance of flooding
+    "Medium": 1,  # 1% to 3.3% chance of flooding
+    "High": 3.3,  # Greater than 3.3% chance of flooding
 }
 
 _PLOT_ALPHA_BASEMAP = 0.7
@@ -518,9 +518,7 @@ def _validate_index(
     """Validate a given index."""
     na_counts = index.isna().sum()
     if na_counts.any():
-        LOG.warning(
-            "Index contains missing values: \n%s", na_counts[na_counts > 0]
-        )
+        LOG.warning("Index contains missing values: \n%s", na_counts[na_counts > 0])
 
     for scenario in Scenarios:
         for var in index_vars:
@@ -1208,7 +1206,6 @@ def _flooding_index(
     ]:
         flooding_risk[col] = flooding_risk[col].map(_FLOODING_RISK_SCORE_MAP).astype(float)
 
-
     feature_range = (config.constants.score_min, config.constants.score_max)
     flooding_risk = min_max_scaling_pair(
         flooding_risk,
@@ -1236,12 +1233,12 @@ def _flooding_index(
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
-    #_audit_index(
+    # _audit_index(
     #    flooding_risk,
     #    [*FloodingRiskCols, MainHazardRiskCols.FLOODING],
     #    audit_path / "Flooding" / "Flooding Risk Index",
     #    feature_range,
-    #)
+    # )
 
     data_cleaning.write_to_file(
         flooding_risk,
@@ -1446,7 +1443,9 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
             )
             return
 
-        coastal_erosion_risk[scenario][MainHazardRiskCols.COASTAL_EROSION] = config.constants.score_max
+        coastal_erosion_risk[scenario][MainHazardRiskCols.COASTAL_EROSION] = (
+            config.constants.score_max
+        )
 
         coastal_erosion_risk[scenario] = coastal_erosion_risk[scenario].rename(
             columns={
@@ -1466,8 +1465,7 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
     num_na = coastal_erosion_risk.isna().sum()
     coastal_erosion_risk = coastal_erosion_risk.fillna(0)
     LOG.debug(
-        "Infilled %s NA values with 0 where there is no risk in coastal erosion index.",
-        num_na
+        "Infilled %s NA values with 0 where there is no risk in coastal erosion index.", num_na
     )
 
     coastal_erosion_risk = gpd.GeoDataFrame(coastal_erosion_risk, geometry="geometry")
