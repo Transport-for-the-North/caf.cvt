@@ -61,8 +61,8 @@ _GEOCLIMATE_YEAR_SCENARIO_MAP = {"2030": Scenarios.CURRENT, "2070": Scenarios.FO
 _COASTAL_EROSION_NEAREST_JOIN_MAX_DISTANCE = 500
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
 
-_FLOODING_TILE_SIZE_M = 10000
-_NUM_TILES_DONE = 0
+FLOODING_TILE_SIZE_M = 5000
+_NUM_TILES_DONE = 82
 _FLOODING_RISK_SCORE_MAP = {
     0: 0, # No risk areas stay 0
     "Unavailable": np.nan,
@@ -1116,7 +1116,7 @@ def _flooding_index(
             boundary,
             flooding_paths,
             crs=data_cleaning.BNG_CRS,
-            tile_size_m=_FLOODING_TILE_SIZE_M,
+            tile_size_m=FLOODING_TILE_SIZE_M,
         )
 
     overlay_path = (
@@ -1141,24 +1141,6 @@ def _flooding_index(
             mask=boundary,
             layer="flood_overlay",
         )
-
-    # Eventually want to rename columns in input data to 'flooding' rather than 'flood'
-    flooding_risk = flooding_risk.rename(
-        columns={
-            f"rivers_sea_flood_risk_{Scenarios.CURRENT}": (
-                f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}"
-            ),
-            f"rivers_sea_flood_risk_{Scenarios.FORECAST}": (
-                f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FORECAST}"
-            ),
-            f"surface_water_flood_risk_{Scenarios.CURRENT}": (
-                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}"
-            ),
-            f"surface_water_flood_risk_{Scenarios.FORECAST}": (
-                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}"
-            ),
-        }
-    )
 
     # Fill NA values with very low risk since no data means very low risk in the data
     flooding_risk = flooding_risk.fillna(_FLOODING_RISK_SCORE_MAP["Very low"])
@@ -1233,7 +1215,10 @@ def _tile_polygon_flooding_overlay(
         / file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH
     )
     layer_name = "flooding_overlay"
-    first_write = True
+    if _NUM_TILES_DONE == 0:
+        first_write = True
+    else:
+        first_write = False
 
     # For each tile, do spatial filtering and run overlay and clean
     for tile_idx, tile in tiles.iterrows():
@@ -1304,7 +1289,14 @@ def _process_flooding_overlay_tile(
     if tile_overlay.empty:
         return None
 
-    return tile_overlay
+    expected_cols = []
+    for scenario in Scenarios:
+        for flood_risk in FloodingRiskCols:
+            expected_cols.append(f"{flood_risk}_{scenario}")
+            if f"{flood_risk}_{scenario}" not in tile_overlay.columns:
+                tile_overlay[f"{flood_risk}_{scenario}"] = None
+
+    return tile_overlay[[*expected_cols, "geometry"]]
 
 
 ### GROUND STABILITY
