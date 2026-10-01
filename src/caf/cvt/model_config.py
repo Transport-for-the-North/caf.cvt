@@ -183,17 +183,17 @@ class Other(ctk.BaseConfig):
         Path to the NCN Sustrans data.
     os_mmrn : ZipFileEntry
         Configuration for the OS MMRN zip file entry.
-    poi_uk : ZipFileEntry
-        Configuration for the POI UK zip file entry.
-    airports: pathlib.path
+    airports: pathlib.Path
         Path to the airports data.
+    mastermap_sites: ZipFileEntry
+        Configuration for the MasterMap Sites zip file entry.
     """
 
     bus_stops: dict[str, pathlib.Path]
     ncn_sustrans: pathlib.Path
     os_mmrn: ZipFileEntry
-    poi_uk: ZipFileEntry
     airports: pathlib.Path
+    mastermap_sites: ZipFileEntry
 
 
 class Bespoke(ctk.BaseConfig):
@@ -428,8 +428,6 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include airports in the analysis.
     bus_stops : bool
         Whether to include bus stops in the analysis.
-    petrol_stations : bool
-        Whether to include petrol stations in the analysis.
     national_cycle_network : bool
         Whether to include the national cycle network in the analysis.
     train_stations : bool
@@ -473,7 +471,6 @@ class SwitchConfig(ctk.BaseConfig):
     freight_rail: bool
     airports: bool
     bus_stops: bool
-    petrol_stations: bool
     national_cycle_network: bool
     train_stations: bool
     tram_stations: bool
@@ -510,7 +507,6 @@ class SwitchConfig(ctk.BaseConfig):
                 self.freight_rail,
                 self.airports,
                 self.bus_stops,
-                self.petrol_stations,
                 self.national_cycle_network,
                 self.train_stations,
                 self.tram_stations,

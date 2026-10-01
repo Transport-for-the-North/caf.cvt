@@ -38,7 +38,6 @@ _BUS_COACH_STATIONS_BUFFER_SIZE_M = 50
 _TRAM_STATIONS_BUFFER_SIZE_M = 25
 _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M = 50
 _FERRY_TERMINALS_BUFFER_SIZE_M = 50
-_PETROL_STATIONS_BUFFER_SIZE_M = 50
 _METRO_STATION_BUFFER_SIZE_M = 25
 
 _RISK_CATEGORIES = {
@@ -76,6 +75,7 @@ def _infrastructure_risk_intersect(
     then calculate hazard risk score as the max risk value of the intersection. Return merged
     GeoDataFrame with hazard risk columns added.
     """
+    # TODO (DJ): Test function with polygon transport infra, such as airports, train stations etc.
     infrastructure_with_risk = infrastructure_data.copy()
 
     for _hazard_name, hazard_data in hazards_dict.items():
@@ -1686,7 +1686,6 @@ def _get_other_risk(  # noqa: C901, PLR0912
             config.switches.tram_stations,
             config.switches.rapid_transport_stations,
             config.switches.ferry_terminals,
-            config.switches.petrol_stations,
             config.switches.national_cycle_network,
             config.switches.tram_network,
             config.switches.rapid_transport_network,
@@ -1708,8 +1707,6 @@ def _get_other_risk(  # noqa: C901, PLR0912
             _rapid_transport_stations_risk(config, hazard_layers, risk_cols, audit_path)
         if config.switches.ferry_terminals:
             _ferry_terminals_risk(config, hazard_layers, risk_cols, audit_path)
-        if config.switches.petrol_stations:
-            _petrol_stations_risk(config, hazard_layers, risk_cols, audit_path)
         if config.switches.national_cycle_network:
             _ncn_risk(config, hazard_layers, risk_cols, audit_path)
         if config.switches.tram_network:
@@ -2115,61 +2112,6 @@ def _ferry_terminals_risk(
         pathlib.Path("Other") / "Ferry Terminals" / "ferry_terminals_risk",
     )
     LOG.info("Finished layering ferry terminals with hazard risk.")
-
-
-#### Petrol Stations
-
-
-def _petrol_stations_risk(
-    config: model_config.Config,
-    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
-    risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
-) -> None:
-    """Get petrol station risk and write to file.
-
-    Buffer petrol stations, then intersect with hazard risk, clean output, and write to file.
-    """
-    LOG.info("Layering petrol stations with hazard risk...")
-    petrol_stations = gpd.read_file(
-        config.paths.model_input / file_paths.PETROL_STATIONS_MODEL_INPUT_PATH
-    )
-
-    if petrol_stations.empty:
-        LOG.warning("Petrol stations layer is empty. Skipping.")
-        return
-
-    petrol_stations = _buffer_geometry(petrol_stations, _PETROL_STATIONS_BUFFER_SIZE_M)
-
-    petrol_stations_risk = _infrastructure_risk_intersect(petrol_stations, hazard_layers)
-
-    _audit_infrastructure_risk(
-        petrol_stations_risk,
-        "Petrol Stations",
-        risk_cols,
-        audit_path / "Other" / "Petrol Stations",
-        feature_range=(config.constants.score_min, config.constants.score_max),
-    )
-
-    data_cleaning.write_to_file(
-        petrol_stations_risk,
-        config.paths.model_output / "Other" / "Petrol Stations" / "petrol_stations_risk.gpkg",
-    )
-
-    petrol_stations_risk = _prepare_model_output(
-        risk_data=petrol_stations_risk,
-        drop_cols=[],
-        rename_map={},
-        risk_cols_order=risk_cols,
-    )
-
-    _split_csv_shapefile(
-        config,
-        petrol_stations_risk,
-        "id",
-        pathlib.Path("Other") / "Petrol Stations" / "petrol_stations_risk",
-    )
-    LOG.info("Finished layering petrol stations with hazard risk.")
 
 
 #### National Cycle Network

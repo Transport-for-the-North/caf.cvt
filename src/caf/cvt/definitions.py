@@ -331,58 +331,6 @@ class OSRoadStructure(enum.StrEnum):
         return mapping[self]
 
 
-class OSRailStructure(enum.StrEnum):
-    """Definitions for OS rail structure types."""
-
-    CUTTING = "In Cutting"
-    EMBANKMENT = "On Embankment"
-    UNDER_STRUCTURE = "Under Structure"
-    ON_STRUCTURE = "On Structure"
-    BRIDGE = "On Bridge"
-    TUNNEL = "In Tunnel"
-    BUILDING = "In Building"
-
-    def get_vulnerability(self) -> dict[RiskColumn, VulnerabilityModifier]:
-        """Return the vulnerability modifiers for the rail structure type."""
-        mapping: dict[OSRailStructure, dict[RiskColumn, VulnerabilityModifier]] = {
-            OSRailStructure.CUTTING: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-                ExtremeWeatherRiskCols.DROUGHT: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-                GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
-            },
-            OSRailStructure.EMBANKMENT: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-                ExtremeWeatherRiskCols.DROUGHT: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.VERY_HIGH,
-                FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-                GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
-                GroundStabilityRiskCols.SHRINK_SWELL: VulnerabilityModifier.VERY_HIGH,
-            },
-            OSRailStructure.BRIDGE: {
-                ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.VERY_HIGH,
-                ExtremeWeatherRiskCols.EXTREME_COLD: VulnerabilityModifier.VERY_HIGH,
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.VERY_HIGH,
-            },
-            OSRailStructure.TUNNEL: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.LOW,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-            },
-            OSRailStructure.BUILDING: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.VERY_LOW,
-            },
-            OSRailStructure.UNDER_STRUCTURE: {},
-            OSRailStructure.ON_STRUCTURE: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-                ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-            },
-        }
-        return mapping[self]
-
 
 class VulnerabilityModifier(float, enum.Enum):
     """Definitions for vulnerability modifiers."""
@@ -472,6 +420,83 @@ class OSRailTrackRepresentation(enum.StrEnum):
     SIDING = "Siding"
     MULTIPLE_TRACKS = "Multiple Tracks"
     SINGLE_TRACK = "Single Track"
+
+
+class OSRailGauge(enum.StrEnum):
+    """Definitions for values of OS rail gauge."""
+
+    STANDARD = "Standard"
+    NARROW = "Narrow"
+    BROAD = "Broad"
+
+
+class OSRailStructure(enum.StrEnum):
+    """Definitions for OS rail structure types."""
+
+    CUTTING = "In Cutting"
+    EMBANKMENT = "On Embankment"
+    UNDER_STRUCTURE = "Under Structure"
+    ON_STRUCTURE = "On Structure"
+    BRIDGE = "On Bridge"
+    TUNNEL = "In Tunnel"
+    BUILDING = "In Building"
+
+    def get_vulnerability(self) -> dict[RiskColumn, VulnerabilityModifier]:
+        """Return the vulnerability modifiers for the rail structure type."""
+        mapping: dict[OSRailStructure, dict[RiskColumn, VulnerabilityModifier]] = {
+            OSRailStructure.CUTTING: {
+                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
+                ExtremeWeatherRiskCols.DROUGHT: VulnerabilityModifier.HIGH,
+                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
+                FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
+                GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
+            },
+            OSRailStructure.EMBANKMENT: {
+                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
+                ExtremeWeatherRiskCols.DROUGHT: VulnerabilityModifier.HIGH,
+                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.VERY_HIGH,
+                FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
+                GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
+                GroundStabilityRiskCols.SHRINK_SWELL: VulnerabilityModifier.VERY_HIGH,
+            },
+            OSRailStructure.BRIDGE: {
+                ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.VERY_HIGH,
+                ExtremeWeatherRiskCols.EXTREME_COLD: VulnerabilityModifier.VERY_HIGH,
+                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
+                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.VERY_HIGH,
+            },
+            OSRailStructure.TUNNEL: {
+                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.LOW,
+                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
+                FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
+            },
+            OSRailStructure.BUILDING: {
+                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.VERY_LOW,
+            },
+            OSRailStructure.UNDER_STRUCTURE: {},
+            OSRailStructure.ON_STRUCTURE: {
+                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
+                ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.HIGH,
+                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
+            },
+        }
+        return mapping[self]
+
+
+class OSRailPhysicalLevel(enum.StrEnum):
+    """Definitions for OS rail physical levels."""
+
+    SURFACE_LEVEL = "Surface Level"
+    UNDERGROUND = "Underground"
+    LEVEL_1 = "Level 1"
+    LEVEL_2 = "Level 2"
+
+
+class OSRailDirection(enum.StrEnum):
+    """Definitions for OS rail directions."""
+
+    BOTH_DIRECTIONS = "Both Directions"
+
 
 
 class AssetTypes(enum.StrEnum):

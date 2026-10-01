@@ -24,11 +24,6 @@ AIRPORTS_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/Airports/airports
 
 BUS_STOPS_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/Bus Stops/bus_stops.gpkg")
 
-PETROL_STATIONS_MODEL_INPUT_PATH = pathlib.Path(
-    "Infrastructure/Other/Petrol Stations/petrol_stations.gpkg"
-)
-
-
 TRAIN_STATIONS_MODEL_INPUT_PATH = pathlib.Path(
     "Infrastructure/Other/Train Stations/train_stations.gpkg"
 )
