@@ -413,11 +413,65 @@ class OSRailCols(enum.StrEnum):
 
     ID = "osid"
     DESCRIPTION = "description"
+    GAUGE = "gauge"
     STRUCTURE = "structure"
     PHYSICAL_LEVEL = "physicallevel"
     RAILWAY_USE = "railwayuse"
     TRACK_REPRESENTATION = "trackrepresentation"
+    DIRECTION = "direction"
     OPERATIONAL_STATUS = "operationalstatus"
+
+    @classmethod
+    def get_descriptive_cols(cls) -> list[str]:
+        """Return a list of the retained descriptive columns for OS rail."""
+        return [
+            OSRailCols.DESCRIPTION,
+            OSRailCols.GAUGE,
+            OSRailCols.STRUCTURE,
+            OSRailCols.PHYSICAL_LEVEL,
+            OSRailCols.RAILWAY_USE,
+            OSRailCols.TRACK_REPRESENTATION,
+            OSRailCols.DIRECTION,
+        ]
+
+
+class OSRailOperationalStatus(enum.StrEnum):
+    """Definitions for values of OS rail operational status."""
+
+    ACTIVE = "Active"
+    INACTIVE = "Inactive"
+
+
+class OSRailDescription(enum.StrEnum):
+    """Definitions for values of OS rail description."""
+
+    MAIN_LINE = "Main Line"
+    TRAM = "Tram"
+    RAPID_TRANSPORT_SYSTEM = "Rapid Transport System"
+    MAIN_LINE_AND_TRAM = "Main Line And Tram"
+    MAIN_LINE_AND_RAPID_TRANSPORT_SYSTEM = "Main Line And Rapid Transport System"
+    PRESERVED = "Preserved"
+    FUNICULAR = "Funicular"
+    MINERAL = "Mineral"
+    STATIC_MUSEUM = "Static Museum"
+
+class OSRailRailwayUse(enum.StrEnum):
+    """Definitions for values of OS rail railway use."""
+
+    FREIGHT = "Freight"
+    PASSENGER = "Passenger"
+    FREIGHT_AND_PASSENGER = "Freight And Passenger"
+    MINERAL = "Mineral"
+    PRESERVED = "Preserved"
+    AMUSEMENT = "Amusement"
+
+
+class OSRailTrackRepresentation(enum.StrEnum):
+    """Definitions for values of OS rail track representation."""
+
+    SIDING = "Siding"
+    MULTIPLE_TRACKS = "Multiple Tracks"
+    SINGLE_TRACK = "Single Track"
 
 
 class AssetTypes(enum.StrEnum):

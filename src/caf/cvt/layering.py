@@ -34,7 +34,6 @@ LOG = logging.getLogger(__name__)
 _DEMAND_WEIGHT = 0.5
 
 _TRAIN_STATIONS_BUFFER_SIZE_M = 25
-_CHARGING_SITES_BUFFER_SIZE_M = 25
 _BUS_COACH_STATIONS_BUFFER_SIZE_M = 50
 _TRAM_STATIONS_BUFFER_SIZE_M = 25
 _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M = 50
@@ -1681,7 +1680,6 @@ def _get_other_risk(  # noqa: C901, PLR0912
     other_risk_enabled = any(
         [
             config.switches.train_stations,
-            config.switches.charging_sites,
             config.switches.airports,
             config.switches.bus_coach_stations,
             config.switches.bus_stops,
@@ -1698,8 +1696,6 @@ def _get_other_risk(  # noqa: C901, PLR0912
         LOG.info("Calculating risk for other infrastructure...")
         if config.switches.train_stations:
             _train_stations_risk(config, hazard_layers, risk_cols, audit_path)
-        if config.switches.charging_sites:
-            _charging_sites_risk(config, hazard_layers, risk_cols, audit_path)
         if config.switches.airports:
             _airports_risk(config, hazard_layers, risk_cols, audit_path)
         if config.switches.bus_coach_stations:
@@ -1784,60 +1780,6 @@ def _train_stations_risk(
     )
     LOG.info("Finished layering train stations with hazard risk.")
 
-
-#### EV Charging Sites
-
-
-def _charging_sites_risk(
-    config: model_config.Config,
-    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
-    risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
-) -> None:
-    """Get EV charging site risk and write to file.
-
-    Buffer charging sites, then intersect with hazard risk, clean output, and write to file.
-    """
-    LOG.info("Layering EV charging sites with hazard risk...")
-    charging_sites = gpd.read_file(
-        config.paths.model_input / file_paths.CHARGING_SITES_MODEL_INPUT_PATH
-    )
-
-    if charging_sites.empty:
-        LOG.warning("EV charging sites layer is empty. Skipping.")
-        return
-
-    charging_sites = _buffer_geometry(charging_sites, _CHARGING_SITES_BUFFER_SIZE_M)
-
-    charging_sites_risk = _infrastructure_risk_intersect(charging_sites, hazard_layers)
-
-    _audit_infrastructure_risk(
-        charging_sites_risk,
-        "EV Charging Sites",
-        risk_cols,
-        audit_path / "Other" / "EV Charging Sites",
-        feature_range=(config.constants.score_min, config.constants.score_max),
-    )
-
-    data_cleaning.write_to_file(
-        charging_sites_risk,
-        config.paths.model_output / "Other" / "EV Charging Sites" / "charging_sites_risk.gpkg",
-    )
-
-    charging_sites_risk = _prepare_model_output(
-        risk_data=charging_sites_risk,
-        drop_cols=[],
-        rename_map={"devices": "installed_devices"},
-        risk_cols_order=risk_cols,
-    )
-
-    _split_csv_shapefile(
-        config,
-        charging_sites_risk,
-        "id",
-        pathlib.Path("Other") / "EV Charging Sites" / "charging_sites_risk",
-    )
-    LOG.info("Finished layering EV charging sites with hazard risk.")
 
 
 #### Airports

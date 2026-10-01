@@ -50,9 +50,6 @@ TRAM_NETWORK_MODEL_INPUT_PATH = pathlib.Path(
 RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH = pathlib.Path(
     "Infrastructure/Other/Rapid Transport Network/rapid_transport_network.gpkg"
 )
-CHARGING_SITES_MODEL_INPUT_PATH = pathlib.Path(
-    "Infrastructure/Other/EV Charging Sites/chg_sites.gpkg"
-)
 NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/NCN/ncn.gpkg")
 
 NEXUS_METRO_LINKS_MODEL_INPUT_PATH = pathlib.Path(
@@ -140,7 +137,7 @@ EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
 )
 
 TILE_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
-    f"Flooding Risk/flooding_tiles_{functional_rules.FLOODING_TILE_SIZE_M}m.gpkg"
+    f"Flooding Risk/flooding_tiles_{functional_rules._FLOODING_TILE_SIZE_M}m.gpkg"
 )
 FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
     "Flooding Risk/flooding_risk_tile_overlay.gpkg"

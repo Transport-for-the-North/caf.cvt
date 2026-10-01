@@ -201,7 +201,7 @@ def _nearest_join_infilling(
     final_remaining = risk_grid[variables].isna().sum().sum()
     filled_nearest = prev_na_count - final_remaining
 
-    LOG.info(
+    LOG.debug(
         "Nearest-join infilling with a %sm max distance filled %s NA values; %s remain",
         int(max_distance),
         int(filled_nearest),
@@ -211,7 +211,7 @@ def _nearest_join_infilling(
     for var in variables:
         risk_grid[var] = risk_grid[var].fillna(0)
 
-    LOG.info("Filled remaining %s NA values with 0", final_remaining)
+    LOG.debug("Filled remaining %s NA values with 0", final_remaining)
 
     return risk_grid
 
@@ -225,7 +225,7 @@ def _iterative_spatial_infilling(
     """Apply spatial infilling iteratively to GeoDataFrame on given variables."""
     prev_na_count = None
     total_na_count = risk_grid[variables].isna().sum().sum()
-    LOG.info("Spatial infilling %s NA values.", total_na_count)
+    LOG.debug("Spatial infilling %s NA values.", total_na_count)
 
     for i in range(max_iterations):
         # Count current NA values
@@ -233,12 +233,12 @@ def _iterative_spatial_infilling(
 
         # Stop if all filled
         if current_na_count == 0:
-            LOG.info("All NA values filled after %s iterations.", i)
+            LOG.debug("All NA values filled after %s iterations.", i)
             return risk_grid
 
         # Stop if no improvement
         if prev_na_count is not None and current_na_count == prev_na_count:
-            LOG.info(
+            LOG.debug(
                 "No further improvement after %s iterations using spatial infilling. "
                 "Switching to nearest join to fill remaining %s NA values.",
                 i,
@@ -252,7 +252,7 @@ def _iterative_spatial_infilling(
 
         new_na_count = risk_grid[variables].isna().sum().sum()
         filled_this_iter = prev_na_count - new_na_count
-        LOG.info(
+        LOG.debug(
             "Iteration %s: filled %s NA values (%s remaining)",
             i + 1,
             int(filled_this_iter),
@@ -395,7 +395,7 @@ def _overlay_and_clean(
         ]
         hazard_overlay = data_cleaning.validate_geometries(hazard_overlay)
         hazard_overlay = hazard_overlay.reset_index(drop=True)
-        LOG.info(
+        LOG.debug(
             "Overlay dropped %s points and %s lines, and kept %s area geometries",
             int(num_points),
             int(num_lines),
@@ -1145,10 +1145,9 @@ def _flooding_index(
     config: model_config.Config, boundary: gpd.GeoDataFrame, audit_path: pathlib.Path
 ) -> gpd.GeoDataFrame:
     """Overlay all four flooding datasets using a tiled chunking method."""
-    LOG.info("Combining all four flooding datasets...")
-
     # If the direct tiled overlay hasn't been done yet, do it
     if config.switches.compute_flooding_overlay:
+        LOG.info("Combining all four flooding datasets...")
         flooding_paths = []
         for flooding_type in config.hazards.flooding:
             for scenario in Scenarios:
@@ -1160,7 +1159,6 @@ def _flooding_index(
                     / f"{flooding_type}_{scenario}.gpkg"
                 )
 
-        LOG.info("Computing tiled flooding overlay...")
         _tile_polygon_flooding_overlay(
             config,
             boundary,
@@ -1176,7 +1174,7 @@ def _flooding_index(
 
     # Read the direct overlay result, and filter to region
     # Eventually want to rename the layer to 'flooding_overlay'
-    LOG.debug("Reading flooding overlay...")
+    LOG.info("Reading flooding overlay...")
     try:
         flooding_risk = gpd.read_file(
             overlay_path,
@@ -1205,8 +1203,7 @@ def _flooding_index(
             layer="flood_overlay",
         )
 
-    LOG.debug("Loaded flooding overlay.")
-    LOG.debug("Applying functional rules to flooding overlay...")
+    LOG.info("Applying functional rules to flooding overlay...")
 
     # Fill NA values with very low risk since no data means very low risk in the data
     flooding_risk = flooding_risk.fillna(_FLOODING_RISK_SCORE_MAP["Very low"])
@@ -1272,6 +1269,7 @@ def _tile_polygon_flooding_overlay(
     tile_size_m: int = 5000,
 ) -> None:
     """Chunked polygon-polygon overlay using a tile grid."""
+    LOG.info("Computing chunked flooding overlay...")
     # Create tiles
     tiles = _create_flooding_tiles(config, boundary, tile_size_m)
 
@@ -1290,7 +1288,7 @@ def _tile_polygon_flooding_overlay(
     for tile_idx, tile in tiles.iterrows():
         if tile_idx + 1 <= _NUM_TILES_DONE:
             continue
-        LOG.info("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
+        LOG.debug("Tile %s/%s starting overlay", tile_idx + 1, len(tiles))
 
         tile_overlay = _process_flooding_overlay_tile(
             tile=tile, layer_paths=layer_paths, crs=crs
@@ -1305,7 +1303,7 @@ def _tile_polygon_flooding_overlay(
         )
         first_write = False
 
-        LOG.info("Tile %s wrote %s geometries.", tile_idx + 1, len(tile_overlay))
+        LOG.debug("Tile %s wrote %s geometries.", tile_idx + 1, len(tile_overlay))
 
     LOG.info("Chunked overlay completed. Output written to %s", output_path)
 

@@ -165,11 +165,11 @@ class Rail(ctk.BaseConfig):
 
     Attributes
     ----------
-    rail_links : pathlib.Path
-        Path to the rail links data.
+    rail_links : ZipFileEntry
+        Configuration for the rail links zip file entry.
     """
 
-    rail_links: pathlib.Path
+    rail_links: ZipFileEntry
 
 
 class Other(ctk.BaseConfig):
@@ -181,21 +181,18 @@ class Other(ctk.BaseConfig):
         Mapping of region name to bus stops data path.
     ncn_sustrans : pathlib.Path
         Path to the NCN Sustrans data.
-    os_mmrn : pathlib.Path
-        Path to the OS MMRN data.
+    os_mmrn : ZipFileEntry
+        Configuration for the OS MMRN zip file entry.
     poi_uk : ZipFileEntry
         Configuration for the POI UK zip file entry.
-    zapmap : pathlib.Path
-        Path to the ZapMap data.
     airports: pathlib.path
         Path to the airports data.
     """
 
     bus_stops: dict[str, pathlib.Path]
     ncn_sustrans: pathlib.Path
-    os_mmrn: pathlib.Path
+    os_mmrn: ZipFileEntry
     poi_uk: ZipFileEntry
-    zapmap: pathlib.Path
     airports: pathlib.Path
 
 
@@ -433,8 +430,6 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include bus stops in the analysis.
     petrol_stations : bool
         Whether to include petrol stations in the analysis.
-    charging_sites : bool
-        Whether to include EV charging sites in the analysis.
     national_cycle_network : bool
         Whether to include the national cycle network in the analysis.
     train_stations : bool
@@ -479,7 +474,6 @@ class SwitchConfig(ctk.BaseConfig):
     airports: bool
     bus_stops: bool
     petrol_stations: bool
-    charging_sites: bool
     national_cycle_network: bool
     train_stations: bool
     tram_stations: bool
@@ -517,7 +511,6 @@ class SwitchConfig(ctk.BaseConfig):
                 self.airports,
                 self.bus_stops,
                 self.petrol_stations,
-                self.charging_sites,
                 self.national_cycle_network,
                 self.train_stations,
                 self.tram_stations,
