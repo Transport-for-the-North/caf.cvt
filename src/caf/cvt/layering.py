@@ -168,10 +168,11 @@ def _reshape_for_scenarios(
     melted["variable"] = melted["variable"].str.replace(scenario_pattern, "", regex=True)
 
     # Pivot back so each risk variable becomes a column
-    reshaped = melted.pivot(
+    reshaped = pd.pivot_table(
+        melted,
+        values="value",
         index=[id_col, scenario_col, *descriptive_cols],
         columns="variable",
-        values="value"
     ).reset_index()
 
     # Reorder risk columns based on original order
@@ -334,7 +335,7 @@ def _apply_asset_hazard_weighting(
                 main_hazard,
             )
         elif main_hazard == MainHazardRiskCols.COASTAL_EROSION:
-            # Special case since subhazards not included for coastal erosion
+            # Special case since sub hazards not included for coastal erosion
             continue
         else:
             asset_risk = functional_rules._calculate_composite_score_scenarios(
@@ -353,9 +354,10 @@ def _create_risk_summary(
     out_filename: str,
 ) -> None:
     """Output a summary spreadsheet for climate risk for a given asset."""
-    # TODO (DJ): Allow risk summary to work with point data as well as line data.
-    # TODO (DJ): Add handling of case where no scenario distinction exists
-    # TODO (DJ): Add summary of impact metrics when available
+    # TODO (DJ): #31 Allow risk summary to work with point data as well as line data.
+    # TODO (DJ): #31 Add handling of case where no scenario distinction exists
+    # TODO (DJ): #31 Add summary of impact metrics when available
+    # TODO (DJ): #31 Rename descriptive columns to more user-friendly names
     asset_risk_summary = asset_risk.copy()
     asset_risk_summary = asset_risk_summary.dropna(
         subset=[f"{col}_{Scenarios.CURRENT}" for col in risk_cols]
@@ -450,6 +452,7 @@ def _create_risk_summary(
 
 
 def _fill_risk_summary_column(
+    config: model_config.Config,
     asset_risk: gpd.GeoDataFrame,
     hazard: MainHazardRiskCols | str,
     risk_distribution: pd.DataFrame,
@@ -466,7 +469,7 @@ def _fill_risk_summary_column(
         out_risk_column = f"{scenario.capitalize()} {hazard.replace('_', ' ').title()}"
         risk_distribution[out_risk_column] = 0.0
         for category, (lower, upper) in _RISK_CATEGORIES.items():
-            if upper == 100:
+            if upper == config.constants.score_max:
                 mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] <= upper)
             else:
                 mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] < upper)
@@ -875,7 +878,6 @@ def _write_descriptive_risk_averages(
     border: openpyxl.styles.Side,
 ) -> openpyxl.Workbook:
     """Write descriptive risk averages data to the Excel workbook sheet."""
-    # TODO (DJ): Need to clean up the structure column names before they go into this
     ws = workbook.create_sheet(title="Descriptive Risk Averages")
     gn_yl_red_cmap = mpl.colormaps["RdYlGn_r"]
     total_length = 0
@@ -1117,11 +1119,18 @@ def _os_open_road_risk(
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
-    # TODO (DJ): Add descriptive cols
     _create_risk_summary(
         os_road_risk,
         risk_cols,
-        [],
+        [
+            OSRoadCols.ROAD_CLASSIFICATION,
+            OSRoadCols.ROAD_FUNCTION,
+            OSRoadCols.FORM_OF_WAY,
+            OSRoadCols.ROAD_CLASSIFICATION_NUMBER,
+            OSRoadCols.ROAD_STRUCTURE,
+            OSRoadCols.PRIMARY_ROUTE,
+            OSRoadCols.TRUNK_ROAD,
+        ],
         audit_path / "Summary" / "Road" / "OS Roads",
         "OS Roads Risk Summary.xlsx",
     )
@@ -1186,7 +1195,6 @@ def _noham_road_risk(
 
     risk_impact_cols = [*risk_cols, *ImpactCols.get_noham_impact_cols()]
 
-    # TODO (DJ): Add descriptive cols
     _create_risk_summary(
         noham_risk,
         risk_impact_cols,
@@ -1325,7 +1333,6 @@ def _model_road_risk(
 
     risk_impact_cols = [*risk_cols, *ImpactCols]
 
-    # TODO (DJ): Add descriptive cols
     _create_risk_summary(
         model_road_risk,
         risk_impact_cols,
@@ -2247,11 +2254,20 @@ def _ncn_risk(
 
     ncn_risk = _infrastructure_risk_intersect(ncn, hazard_layers)
 
-    # TODO (DJ): Add descriptive cols
     _create_risk_summary(
         ncn_risk,
         risk_cols,
-        [],
+        [
+            "Desc_",
+            "Greenway",
+            "RouteType",
+            "RouteNo",
+            "LinkNo",
+            "Surface",
+            "Quality",
+            "Lighting",
+            "RoadClass",
+        ],
         config.paths.audit_path / "Summary" / "Other" / "National Cycle Network",
         "National Cycle Network Risk Summary.xlsx",
     )
@@ -2327,11 +2343,16 @@ def _tram_network_risk(
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
-    # TODO (DJ): Add descriptive risk cols
     _create_risk_summary(
         tram_risk,
         risk_cols,
-        [],
+        [
+            OSRailCols.DESCRIPTION,
+            OSRailCols.STRUCTURE,
+            OSRailCols.PHYSICAL_LEVEL,
+            OSRailCols.RAILWAY_USE,
+            OSRailCols.TRACK_REPRESENTATION,
+        ],
         config.paths.audit_path / "Summary" / "Other" / "Tram Network Risk",
         "Tram Network Risk Summary.xlsx",
     )
@@ -2503,7 +2524,6 @@ def _nexus_metro_links_risk(
 
     metro_links_risk = _metro_impact_index(metro_links_risk, feature_range)
 
-    # TODO (DJ): Add descriptive cols
     _create_risk_summary(
         metro_links_risk,
         risk_cols,
@@ -2598,8 +2618,6 @@ def _nexus_metro_stations_risk(
         return
 
     metro_stations = _buffer_geometry(metro_stations, _METRO_STATION_BUFFER_SIZE_M)
-
-    # TODO (DJ): Consider buffering metro stations to account for surrounding area risk
 
     metro_stations_risk = _infrastructure_risk_intersect(metro_stations, hazard_layers)
 

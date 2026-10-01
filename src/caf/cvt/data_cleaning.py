@@ -2611,8 +2611,6 @@ def _clean_nexus_demand(config: model_config.Config) -> None:
     # Map onto network links between stations
     metro_flows = _map_demand_to_metro_links(config, demand)
 
-    # TODO (DJ): Pelaw junction lines are overlapping, need to decide what to do with these
-
     write_to_file(
         metro_flows,
         config.paths.model_input / file_paths.NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH,
@@ -2681,7 +2679,7 @@ def _map_demand_to_metro_links(
 
     # Write the flows back to the network
     demand_lookup = {}
-    for u, v, data in metro_graph.edges(data=True):
+    for _, _, data in metro_graph.edges(data=True):
         demand_lookup[data["metro_link_id"]] = {
             f"demand_{Scenarios.CURRENT}": data[f"demand_{Scenarios.CURRENT}"],
             f"demand_{Scenarios.FORECAST}": data[f"demand_{Scenarios.FORECAST}"],

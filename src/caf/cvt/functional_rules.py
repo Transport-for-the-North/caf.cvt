@@ -350,8 +350,6 @@ def _calculate_composite_score(
     risk_data: pd.DataFrame, weights: dict[str, float], output_col: str
 ) -> pd.DataFrame:
     """Calculate composite score given a dataframe with variables and corresponding weights."""
-    # TODO (DJ): Consider alternative approach for calculating composite score,
-    # e.g. taking max value, or weighted mean + maximum value
     risk_data[output_col] = sum(risk_data[col] * weight for col, weight in weights.items())
 
     return risk_data
@@ -1250,12 +1248,12 @@ def _flooding_index(
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
-    #_audit_index(
-    #    flooding_risk,
-    #    [*FloodingRiskCols, MainHazardRiskCols.FLOODING],
-    #    audit_path / "Flooding" / "Flooding Risk Index",
-    #    feature_range,
-    #)
+    _audit_index(
+        flooding_risk,
+        [*FloodingRiskCols, MainHazardRiskCols.FLOODING],
+        audit_path / "Flooding" / "Flooding Risk Index",
+        feature_range,
+    )
 
     data_cleaning.write_to_file(
         flooding_risk,
