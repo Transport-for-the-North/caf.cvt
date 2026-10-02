@@ -498,6 +498,78 @@ class OSRailDirection(enum.StrEnum):
     BOTH_DIRECTIONS = "Both Directions"
 
 
+class MasterMapSiteCols(enum.StrEnum):
+    """Column definitions for MasterMap sites."""
+
+    ID = "toid"
+    FUNCTION_STATUS = "function_status"
+    FUNCTION_THEME = "function_theme"
+    FUNCTION = "function"
+    DISTINCTIVE_NAME_1 = "distinctive_name_1"
+    DISTINCTIVE_NAME_2 = "distinctive_name_2"
+    DISTINCTIVE_NAME_3 = "distinctive_name_3"
+    DISTINCTIVE_NAME_4 = "distinctive_name_4"
+    STAKEHOLDER_1 = "stakeholder_1"
+    STAKEHOLDER_1_ROLE = "stakeholder_1_role"
+    EXTENT_DEFINITION = "extent_definition"
+    PERIMETER = "perimeter"
+    AREA = "area"
+
+    @classmethod
+    def get_descriptive_cols(cls) -> list[str]:
+        """Return list of descriptive columns for MasterMap sites."""
+        return [
+            MasterMapSiteCols.FUNCTION_THEME,
+            MasterMapSiteCols.FUNCTION,
+            MasterMapSiteCols.DISTINCTIVE_NAME_1,
+            MasterMapSiteCols.DISTINCTIVE_NAME_2,
+            MasterMapSiteCols.DISTINCTIVE_NAME_3,
+            MasterMapSiteCols.DISTINCTIVE_NAME_4,
+            MasterMapSiteCols.STAKEHOLDER_1,
+            MasterMapSiteCols.STAKEHOLDER_1_ROLE,
+            MasterMapSiteCols.EXTENT_DEFINITION
+        ]
+
+
+class MasterMapFunctionStatus(enum.StrEnum):
+    """Function status definitions for MasterMap sites."""
+
+    OPERATIONAL = "Operational"
+    OUT_OF_SERVICE = "Out of Service"
+
+
+class MasterMapFunction(enum.StrEnum):
+    """Function definitions for MasterMap sites."""
+
+    RAILWAY_STATION = "Railway Station"
+    BUS_STATION = "Bus Station"
+    COACH_STATION = "Coach Station"
+    TRAM_STATION = "Tram Station"
+    FERRY_TERMINAL = "Ferry Terminal"
+    AIRPORT = "Airport"
+
+
+class MasterMapStakeholder(enum.StrEnum):
+    """Stakeholder definitions for MasterMap sites."""
+
+    NETWORK_RAIL = "Network Rail"
+
+    # Rapid Transport Networks
+    LONDON_UNDERGROUND = "London Underground"
+    DOCKLANDS_LIGHT_RAILWAY = "Docklands Light Railway"
+    TYNE_AND_WEAR_METRO = "Tyne And Wear Metro"
+    GLASGOW_SUBWAY = "Glasgow Subway"
+
+
+class MasterMapFunctionTheme(enum.StrEnum):
+    """Function theme definitions for MasterMap sites."""
+
+    ROAD_TRANSPORT = "Road Transport"
+    RAIL_TRANSPORT = "Rail Transport"
+    WATER_TRANSPORT = "Water Transport"
+    AIR_TRANSPORT = "Air Transport"
+
+
 
 class AssetTypes(enum.StrEnum):
     """Asset Type definitions."""

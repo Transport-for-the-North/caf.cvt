@@ -25,6 +25,11 @@ from caf.cvt.definitions import (
     FloodingRiskCols,
     FloodingTypes,
     GroundStabilityRiskCols,
+    MasterMapFunction,
+    MasterMapFunctionStatus,
+    MasterMapFunctionTheme,
+    MasterMapSiteCols,
+    MasterMapStakeholder,
     OSRailCols,
     OSRailDescription,
     OSRailOperationalStatus,
@@ -709,19 +714,19 @@ def _clean_other(  # noqa: C901
             _clean_ncn(config, boundary)
         if config.switches.train_stations:
             LOG.info("Cleaning train stations data...")
-            _clean_train_stations(config, boundary)
+            _clean_train_stations(config, transport_sites)
         if config.switches.tram_stations:
             LOG.info("Cleaning tram stations data...")
-            _clean_tram_stations(config, boundary)
+            _clean_tram_stations(config, transport_sites)
         if config.switches.rapid_transport_stations:
             LOG.info("Cleaning rapid transport stations data...")
-            _clean_rapid_transport_stations(config, boundary)
+            _clean_rapid_transport_stations(config, transport_sites)
         if config.switches.ferry_terminals:
             LOG.info("Cleaning ferry terminals data...")
-            _clean_ferry_terminals(config, boundary)
+            _clean_ferry_terminals(config, transport_sites)
         if config.switches.bus_coach_stations:
             LOG.info("Cleaning bus coach stations data...")
-            _clean_bus_coach_stations(config, boundary)
+            _clean_bus_coach_stations(config, transport_sites)
         if config.switches.tram_network:
             LOG.info("Cleaning tram network data...")
             _clean_tram_network(config, rail_links)
@@ -734,44 +739,30 @@ def _clean_other(  # noqa: C901
 def _clean_mastermap_sites(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read, clean and prepare mastermap sites data for further filtering."""
     mm_sites = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.infrastructure.other.mastermap_sites.zip_path}!"
+        f"zip://"
+        f"{config.paths.raw_input / config.infrastructure.other.mastermap_sites.zip_path}!"
         f"{config.infrastructure.other.mastermap_sites.file_path.as_posix()}",
         layer="functional_site",
-        #mask=boundary,
-        columns=[
-            "toid",
-            "function_status",
-            "function_theme",
-            "function",
-            "perimeter",
-            "area",
-            "distinctive_name_1",
-            "distinctive_name_2",
-            "distinctive_name_3",
-            "distinctive_name_4",
-            "stakeholder_1",
-            "stakeholder_1_role",
-            "extent_definition",
-            "geometry"
-        ]
+        mask=boundary,
+        columns=[col.value for col in MasterMapSiteCols] + ["geometry"]
     )
     len_before_filter = len(mm_sites)
     mm_sites = mm_sites[
-        mm_sites["function_status"] == "Operational"
+        mm_sites[MasterMapSiteCols.FUNCTION_STATUS] == MasterMapFunctionStatus.OPERATIONAL
     ]
-    mm_sites = mm_sites.drop(columns=["function_status"])
+    mm_sites = mm_sites.drop(columns=[MasterMapSiteCols.FUNCTION_STATUS])
     transport_sites = mm_sites[
-        mm_sites["function_theme"].isin([
-            "Rail Transport", "Air Transport", "Road Transport", "Water Transport"
+        mm_sites[MasterMapSiteCols.FUNCTION_THEME].isin([
+            MasterMapFunctionTheme.RAIL_TRANSPORT, MasterMapFunctionTheme.AIR_TRANSPORT,
+            MasterMapFunctionTheme.ROAD_TRANSPORT, MasterMapFunctionTheme.WATER_TRANSPORT
         ])
     ]
-    transport_sites = transport_sites.drop_duplicates(subset=["toid", "geometry"])
-    transport_sites = transport_sites.rename(columns={"toid": "id"})
-    #transport_sites[OSRailCols.get_descriptive_cols()] = transport_sites[
-    #    OSRailCols.get_descriptive_cols()
-    #].replace(0, "N/A")
+    transport_sites = transport_sites.drop_duplicates(subset=[MasterMapSiteCols.ID, "geometry"])
+    transport_sites = transport_sites.rename(columns={MasterMapSiteCols.ID: "id"})
+    transport_sites[MasterMapSiteCols.get_descriptive_cols()] = transport_sites[
+        MasterMapSiteCols.get_descriptive_cols()
+    ].fillna("N/A")
     transport_sites = validate_geometries(transport_sites)
-    #transport_sites = clip_to_boundary(transport_sites, boundary)
     filter_removed = len_before_filter - len(transport_sites)
     LOG.debug(
         "OS MasterMap sites filtered - %s of %s (%.1f percent) rows removed",
@@ -786,14 +777,17 @@ def _clean_airports(config: model_config.Config, transport_sites: gpd.GeoDataFra
     """Read airports dataset, then write to file in new directory."""
     len_before_filter = len(transport_sites)
     air_transport = transport_sites[
-        transport_sites["function_theme"] == "Air Transport"
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
+        MasterMapFunctionTheme.AIR_TRANSPORT
     ]
     airports = air_transport[
-        air_transport["function"] == "Airport"
+        air_transport[MasterMapSiteCols.FUNCTION] == MasterMapFunction.AIRPORT
     ]
     airports = airports.drop(columns=[
-        "function_theme", "function", "stakeholder_1", "stakeholder_1_role",
-        "extent_definition", "distinctive_name_3", "distinctive_name_4"
+        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.FUNCTION,
+        MasterMapSiteCols.STAKEHOLDER_1, MasterMapSiteCols.STAKEHOLDER_1_ROLE,
+        MasterMapSiteCols.EXTENT_DEFINITION, MasterMapSiteCols.DISTINCTIVE_NAME_3,
+        MasterMapSiteCols.DISTINCTIVE_NAME_4
     ])
     filter_removed = len_before_filter - len(airports)
     LOG.debug(
@@ -845,21 +839,37 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     )
 
 
-def _clean_train_stations(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_train_stations(
+        config: model_config.Config,
+        transport_sites: gpd.GeoDataFrame
+) -> None:
     """Filter OS MMRN for train stations, then clip to boundary and write to file."""
-    # TODO (DJ): Investigate other data source since querying MMRN takes a while
-    os_mmrn_railway_stations = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.infrastructure.other.os_mmrn.zip_path}!"
-        f"{config.infrastructure.other.os_mmrn.file_path}",
-        layer="mrn_ntwk_transportnode",
-        where="os_nodetype LIKE '%Railway Station%'",
-        columns=["nodeid", "os_nodetype"],
-    )
-    len_before_filter = len(os_mmrn_railway_stations)
-    train_stations = os_mmrn_railway_stations.drop(columns=["os_nodetype"])
-    train_stations = train_stations.drop_duplicates()
-    train_stations = validate_geometries(train_stations)
-    train_stations = clip_to_boundary(train_stations, boundary)
+    len_before_filter = len(transport_sites)
+    rail_transport = transport_sites[
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
+        MasterMapFunctionTheme.RAIL_TRANSPORT
+    ]
+    train_stations = rail_transport[
+        rail_transport[MasterMapSiteCols.FUNCTION].str.contains(MasterMapFunction.RAILWAY_STATION)
+    ]
+    train_stations = train_stations[
+        ~(
+            train_stations[MasterMapSiteCols.STAKEHOLDER_1].str.contains(
+                "|".join([
+                    MasterMapStakeholder.LONDON_UNDERGROUND,
+                    MasterMapStakeholder.DOCKLANDS_LIGHT_RAILWAY,
+                    MasterMapStakeholder.TYNE_AND_WEAR_METRO,
+                    MasterMapStakeholder.GLASGOW_SUBWAY,
+                ])
+            ) & ~(train_stations[MasterMapSiteCols.STAKEHOLDER_1].str.contains(
+                MasterMapStakeholder.NETWORK_RAIL)
+            )
+        )
+    ]
+    train_stations = train_stations.drop(columns=[
+        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.DISTINCTIVE_NAME_3,
+        MasterMapSiteCols.DISTINCTIVE_NAME_4, MasterMapSiteCols.STAKEHOLDER_1_ROLE
+    ])
     filter_removed = len_before_filter - len(train_stations)
     LOG.debug(
         "Train stations filtered - %s of %s (%.1f percent) rows removed",
@@ -873,20 +883,23 @@ def _clean_train_stations(config: model_config.Config, boundary: gpd.GeoDataFram
     )
 
 
-def _clean_tram_stations(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_tram_stations(
+        config: model_config.Config,
+        transport_sites: gpd.GeoDataFrame
+) -> None:
     """Filter OS MMRN for tram stations, then clip to boundary and write to file."""
-    # TODO (DJ): Investigate other data source since querying MMRN takes a while
-    tram_stations = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.infrastructure.other.os_mmrn.zip_path}!"
-        f"{config.infrastructure.other.os_mmrn.file_path}",
-        layer="mrn_ntwk_transportnode",
-        where="os_nodetype LIKE '%Tram Station%'",
-        columns=["nodeid"],
-    )
-    len_before_filter = len(tram_stations)
-    tram_stations = tram_stations.drop_duplicates()
-    tram_stations = validate_geometries(tram_stations)
-    tram_stations = clip_to_boundary(tram_stations, boundary)
+    len_before_filter = len(transport_sites)
+    rail_transport = transport_sites[
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
+        MasterMapFunctionTheme.RAIL_TRANSPORT
+    ]
+    tram_stations = rail_transport[
+        rail_transport[MasterMapSiteCols.FUNCTION].str.contains(MasterMapFunction.TRAM_STATION)
+    ]
+    tram_stations = tram_stations.drop(columns=[
+        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.DISTINCTIVE_NAME_3,
+        MasterMapSiteCols.DISTINCTIVE_NAME_4, MasterMapSiteCols.STAKEHOLDER_1_ROLE
+    ])
     filter_removed = len_before_filter - len(tram_stations)
     LOG.debug(
         "Tram stations filtered - %s of %s (%.1f percent) rows removed",
@@ -901,21 +914,29 @@ def _clean_tram_stations(config: model_config.Config, boundary: gpd.GeoDataFrame
 
 
 def _clean_rapid_transport_stations(
-    config: model_config.Config, boundary: gpd.GeoDataFrame
+    config: model_config.Config,
+    transport_sites: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MMRN for rapid transport stations, then clip to boundary and write to file."""
-    # TODO (DJ): Investigate other data source since querying MMRN takes a while
-    rapid_transport_stations = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.infrastructure.other.os_mmrn.zip_path}!"
-        f"{config.infrastructure.other.os_mmrn.file_path}",
-        layer="mrn_ntwk_transportnode",
-        where="os_nodetype LIKE '%Underground System%'",
-        columns=["nodeid"],
-    )
-    len_before_filter = len(rapid_transport_stations)
-    rapid_transport_stations = rapid_transport_stations.drop_duplicates()
-    rapid_transport_stations = validate_geometries(rapid_transport_stations)
-    rapid_transport_stations = clip_to_boundary(rapid_transport_stations, boundary)
+    len_before_filter = len(transport_sites)
+    rail_transport = transport_sites[
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
+        MasterMapFunctionTheme.RAIL_TRANSPORT
+    ]
+    rapid_transport_stations = rail_transport[
+        rail_transport[MasterMapSiteCols.STAKEHOLDER_1].str.contains(
+            "|".join([
+                MasterMapStakeholder.TYNE_AND_WEAR_METRO,
+                MasterMapStakeholder.GLASGOW_SUBWAY,
+                MasterMapStakeholder.LONDON_UNDERGROUND,
+                MasterMapStakeholder.DOCKLANDS_LIGHT_RAILWAY,
+            ])
+        )
+    ]
+    rapid_transport_stations = rapid_transport_stations.drop(columns=[
+        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.DISTINCTIVE_NAME_3,
+        MasterMapSiteCols.DISTINCTIVE_NAME_4, MasterMapSiteCols.STAKEHOLDER_1_ROLE
+    ])
     filter_removed = len_before_filter - len(rapid_transport_stations)
     LOG.debug(
         "Rapid transport stations filtered - %s of %s (%.1f percent) rows removed",
@@ -929,21 +950,26 @@ def _clean_rapid_transport_stations(
     )
 
 
-def _clean_ferry_terminals(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_ferry_terminals(
+        config: model_config.Config,
+        transport_sites: gpd.GeoDataFrame
+) -> None:
     """Filter OS MMRN for ferry terminals, then clip to boundary and write to file."""
-    # TODO (DJ): Investigate other data source since querying MMRN takes a while
-    ferry_terminals = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.infrastructure.other.os_mmrn.zip_path}!"
-        f"{config.infrastructure.other.os_mmrn.file_path}",
-        layer="mrn_ntwk_transportnode",
-        where="os_nodetype LIKE '%Ferry%'",
-        columns=["nodeid"],
-    )
-    len_before_filter = len(ferry_terminals)
-    ferry_terminals = ferry_terminals.drop_duplicates()
-    ferry_terminals = validate_geometries(ferry_terminals)
-    ferry_terminals = clip_to_boundary(ferry_terminals, boundary)
-    filter_removed = len_before_filter - len(ferry_terminals)
+    len_before_filter = len(transport_sites)
+    water_transport = transport_sites[
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
+        MasterMapFunctionTheme.WATER_TRANSPORT
+    ]
+    ferry_terminals = water_transport[
+        water_transport[MasterMapSiteCols.FUNCTION].str.contains(
+            MasterMapFunction.FERRY_TERMINAL
+        )
+    ]
+    ferry_terminals = ferry_terminals.drop(columns=[
+        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.DISTINCTIVE_NAME_3,
+        MasterMapSiteCols.DISTINCTIVE_NAME_4, MasterMapSiteCols.STAKEHOLDER_1_ROLE
+    ])
+    filter_removed = len_before_filter - len(water_transport)
     LOG.debug(
         "Ferry terminals filtered - %s of %s (%.1f percent) rows removed",
         filter_removed,
@@ -956,20 +982,28 @@ def _clean_ferry_terminals(config: model_config.Config, boundary: gpd.GeoDataFra
     )
 
 
-def _clean_bus_coach_stations(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_bus_coach_stations(
+        config: model_config.Config,
+        transport_sites: gpd.GeoDataFrame
+) -> None:
     """Filter OS MMRN for bus and coach stations, then clip to boundary and write to file."""
-    # TODO (DJ): Investigate other data source since querying MMRN takes a while
-    bus_coach_stations = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.infrastructure.other.os_mmrn.zip_path}!"
-        f"{config.infrastructure.other.os_mmrn.file_path}",
-        layer="mrn_ntwk_transportnode",
-        where="os_nodetype LIKE '%Bus Station%' OR os_nodetype LIKE '%Coach Station%'",
-        columns=["nodeid"],
-    )
-    len_before_filter = len(bus_coach_stations)
-    bus_coach_stations = bus_coach_stations.drop_duplicates()
-    bus_coach_stations = validate_geometries(bus_coach_stations)
-    bus_coach_stations = clip_to_boundary(bus_coach_stations, boundary)
+    len_before_filter = len(transport_sites)
+    road_transport = transport_sites[
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
+        MasterMapFunctionTheme.ROAD_TRANSPORT
+    ]
+    bus_coach_stations = road_transport[
+        road_transport[MasterMapSiteCols.FUNCTION].str.contains(
+            "|".join([
+                MasterMapFunction.BUS_STATION,
+                MasterMapFunction.COACH_STATION,
+            ])
+        )
+    ]
+    bus_coach_stations = bus_coach_stations.drop(columns=[
+        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.DISTINCTIVE_NAME_3,
+        MasterMapSiteCols.DISTINCTIVE_NAME_4, MasterMapSiteCols.STAKEHOLDER_1_ROLE
+    ])
     filter_removed = len_before_filter - len(bus_coach_stations)
     LOG.debug(
         "Bus and coach stations filtered - %s of %s (%.1f percent) rows removed",
@@ -1038,7 +1072,6 @@ def _clean_rapid_transport_network(
         rapid_transport_links,
         config.paths.model_input / file_paths.RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH,
     )
-
 
 
 def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
