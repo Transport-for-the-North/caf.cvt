@@ -2,14 +2,18 @@
 
 import pathlib
 
+from caf.cvt import functional_rules
+
 # Infrastructure Model Inputs Paths
 
 OS_ROAD_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Road/OS Road/os_road.gpkg")
 
 NOHAM_NETWORK_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Road/NoHAM")
 
+MODEL_ROADS_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Road/Model Roads/model_roads.gpkg")
+
 PASSENGER_RAIL_MODEL_INPUT_PATH = pathlib.Path(
-    "Infrastructure/Rail/OS Passenger Rail/pass_rail_links.gpkg"
+    "Infrastructure/Rail/OS Passenger Rail/passenger_rail_links.gpkg"
 )
 
 FREIGHT_RAIL_MODEL_INPUT_PATH = pathlib.Path(
@@ -19,11 +23,6 @@ FREIGHT_RAIL_MODEL_INPUT_PATH = pathlib.Path(
 AIRPORTS_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/Airports/airports.gpkg")
 
 BUS_STOPS_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/Bus Stops/bus_stops.gpkg")
-
-PETROL_STATIONS_MODEL_INPUT_PATH = pathlib.Path(
-    "Infrastructure/Other/Petrol Stations/petrol_stations.gpkg"
-)
-
 
 TRAIN_STATIONS_MODEL_INPUT_PATH = pathlib.Path(
     "Infrastructure/Other/Train Stations/train_stations.gpkg"
@@ -46,10 +45,14 @@ TRAM_NETWORK_MODEL_INPUT_PATH = pathlib.Path(
 RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH = pathlib.Path(
     "Infrastructure/Other/Rapid Transport Network/rapid_transport_network.gpkg"
 )
-CHARGING_SITES_MODEL_INPUT_PATH = pathlib.Path(
-    "Infrastructure/Other/EV Charging Sites/chg_sites.gpkg"
-)
 NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH = pathlib.Path("Infrastructure/Other/NCN/ncn.gpkg")
+
+NEXUS_METRO_LINKS_MODEL_INPUT_PATH = pathlib.Path(
+    "Infrastructure/Bespoke/Nexus Metro/metro_links.gpkg"
+)
+NEXUS_METRO_STATIONS_MODEL_INPUT_PATH = pathlib.Path(
+    "Infrastructure/Bespoke/Nexus Metro/metro_stations.gpkg"
+)
 
 # Hazards Model Inputs Paths
 HAZARD_GRID_MODEL_INPUT_PATH = pathlib.Path(
@@ -99,10 +102,8 @@ WIND_DRIVEN_RAIN_MODEL_INPUT_PATH = pathlib.Path(
 FLOODING_MODEL_INPUT_PATH = pathlib.Path("Hazards/Flooding")
 
 
-GEOSURE_MODEL_INPUT_PATH = pathlib.Path("Hazards/Ground Stability/GeoSure/geosure.gpkg")
-GEOCLIMATE_SHRINK_SWELL_MODEL_INPUT_PATH = pathlib.Path(
-    "Hazards/Ground Stability/BGS Shrink Swell"
-)
+GEOSURE_MODEL_INPUT_PATH = pathlib.Path("Hazards/Ground Stability/GeoSure")
+
 GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Coastal Erosion/NCERM/ncerm_giz.gpkg"
 )
@@ -112,16 +113,27 @@ NCERM_MODEL_INPUT_PATH = pathlib.Path("Hazards/Coastal Erosion/NCERM")
 FREIGHT_DEMAND_MODEL_INPUT_PATH = pathlib.Path(
     "Impact/Freight Flows/freight_network_demand.gpkg"
 )
+
 NOHAM_FLOWS_MODEL_INPUT_PATH = pathlib.Path("Impact/NoHAM Flows/noham_net_flows.gpkg")
 
 NOHAM_ZIP_EXTRACT_OUTPUT_PATH = pathlib.Path("Impact/NoHAM Link Flows/h5 files")
+
+MODEL_ROAD_FLOWS_MODEL_INPUT_PATH = pathlib.Path(
+    "Impact/Model Road Flows/model_road_flows.gpkg"
+)
+
+NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH = pathlib.Path(
+    "Impact/Nexus Metro Link Flows/nexus_metro_link_flows.gpkg"
+)
 
 # Model Interim Output Paths
 EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
     "Extreme Weather Risk/extreme_weather_risk.gpkg"
 )
 
-TILE_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path("Flooding Risk/flooding_tiles.gpkg")
+TILE_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
+    f"Flooding Risk/flooding_tiles_{functional_rules._FLOODING_TILE_SIZE_M}m.gpkg"
+)
 FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
     "Flooding Risk/flooding_risk_tile_overlay.gpkg"
 )
