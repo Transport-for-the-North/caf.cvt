@@ -149,6 +149,10 @@ class Road(ctk.BaseConfig):
     ----------
     os_road : ZipFileEntry
         Configuration for the OS road zip file entry.
+    os_road_lookup: ZipFileEntry
+        Configuration for the OS road lookup zip file entry.
+    mm_highways: ZipFileEntry
+        Configuration for the MasterMap Highways Network zip file entry.
     noham: NoHAMEntry
         Configuration for the NoHAM road network data.
     model_roads: ModelRoadsEntry
@@ -156,6 +160,8 @@ class Road(ctk.BaseConfig):
     """
 
     os_road: ZipFileEntry
+    os_road_lookup: ZipFileEntry
+    mm_highways: ZipFileEntry
     noham: NoHAMEntry
     model_roads: ModelRoadsEntry
 
@@ -177,22 +183,16 @@ class Other(ctk.BaseConfig):
 
     Attributes
     ----------
-    bus_stops : dict[str, pathlib.Path]
-        Mapping of region name to bus stops data path.
+    bus_stops : pathlib.Path
+        Path to the bus stops data.
     ncn_sustrans : pathlib.Path
         Path to the NCN Sustrans data.
-    os_mmrn : ZipFileEntry
-        Configuration for the OS MMRN zip file entry.
-    airports: pathlib.Path
-        Path to the airports data.
     mastermap_sites: ZipFileEntry
         Configuration for the MasterMap Sites zip file entry.
     """
 
-    bus_stops: dict[str, pathlib.Path]
+    bus_stops: pathlib.Path
     ncn_sustrans: pathlib.Path
-    os_mmrn: ZipFileEntry
-    airports: pathlib.Path
     mastermap_sites: ZipFileEntry
 
 

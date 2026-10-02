@@ -7,6 +7,9 @@ import enum
 # GLOBAL CONSTANTS
 
 BNG_CRS = "EPSG:27700"  # British National Grid CRS, for use in spatially merging datasets
+ID_COL = "id"
+NA_COL = "N/A"
+GEOMETRY_COL = "geometry"
 
 # CLASSES
 
@@ -355,6 +358,18 @@ class OSRoadCols(enum.StrEnum):
     PRIMARY_ROUTE = "primary_route"
     TRUNK_ROAD = "trunk_road"
 
+    @classmethod
+    def get_layer_name(cls) -> str:
+        """Return the name of the layer for OS roads."""
+        return "road_link"
+
+
+
+class NoHAMRoadCols(enum.StrEnum):
+    """Definitions for NoHAM road columns."""
+
+    LINK_ID = "link_id"
+
 
 class OSRailCols(enum.StrEnum):
     """Definitions for OS rail columns."""
@@ -381,6 +396,15 @@ class OSRailCols(enum.StrEnum):
             OSRailCols.TRACK_REPRESENTATION,
             OSRailCols.DIRECTION,
         ]
+
+    @classmethod
+    def rename_map(cls) -> dict[str, str]:
+        """Return rename map for OS rail columns."""
+        return {
+            OSRailCols.PHYSICAL_LEVEL: "physical_level",
+            OSRailCols.RAILWAY_USE: "railway_use",
+            OSRailCols.TRACK_REPRESENTATION: "track_representation",
+        }
 
 
 class OSRailOperationalStatus(enum.StrEnum):
@@ -498,6 +522,31 @@ class OSRailDirection(enum.StrEnum):
     BOTH_DIRECTIONS = "Both Directions"
 
 
+class NaPTANCols(enum.StrEnum):
+    """Column definitions for NaPTAN data."""
+
+    ID = "ATCOCode"
+    NAME = "CommonName"
+    STREET = "Street"
+    LOCALITY = "LocalityName"
+    PARENT_LOCALITY = "ParentLocalityName"
+    STOP_TYPE = "StopType"
+    LONGITUDE = "Longitude"
+    LATITUDE = "Latitude"
+    STATUS = "Status"
+
+    @classmethod
+    def rename_map(cls) -> dict[str, str]:
+        """Return mapping of original column names to desired column names for NaPTAN data."""
+        return {
+            NaPTANCols.ID: ID_COL,
+            NaPTANCols.NAME: "name",
+            NaPTANCols.STREET: "street",
+            NaPTANCols.LOCALITY: "locality",
+            NaPTANCols.PARENT_LOCALITY: "parent_locality",
+        }
+
+
 class MasterMapSiteCols(enum.StrEnum):
     """Column definitions for MasterMap sites."""
 
@@ -516,6 +565,11 @@ class MasterMapSiteCols(enum.StrEnum):
     AREA = "area"
 
     @classmethod
+    def get_layer_name(cls) -> str:
+        """Return the name of the layer for MasterMap sites."""
+        return "functional_site"
+
+    @classmethod
     def get_descriptive_cols(cls) -> list[str]:
         """Return list of descriptive columns for MasterMap sites."""
         return [
@@ -529,6 +583,7 @@ class MasterMapSiteCols(enum.StrEnum):
             MasterMapSiteCols.STAKEHOLDER_1_ROLE,
             MasterMapSiteCols.EXTENT_DEFINITION
         ]
+
 
 
 class MasterMapFunctionStatus(enum.StrEnum):
@@ -569,6 +624,35 @@ class MasterMapFunctionTheme(enum.StrEnum):
     WATER_TRANSPORT = "Water Transport"
     AIR_TRANSPORT = "Air Transport"
 
+
+class NationalCycleNetworkCols(enum.StrEnum):
+    """Column definitions for the National Cycle Network."""
+
+    ID = "SegmentID"
+    DESCRIPTION = "Desc_"
+    GREENWAY = "Greenway"
+    ROUTE_TYPE = "RouteType"
+    ROUTE_NUMBER = "RouteNo"
+    LINK_NUMBER = "LinkNo"
+    SURFACE = "Surface"
+    QUALITY = "Quality"
+    LIGHTING = "Lighting"
+    ROAD_CLASS = "RoadClass"
+
+    @classmethod
+    def rename_map(cls) -> dict[str, str]:
+        return {
+            NationalCycleNetworkCols.ID: "id",
+            NationalCycleNetworkCols.DESCRIPTION: "description",
+            NationalCycleNetworkCols.GREENWAY: "greenway",
+            NationalCycleNetworkCols.ROUTE_TYPE: "route_type",
+            NationalCycleNetworkCols.ROUTE_NUMBER: "route_number",
+            NationalCycleNetworkCols.LINK_NUMBER: "link_number",
+            NationalCycleNetworkCols.SURFACE: "surface",
+            NationalCycleNetworkCols.QUALITY: "quality",
+            NationalCycleNetworkCols.LIGHTING: "lighting",
+            NationalCycleNetworkCols.ROAD_CLASS: "road_class",
+        }
 
 
 class AssetTypes(enum.StrEnum):

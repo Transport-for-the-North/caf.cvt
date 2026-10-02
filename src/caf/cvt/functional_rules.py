@@ -17,6 +17,7 @@ from shapely.geometry import Polygon, box
 
 from caf.cvt import data_cleaning, file_paths, model_config
 from caf.cvt.definitions import (
+    GEOMETRY_COL,
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
@@ -287,7 +288,7 @@ def _create_grid(
     ]
     grid_ids = list(range(len(grid_cells)))
     return gpd.GeoDataFrame(
-        {"grid_id": grid_ids, "geometry": grid_cells}, crs=data_cleaning.BNG_CRS
+        {"grid_id": grid_ids, GEOMETRY_COL: grid_cells}, crs=data_cleaning.BNG_CRS
     )
 
 
@@ -307,7 +308,7 @@ def _merge_on_key(
         raise KeyError(f"Merge key '{key}' missing in grid.")
     merged = reduce(lambda left, right: left.merge(right, on=key, how="outer"), df_list)
     merged_df = merged.merge(grid, on=key, how="left", validate="one_to_many")
-    return gpd.GeoDataFrame(merged_df, geometry="geometry", crs=grid.crs)
+    return gpd.GeoDataFrame(merged_df, geometry=GEOMETRY_COL, crs=grid.crs)
 
 
 def _calculate_risk_threshold(
@@ -631,7 +632,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
                 "part",
                 f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.CURRENT}",
                 f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.FORECAST}",
-                "geometry",
+                GEOMETRY_COL,
             ]
         ],
         on=["grid_id", "part"],
@@ -639,7 +640,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
     )
 
     extreme_heat_cold = gpd.GeoDataFrame(
-        extreme_heat_cold, geometry="geometry", crs=hazard_grid.crs
+        extreme_heat_cold, geometry=GEOMETRY_COL, crs=hazard_grid.crs
     )
     extreme_heat_cold = extreme_heat_cold.drop(columns=["grid_id", "part"])
 
@@ -649,14 +650,14 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
             [
                 f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.CURRENT}",
                 f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FORECAST}",
-                "geometry",
+                GEOMETRY_COL,
             ]
         ],
         storm[
             [
                 f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.CURRENT}",
                 f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FORECAST}",
-                "geometry",
+                GEOMETRY_COL,
             ]
         ],
         target_crs=data_cleaning.BNG_CRS,
@@ -686,7 +687,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
     feature_range = (config.constants.score_min, config.constants.score_max)
 
     extreme_weather_risk = gpd.GeoDataFrame(
-        extreme_weather_risk, geometry="geometry", crs=data_cleaning.BNG_CRS
+        extreme_weather_risk, geometry=GEOMETRY_COL, crs=data_cleaning.BNG_CRS
     )
 
     _validate_index(
@@ -772,7 +773,7 @@ def _extreme_heat_index(
     )
 
     LOG.info("Extreme heat index calculation complete.")
-    extreme_heat = gpd.GeoDataFrame(extreme_heat, geometry="geometry", crs=hazard_grid.crs)
+    extreme_heat = gpd.GeoDataFrame(extreme_heat, geometry=GEOMETRY_COL, crs=hazard_grid.crs)
 
     _validate_index(
         extreme_heat,
@@ -849,7 +850,7 @@ def _extreme_cold_index(
         feature_range,
     )
 
-    extreme_cold = gpd.GeoDataFrame(extreme_cold, geometry="geometry", crs=hazard_grid.crs)
+    extreme_cold = gpd.GeoDataFrame(extreme_cold, geometry=GEOMETRY_COL, crs=hazard_grid.crs)
 
     _validate_index(
         extreme_cold,
@@ -885,13 +886,13 @@ def _drought_index(
 
     precip_sum_grid = precip_sum.merge(hazard_grid, on="grid_id")
     precip_sum_gdf = gpd.GeoDataFrame(
-        precip_sum_grid, geometry="geometry", crs=hazard_grid.crs
+        precip_sum_grid, geometry=GEOMETRY_COL, crs=hazard_grid.crs
     )
     precip_sum_gdf = precip_sum_gdf[
         [
             f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}",
             f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}",
-            "geometry",
+            GEOMETRY_COL,
         ]
     ]
 
@@ -916,7 +917,7 @@ def _drought_index(
             f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FORECAST}",
             f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}",
             f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}",
-            "geometry",
+            GEOMETRY_COL,
         ]
     ]
 
@@ -964,7 +965,7 @@ def _drought_index(
     )
 
     drought_risk = gpd.GeoDataFrame(
-        drought_risk, geometry="geometry", crs=data_cleaning.BNG_CRS
+        drought_risk, geometry=GEOMETRY_COL, crs=data_cleaning.BNG_CRS
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -1004,13 +1005,13 @@ def _storm_index(
         hazard_grid, on="grid_id", how="left", validate="one_to_many"
     )
     precip_win_gdf = gpd.GeoDataFrame(
-        precip_win_grid, geometry="geometry", crs=hazard_grid.crs
+        precip_win_grid, geometry=GEOMETRY_COL, crs=hazard_grid.crs
     )
     precip_win_gdf = precip_win_gdf[
         [
             f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",
             f"{StormCols.PRECIP_WINTER}_{Scenarios.FORECAST}",
-            "geometry",
+            GEOMETRY_COL,
         ]
     ]
 
@@ -1033,7 +1034,7 @@ def _storm_index(
             f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
             f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.CURRENT}",
             f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FORECAST}",
-            "geometry",
+            GEOMETRY_COL,
         ]
     ]
 
@@ -1110,7 +1111,7 @@ def _storm_index(
         feature_range,
     )
 
-    storm_risk = gpd.GeoDataFrame(storm_risk, geometry="geometry", crs=data_cleaning.BNG_CRS)
+    storm_risk = gpd.GeoDataFrame(storm_risk, geometry=GEOMETRY_COL, crs=data_cleaning.BNG_CRS)
 
     _validate_index(storm_risk, [*StormCols, ExtremeWeatherRiskCols.STORM], feature_range)
 
@@ -1360,7 +1361,7 @@ def _process_flooding_overlay_tile(
             if f"{flood_risk}_{scenario}" not in tile_overlay.columns:
                 tile_overlay[f"{flood_risk}_{scenario}"] = None
 
-    return tile_overlay[[*expected_cols, "geometry"]]
+    return tile_overlay[[*expected_cols, GEOMETRY_COL]]
 
 
 ### GROUND STABILITY
@@ -1458,9 +1459,9 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
                     columns=[
                         f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
                         f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FORECAST}",
-                        "geometry",
+                        GEOMETRY_COL,
                     ],  # Empty GeoDataFrame
-                    geometry="geometry",
+                    geometry=GEOMETRY_COL,
                     crs=data_cleaning.BNG_CRS,
                 ),
                 config.paths.model_interim_output
@@ -1493,12 +1494,12 @@ def _coastal_erosion_index(config: model_config.Config, audit_path: pathlib.Path
         "Infilled %s NA values with 0 where there is no risk in coastal erosion index.", num_na
     )
 
-    coastal_erosion_risk = gpd.GeoDataFrame(coastal_erosion_risk, geometry="geometry")
+    coastal_erosion_risk = gpd.GeoDataFrame(coastal_erosion_risk, geometry=GEOMETRY_COL)
     coastal_erosion_risk = coastal_erosion_risk[
         [
             f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
             f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FORECAST}",
-            "geometry",
+            GEOMETRY_COL,
         ]
     ]
 

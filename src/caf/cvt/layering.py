@@ -13,12 +13,15 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 from caf.cvt.definitions import (
+    GEOMETRY_COL,
+    ID_COL,
     AssetTypes,
     ExtremeWeatherRiskCols,
     FloodingRiskCols,
     GroundStabilityRiskCols,
     ImpactCols,
     MainHazardRiskCols,
+    NationalCycleNetworkCols,
     OSRailCols,
     OSRailStructure,
     OSRoadCols,
@@ -142,11 +145,11 @@ def _reshape_for_scenarios(
     descriptive_cols = [
         col
         for col in risk_data.columns
-        if col not in risk_cols and col not in (id_col, "geometry")
+        if col not in risk_cols and col not in (id_col, GEOMETRY_COL)
     ]
 
     # Separate geometry for later
-    geometry = risk_data[[id_col, "geometry"]].copy()
+    geometry = risk_data[[id_col, GEOMETRY_COL]].copy()
 
     # Melt only risk columns
     melted = risk_data.melt(
@@ -179,7 +182,7 @@ def _reshape_for_scenarios(
 
     # Merge geometry back
     reshaped_gdf = reshaped.merge(geometry, on=id_col)
-    return gpd.GeoDataFrame(reshaped_gdf, geometry="geometry", crs=risk_data.crs)
+    return gpd.GeoDataFrame(reshaped_gdf, geometry=GEOMETRY_COL, crs=risk_data.crs)
 
 
 def _prepare_model_output(
@@ -190,11 +193,11 @@ def _prepare_model_output(
 ) -> gpd.GeoDataFrame:
     """Perform standard cleaning operations on risk data to prepare for model output."""
     risk_data = risk_data.drop(columns=drop_cols)
-    risk_data = risk_data.drop_duplicates(subset=["geometry"])
+    risk_data = risk_data.drop_duplicates(subset=[GEOMETRY_COL])
     risk_data = risk_data.rename(columns=rename_map)
     risk_data = risk_data.to_crs(data_cleaning.BNG_CRS)
     risk_data = _duplicate_non_scenario_hazards(risk_data)
-    risk_data = _reshape_for_scenarios(risk_data, "id", risk_cols_order)
+    risk_data = _reshape_for_scenarios(risk_data, ID_COL, risk_cols_order)
     risk_data[risk_cols_order] = risk_data[risk_cols_order].round(1)
     return risk_data.rename(columns={col: f"{col}_score" for col in risk_cols_order})
 
@@ -211,8 +214,8 @@ def _split_csv_shapefile(
     ID and geometry, then writes them to file.
     """
     # Separate spatial and attribute data
-    spatial_gdf = gdf[[id_col, "geometry"]].copy()
-    attribute_df = gdf.drop(columns=["geometry"])
+    spatial_gdf = gdf[[id_col, GEOMETRY_COL]].copy()
+    attribute_df = gdf.drop(columns=[GEOMETRY_COL])
 
     # Remove duplicates from spatial data
     spatial_gdf = spatial_gdf.drop_duplicates()
@@ -1150,12 +1153,12 @@ def _os_open_road_risk(
     os_road_risk = _prepare_model_output(
         risk_data=os_road_risk,
         drop_cols=[],
-        rename_map={"identifier": "id"},
+        rename_map={},
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
-        config, os_road_risk, "id", pathlib.Path("Road") / "OS Roads" / "os_road_risk"
+        config, os_road_risk, ID_COL, pathlib.Path("Road") / "OS Roads" / "os_road_risk"
     )
     LOG.info("Finished layering OS Open Roads with hazard risk.")
 
@@ -1218,12 +1221,12 @@ def _noham_road_risk(
     noham_risk = _prepare_model_output(
         risk_data=noham_risk,
         drop_cols=[],
-        rename_map={"link_id": "id"},
+        rename_map={},
         risk_cols_order=risk_impact_cols,
     )
 
     _split_csv_shapefile(
-        config, noham_risk, "id", pathlib.Path("Road") / "NoHAM" / "noham_risk"
+        config, noham_risk, ID_COL, pathlib.Path("Road") / "NoHAM" / "noham_risk"
     )
 
     LOG.info("Finished layering NoHAM with hazard risk and calculating impact index.")
@@ -1476,13 +1479,7 @@ def _passenger_rail_risk(
     _create_risk_summary(
         passenger_rail_network_risk,
         risk_cols,
-        [
-            OSRailCols.DESCRIPTION,
-            OSRailCols.STRUCTURE,
-            OSRailCols.PHYSICAL_LEVEL,
-            OSRailCols.RAILWAY_USE,
-            OSRailCols.TRACK_REPRESENTATION,
-        ],
+        OSRailCols.get_descriptive_cols(),
         config.paths.audit_path / "Summary" / "Rail" / "Passenger Rail",
         "Passenger Rail Risk Summary.xlsx",
     )
@@ -1507,19 +1504,14 @@ def _passenger_rail_risk(
     passenger_rail_network_risk = _prepare_model_output(
         risk_data=passenger_rail_network_risk,
         drop_cols=[],
-        rename_map={
-            OSRailCols.ID: "id",
-            OSRailCols.PHYSICAL_LEVEL: "physical_level",
-            OSRailCols.RAILWAY_USE: "railway_use",
-            OSRailCols.TRACK_REPRESENTATION: "track_representation",
-        },
+        rename_map=OSRailCols.rename_map(),
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
         config,
         passenger_rail_network_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Rail") / "Passenger Rail" / "passenger_rail_network_risk",
     )
 
@@ -1576,13 +1568,7 @@ def _freight_rail_risk(
     _create_risk_summary(
         freight_rail_network_risk,
         risk_cols,
-        [
-            OSRailCols.DESCRIPTION,
-            OSRailCols.STRUCTURE,
-            OSRailCols.PHYSICAL_LEVEL,
-            OSRailCols.RAILWAY_USE,
-            OSRailCols.TRACK_REPRESENTATION,
-        ],
+        OSRailCols.get_descriptive_cols(),
         config.paths.audit_path / "Summary" / "Rail" / "Freight Rail",
         "Freight Rail Risk Summary.xlsx",
     )
@@ -1607,19 +1593,14 @@ def _freight_rail_risk(
             "dij_id",
             "distance",
         ],
-        rename_map={
-            OSRailCols.ID: "id",
-            OSRailCols.PHYSICAL_LEVEL: "physical_level",
-            OSRailCols.RAILWAY_USE: "railway_use",
-            OSRailCols.TRACK_REPRESENTATION: "track_representation",
-        },
+        rename_map=OSRailCols.rename_map(),
         risk_cols_order=[*risk_cols, ImpactCols.IMPACT],
     )
 
     _split_csv_shapefile(
         config,
         freight_rail_network_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Rail") / "Freight Rail" / "freight_rail_network_risk",
     )
     LOG.info(
@@ -1639,7 +1620,7 @@ def _freight_impact_index(
 
     freight_rail_network_risk = _calculate_freight_impact(freight_rail_network_risk)
 
-    return gpd.GeoDataFrame(freight_rail_network_risk, geometry="geometry", crs="EPSG:4326")
+    return gpd.GeoDataFrame(freight_rail_network_risk, geometry=GEOMETRY_COL, crs="EPSG:4326")
 
 
 def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
@@ -1670,7 +1651,7 @@ def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
 ### OTHER
 
 
-def _get_other_risk(  # noqa: C901, PLR0912
+def _get_other_risk(  # noqa: C901
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
@@ -1719,7 +1700,7 @@ def _get_other_risk(  # noqa: C901, PLR0912
 def _buffer_geometry(infrastructure: gpd.GeoDataFrame, buffer_size_m: int) -> gpd.GeoDataFrame:
     """Buffers the geometries of a given GeoDataFrame to a given size in metres."""
     infrastructure = infrastructure.to_crs(data_cleaning.BNG_CRS)
-    infrastructure["geometry"] = infrastructure.buffer(buffer_size_m)
+    infrastructure[GEOMETRY_COL] = infrastructure.buffer(buffer_size_m)
     return infrastructure
 
 
@@ -1745,8 +1726,6 @@ def _train_stations_risk(
         LOG.warning("Train stations layer is empty. Skipping.")
         return
 
-    train_stations = _buffer_geometry(train_stations, _TRAIN_STATIONS_BUFFER_SIZE_M)
-
     train_stations_risk = _infrastructure_risk_intersect(train_stations, hazard_layers)
 
     _audit_infrastructure_risk(
@@ -1765,14 +1744,14 @@ def _train_stations_risk(
     train_stations_risk = _prepare_model_output(
         risk_data=train_stations_risk,
         drop_cols=[],
-        rename_map={"nodeid": "id"},
+        rename_map={},
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
         config,
         train_stations_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Other") / "Train Stations" / "train_stations_risk",
     )
     LOG.info("Finished layering train stations with hazard risk.")
@@ -1809,8 +1788,6 @@ def _airports_risk(
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
-    airports_risk = data_cleaning.explode_to_polygons(airports_risk)
-
     data_cleaning.write_to_file(
         airports_risk,
         config.paths.model_output / "Other" / "Airports" / "airports_risk.gpkg",
@@ -1826,7 +1803,7 @@ def _airports_risk(
     _split_csv_shapefile(
         config,
         airports_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Other") / "Airports" / "airports_risk",
     )
     LOG.info("Finished layering airports with hazard risk.")
@@ -1841,11 +1818,7 @@ def _bus_coach_stations_risk(
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
-    """Get bus and coach station risk and write to file.
-
-    Buffer bus and coach stations, then intersect with hazard risk, clean output, and write to
-    file.
-    """
+    """Get bus and coach station risk and write to file."""
     LOG.info("Layering bus and coach stations with hazard risk...")
     bus_coach_stations = gpd.read_file(
         config.paths.model_input / file_paths.BUS_COACH_STATIONS_MODEL_INPUT_PATH
@@ -1854,10 +1827,6 @@ def _bus_coach_stations_risk(
     if bus_coach_stations.empty:
         LOG.warning("Bus and coach stations layer is empty. Skipping.")
         return
-
-    bus_coach_stations = _buffer_geometry(
-        bus_coach_stations, _BUS_COACH_STATIONS_BUFFER_SIZE_M
-    )
 
     bus_coach_stations_risk = _infrastructure_risk_intersect(bus_coach_stations, hazard_layers)
 
@@ -1880,14 +1849,14 @@ def _bus_coach_stations_risk(
     bus_coach_stations_risk = _prepare_model_output(
         risk_data=bus_coach_stations_risk,
         drop_cols=[],
-        rename_map={"nodeid": "id"},
+        rename_map={},
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
         config,
         bus_coach_stations_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Other") / "Bus and Coach Stations" / "bus_coach_stations_risk",
     )
     LOG.info("Finished layering bus and coach stations with hazard risk.")
@@ -1928,14 +1897,14 @@ def _bus_stops_risk(
     bus_stops_risk = _prepare_model_output(
         risk_data=bus_stops_risk,
         drop_cols=[],
-        rename_map={"stop_id": "id"},
+        rename_map={},
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
         config,
         bus_stops_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Other") / "Bus Stops" / "bus_stops_risk",
     )
     LOG.info("Finished layering bus stops with hazard risk.")
@@ -1963,8 +1932,6 @@ def _tram_stations_risk(
         LOG.warning("Tram stations layer is empty. Skipping.")
         return
 
-    tram_stations = _buffer_geometry(tram_stations, _TRAM_STATIONS_BUFFER_SIZE_M)
-
     tram_stations_risk = _infrastructure_risk_intersect(tram_stations, hazard_layers)
 
     _audit_infrastructure_risk(
@@ -1983,14 +1950,14 @@ def _tram_stations_risk(
     tram_stations_risk = _prepare_model_output(
         risk_data=tram_stations_risk,
         drop_cols=[],
-        rename_map={"nodeid": "id"},
+        rename_map={},
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
         config,
         tram_stations_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Other") / "Tram Stations" / "tram_stations_risk",
     )
     LOG.info("Finished layering tram stations with hazard risk.")
@@ -2019,10 +1986,6 @@ def _rapid_transport_stations_risk(
         LOG.warning("Rapid transport stations layer is empty. Skipping.")
         return
 
-    rapid_transport_stations = _buffer_geometry(
-        rapid_transport_stations, _RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M
-    )
-
     rapid_transport_stations_risk = _infrastructure_risk_intersect(
         rapid_transport_stations, hazard_layers
     )
@@ -2046,14 +2009,14 @@ def _rapid_transport_stations_risk(
     rapid_transport_stations_risk = _prepare_model_output(
         risk_data=rapid_transport_stations_risk,
         drop_cols=[],
-        rename_map={"nodeid": "id"},
+        rename_map={},
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
         config,
         rapid_transport_stations_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Other") / "Rapid Transport Stations" / "rapid_transport_stations_risk",
     )
     LOG.info("Finished layering rapid transport stations with hazard risk.")
@@ -2068,10 +2031,7 @@ def _ferry_terminals_risk(
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
-    """Get ferry terminal risk and write to file.
-
-    Buffer ferry terminals, then intersect with hazard risk, clean output, and write to file.
-    """
+    """Get ferry terminal risk and write to file."""
     LOG.info("Layering ferry terminals with hazard risk...")
     ferry_terminals = gpd.read_file(
         config.paths.model_input / file_paths.FERRY_TERMINALS_MODEL_INPUT_PATH
@@ -2080,8 +2040,6 @@ def _ferry_terminals_risk(
     if ferry_terminals.empty:
         LOG.warning("Ferry terminals layer is empty. Skipping.")
         return
-
-    ferry_terminals = _buffer_geometry(ferry_terminals, _FERRY_TERMINALS_BUFFER_SIZE_M)
 
     ferry_terminals_risk = _infrastructure_risk_intersect(ferry_terminals, hazard_layers)
 
@@ -2101,14 +2059,14 @@ def _ferry_terminals_risk(
     ferry_terminals_risk = _prepare_model_output(
         risk_data=ferry_terminals_risk,
         drop_cols=[],
-        rename_map={"nodeid": "id"},
+        rename_map={},
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
         config,
         ferry_terminals_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Other") / "Ferry Terminals" / "ferry_terminals_risk",
     )
     LOG.info("Finished layering ferry terminals with hazard risk.")
@@ -2123,10 +2081,7 @@ def _ncn_risk(
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
-    """Get NCN risk and write to file.
-
-    Intersect National Cycle Network with hazard risk, clean output, then write to file.
-    """
+    """Get NCN risk and write to file."""
     LOG.info("Layering national cycle network with hazard risk...")
     ncn = gpd.read_file(
         config.paths.model_input / file_paths.NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH
@@ -2141,17 +2096,8 @@ def _ncn_risk(
     _create_risk_summary(
         ncn_risk,
         risk_cols,
-        [
-            "Desc_",
-            "Greenway",
-            "RouteType",
-            "RouteNo",
-            "LinkNo",
-            "Surface",
-            "Quality",
-            "Lighting",
-            "RoadClass",
-        ],
+        [col.value for col in NationalCycleNetworkCols
+         if col != NationalCycleNetworkCols.ID_COL],
         config.paths.audit_path / "Summary" / "Other" / "National Cycle Network",
         "National Cycle Network Risk Summary.xlsx",
     )
@@ -2172,25 +2118,14 @@ def _ncn_risk(
     ncn_risk = _prepare_model_output(
         risk_data=ncn_risk,
         drop_cols=[],
-        rename_map={
-            "Desc_": "description",
-            "Greenway": "greenway",
-            "RouteType": "route_type",
-            "RouteNo": "route_number",
-            "LinkNo": "link_number",
-            "Surface": "surface",
-            "Quality": "quality",
-            "Lighting": "lighting",
-            "RoadClass": "road_class",
-            "SegmentID": "id",
-        },
+        rename_map={},
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
         config,
         ncn_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Other") / "National Cycle Network" / "ncn_risk",
     )
     LOG.info("Finished layering national cycle network with hazard risk.")
@@ -2230,13 +2165,7 @@ def _tram_network_risk(
     _create_risk_summary(
         tram_risk,
         risk_cols,
-        [
-            OSRailCols.DESCRIPTION,
-            OSRailCols.STRUCTURE,
-            OSRailCols.PHYSICAL_LEVEL,
-            OSRailCols.RAILWAY_USE,
-            OSRailCols.TRACK_REPRESENTATION,
-        ],
+        OSRailCols.get_descriptive_cols(),
         config.paths.audit_path / "Summary" / "Other" / "Tram Network Risk",
         "Tram Network Risk Summary.xlsx",
     )
@@ -2258,19 +2187,14 @@ def _tram_network_risk(
     tram_risk = _prepare_model_output(
         risk_data=tram_risk,
         drop_cols=[],
-        rename_map={
-            OSRailCols.ID: "id",
-            OSRailCols.PHYSICAL_LEVEL: "physical_level",
-            OSRailCols.RAILWAY_USE: "railway_use",
-            OSRailCols.TRACK_REPRESENTATION: "track_representation",
-        },
+        rename_map={OSRailCols.rename_map()},
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
         config,
         tram_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Other") / "Tram Network" / "tram_network_risk",
     )
     LOG.info("Finished layering tram network with hazard risk.")
@@ -2312,13 +2236,7 @@ def _rapid_transport_network_risk(
     _create_risk_summary(
         rapid_transport_risk,
         risk_cols,
-        [
-            OSRailCols.DESCRIPTION,
-            OSRailCols.STRUCTURE,
-            OSRailCols.PHYSICAL_LEVEL,
-            OSRailCols.RAILWAY_USE,
-            OSRailCols.TRACK_REPRESENTATION,
-        ],
+        OSRailCols.get_descriptive_cols(),
         config.paths.audit_path / "Summary" / "Other" / "Rapid Transport Network",
         "Rapid Transport Network Risk Summary.xlsx",
     )
@@ -2342,19 +2260,14 @@ def _rapid_transport_network_risk(
     rapid_transport_risk = _prepare_model_output(
         risk_data=rapid_transport_risk,
         drop_cols=[],
-        rename_map={
-            OSRailCols.ID: "id",
-            OSRailCols.PHYSICAL_LEVEL: "physical_level",
-            OSRailCols.RAILWAY_USE: "railway_use",
-            OSRailCols.TRACK_REPRESENTATION: "track_representation",
-        },
+        rename_map=OSRailCols.rename_map(),
         risk_cols_order=risk_cols,
     )
 
     _split_csv_shapefile(
         config,
         rapid_transport_risk,
-        "id",
+        ID_COL,
         pathlib.Path("Other") / "Rapid Transport Network" / "rapid_transport_network_risk",
     )
     LOG.info("Finished layering rapid transport network with hazard risk.")

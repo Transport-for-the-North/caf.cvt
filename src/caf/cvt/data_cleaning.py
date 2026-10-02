@@ -19,6 +19,9 @@ import xarray as xr
 from caf.cvt import file_paths, model_config
 from caf.cvt.definitions import (
     BNG_CRS,
+    GEOMETRY_COL,
+    ID_COL,
+    NA_COL,
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
@@ -30,6 +33,9 @@ from caf.cvt.definitions import (
     MasterMapFunctionTheme,
     MasterMapSiteCols,
     MasterMapStakeholder,
+    NaPTANCols,
+    NationalCycleNetworkCols,
+    NoHAMRoadCols,
     OSRailCols,
     OSRailDescription,
     OSRailOperationalStatus,
@@ -211,7 +217,7 @@ def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
         LOG.info("Using boundary for STB: %s", config.parameters.stb)
         stb_boundaries = gpd.read_file(config.paths.raw_input / config.other_input.stb_path)
         stb_boundary = stb_boundaries[stb_boundaries["stb_name"] == config.parameters.stb]
-        stb_boundary = stb_boundary[["stb_name", "geometry"]]
+        stb_boundary = stb_boundary[["stb_name", GEOMETRY_COL]]
         if stb_boundary.empty:
             raise ValueError(f"No boundary found for STB: '{config.parameters.stb}'")
         return stb_boundary
@@ -220,7 +226,7 @@ def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
         LOG.info("Using boundary for CA: %s", config.parameters.ca)
         ca_boundaries = gpd.read_file(config.paths.raw_input / config.other_input.ca_path)
         ca_boundary = ca_boundaries[ca_boundaries["CAUTH25NM"] == config.parameters.ca]
-        ca_boundary = ca_boundary[["CAUTH25NM", "geometry"]]
+        ca_boundary = ca_boundary[["CAUTH25NM", GEOMETRY_COL]]
         if ca_boundary.empty:
             raise ValueError(f"No boundary found for CA: '{config.parameters.ca}'")
         return ca_boundary
@@ -231,12 +237,6 @@ def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
         "`boundary_path`, `stb`, or `ca`."
     )
 
-
-def _df_to_gdf(df: pd.DataFrame, x_col: str, y_col: str, crs: str) -> gpd.GeoDataFrame:
-    """Take a DataFrame and convert it to a GeoDataFrame using spatial columns."""
-    return gpd.GeoDataFrame(
-        df.copy(), geometry=gpd.points_from_xy(df[x_col], df[y_col]), crs=crs
-    )
 
 
 def _convert_point_to_grid(x: int, y: int, size: int) -> shapely.geometry.Polygon:
@@ -343,7 +343,10 @@ def data_cleaning(config: model_config.Config) -> None:
 ## INFRASTRUCTURE
 
 
-def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_infrastructure(
+        config: model_config.Config,
+        boundary: gpd.GeoDataFrame
+) -> None:
     """Clean all infrastructure datasets ready for analysis."""
     LOG.info("Cleaning infrastructure data...")
     _clean_roads(config, boundary)
@@ -366,7 +369,21 @@ def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFram
 
     _clean_rail(config, rail_links)
 
-    transport_sites = _clean_mastermap_sites(config, boundary)
+    any_transport_sites = any(
+        [
+            config.switches.airports,
+            config.switches.train_stations,
+            config.switches.tram_stations,
+            config.switches.rapid_transport_stations,
+            config.switches.ferry_terminals,
+            config.switches.bus_coach_stations,
+        ]
+    )
+
+    if any_transport_sites:
+        transport_sites = _clean_mastermap_sites(config, boundary)
+    else:
+        transport_sites = None
 
     _clean_other(config, boundary, rail_links, transport_sites)
 
@@ -378,7 +395,10 @@ def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFram
 ### ROAD
 
 
-def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_roads(
+        config: model_config.Config,
+        boundary: gpd.GeoDataFrame
+) -> None:
     """Clean all roads datasets ready for analysis."""
     road_cleaning_enabled = any(
         [
@@ -401,30 +421,31 @@ def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
         LOG.info("Finished cleaning roads data.")
 
 
-def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_os_roads(
+        config: model_config.Config,
+        boundary: gpd.GeoDataFrame
+) -> None:
     """Read and clean OS Open Roads dataset, then write to file."""
+    mm_highways = gpd.read_file(
+        f"zip://{config.paths.raw_input / config.infrastructure.road.mm_highways.zip_path}!"
+        f"{config.infrastructure.road.mm_highways.file_path.as_posix()}",
+        # mask=boundary,
+        columns=["toid", "road_structure"],
+        layer="road_link",
+        ignore_geometry=True
+    )
+
     os_road = gpd.read_file(
         f"zip://{config.paths.raw_input / config.infrastructure.road.os_road.zip_path}!"
         f"{config.infrastructure.road.os_road.file_path.as_posix()}",
         mask=boundary,
-        columns=[
-            OSRoadCols.ID,
-            OSRoadCols.ROAD_CLASSIFICATION,
-            OSRoadCols.ROAD_FUNCTION,
-            OSRoadCols.FORM_OF_WAY,
-            OSRoadCols.ROAD_CLASSIFICATION_NUMBER,
-            OSRoadCols.NAME_1,
-            OSRoadCols.ROAD_STRUCTURE,
-            OSRoadCols.PRIMARY_ROUTE,
-            OSRoadCols.TRUNK_ROAD,
-            "geometry",
-        ],
-        layer="road_link",
+        columns=[col.value for col in OSRoadCols],
+        layer=OSRoadCols.get_layer_name(),
     )
     len_before_filter = len(os_road)
-    os_road = os_road.drop_duplicates(subset=[OSRoadCols.ID, "geometry"])
-    os_road = os_road.rename(columns={OSRoadCols.NAME_1: "name"})
-    os_road = os_road.replace(0, "N/A")
+    os_road = os_road.drop_duplicates(subset=[OSRoadCols.ID, GEOMETRY_COL])
+    os_road = os_road.rename(columns={OSRoadCols.ID: ID_COL})
+    os_road = os_road.replace(0, NA_COL)
     os_road = validate_geometries(os_road)
     os_road = clip_to_boundary(os_road, boundary)
     filter_removed = len_before_filter - len(os_road)
@@ -440,18 +461,23 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     )
 
 
-def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_noham_roads(
+        config: model_config.Config,
+        boundary: gpd.GeoDataFrame
+) -> None:
     """Read and clean NoHAM network dataset, then write to file."""
     year = config.infrastructure.road.noham.year
     noham_network = gpd.read_file(
         config.paths.raw_input / config.infrastructure.road.noham.file_path,
         mask=boundary,
-        columns=["link_id"],
+        columns=[NoHAMRoadCols.LINK_ID],
     )
     len_before_filter = len(noham_network)
-    noham_network_clean = noham_network.drop_duplicates(subset=["link_id", "geometry"])
+    noham_network_clean = noham_network.drop_duplicates(
+        subset=[NoHAMRoadCols.LINK_ID, GEOMETRY_COL]
+    )
     noham_network_clean[["a", "b"]] = (
-        noham_network_clean["link_id"].str.split("_", expand=True).astype(int)
+        noham_network_clean[NoHAMRoadCols.LINK_ID].str.split("_", expand=True).astype(int)
     )
     # Filter out links with a or b less than 10,000 (zone connectors)
     noham_network_clean = noham_network_clean[
@@ -459,6 +485,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         & (noham_network_clean["b"] >= config.constants.noham_road_id_threshold)
     ]
     noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
+    noham_network_clean = noham_network_clean.rename(columns={NoHAMRoadCols.LINK_ID: ID_COL})
     noham_network_clean = validate_geometries(noham_network_clean)
     noham_network_clipped = clip_to_boundary(noham_network_clean, boundary)
     noham_network_clipped = noham_network_clipped.reset_index(drop=True)
@@ -477,7 +504,10 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     )
 
 
-def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_model_roads(
+        config: model_config.Config,
+        boundary: gpd.GeoDataFrame
+) -> None:
     """Read and clean transport model road network dataset, then write to file."""
     nodes = pd.read_csv(config.infrastructure.road.model_roads.nodes)
     zone_nodes = nodes.loc[nodes["is_zone"] == 1, "id"]
@@ -518,20 +548,20 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     # Join shaped links to links using coordinates
     # This link key assumes (X1, Y1) -> (X2, Y2) is stored the same direction in both datasets
     model_roads = links[["link_id", *coord_cols]].merge(
-        shaped_links[[*coord_cols, "geometry"]],
+        shaped_links[[*coord_cols, GEOMETRY_COL]],
         on=coord_cols,
         how="left",
         validate="one_to_one",
     )
 
-    if model_roads["geometry"].isna().sum() != 0:
+    if model_roads[GEOMETRY_COL].isna().sum() != 0:
         LOG.warning(
             "Some model roads do not have a matching shaped link. Missing geometries: %s",
-            model_roads["geometry"].isna().sum(),
+            model_roads[GEOMETRY_COL].isna().sum(),
         )
 
     model_roads = gpd.GeoDataFrame(
-        model_roads.drop(columns=coord_cols), geometry="geometry", crs=BNG_CRS
+        model_roads.drop(columns=coord_cols), geometry=GEOMETRY_COL, crs=BNG_CRS
     )
 
     len_before_filter = len(model_roads)
@@ -552,7 +582,10 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
 ### RAIL
 
 
-def _clean_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame | None) -> None:
+def _clean_rail(
+        config: model_config.Config,
+        rail_links: gpd.GeoDataFrame | None
+) -> None:
     """Clean all rail datasets ready for analysis."""
     rail_cleaning_enabled = any(
         [
@@ -579,18 +612,8 @@ def _get_rail_links(
         f"zip://{config.paths.raw_input / config.infrastructure.rail.rail_links.zip_path}!"
         f"{config.infrastructure.rail.rail_links.file_path}",
         mask=boundary,
-        columns=[
-            OSRailCols.ID,
-            OSRailCols.DESCRIPTION,
-            OSRailCols.GAUGE,
-            OSRailCols.STRUCTURE,
-            OSRailCols.PHYSICAL_LEVEL,
-            OSRailCols.RAILWAY_USE,
-            OSRailCols.TRACK_REPRESENTATION,
-            OSRailCols.DIRECTION,
-            OSRailCols.OPERATIONAL_STATUS,
-        ],
-    )
+        columns=[col.value for col in OSRailCols],
+     )
     len_before_filter = len(rail_links)
     rail_links = rail_links[
         rail_links[OSRailCols.OPERATIONAL_STATUS] == OSRailOperationalStatus.ACTIVE
@@ -609,10 +632,11 @@ def _get_rail_links(
             ]
         )
     ]
-    rail_links = rail_links.drop_duplicates(subset=[OSRailCols.ID, "geometry"])
+    rail_links = rail_links.drop_duplicates(subset=[OSRailCols.ID, GEOMETRY_COL])
     rail_links[OSRailCols.get_descriptive_cols()] = rail_links[
         OSRailCols.get_descriptive_cols()
-    ].replace(0, "N/A")
+    ].replace(0, NA_COL)
+    rail_links = rail_links.rename(columns={OSRailCols.ID: ID_COL})
     rail_links = validate_geometries(rail_links)
     rail_links = clip_to_boundary(rail_links, boundary)
     filter_removed = len_before_filter - len(rail_links)
@@ -626,7 +650,10 @@ def _get_rail_links(
     return rail_links
 
 
-def _clean_passenger_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
+def _clean_passenger_rail(
+        config: model_config.Config,
+        rail_links: gpd.GeoDataFrame
+) -> None:
     """Filter OS rail data to passenger rail network, then write to file."""
     len_before_filter = len(rail_links)
     passenger_rail = rail_links[
@@ -656,7 +683,10 @@ def _clean_passenger_rail(config: model_config.Config, rail_links: gpd.GeoDataFr
     )
 
 
-def _clean_freight_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
+def _clean_freight_rail(
+        config: model_config.Config,
+        rail_links: gpd.GeoDataFrame
+) -> None:
     """Filter OS rail data to freight rail network, then write to file."""
     len_before_filter = len(rail_links)
     freight_rail = rail_links[
@@ -680,7 +710,7 @@ def _clean_freight_rail(config: model_config.Config, rail_links: gpd.GeoDataFram
 ### OTHER
 
 
-def _clean_other(  # noqa: C901
+def _clean_other(   # noqa: C901
     config: model_config.Config,
     boundary: gpd.GeoDataFrame,
     rail_links: gpd.GeoDataFrame | None,
@@ -710,8 +740,8 @@ def _clean_other(  # noqa: C901
             LOG.info("Cleaning bus stops data...")
             _clean_bus_stops(config, boundary)
         if config.switches.national_cycle_network:
-            LOG.info("Cleaning NCN data...")
-            _clean_ncn(config, boundary)
+            LOG.info("Cleaning National Cycle Network data...")
+            _clean_national_cycle_network(config, boundary)
         if config.switches.train_stations:
             LOG.info("Cleaning train stations data...")
             _clean_train_stations(config, transport_sites)
@@ -736,15 +766,18 @@ def _clean_other(  # noqa: C901
         LOG.info("Finished cleaning other infrastructure data.")
 
 
-def _clean_mastermap_sites(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_mastermap_sites(
+        config: model_config.Config,
+        boundary: gpd.GeoDataFrame
+) -> None:
     """Read, clean and prepare mastermap sites data for further filtering."""
     mm_sites = gpd.read_file(
         f"zip://"
         f"{config.paths.raw_input / config.infrastructure.other.mastermap_sites.zip_path}!"
         f"{config.infrastructure.other.mastermap_sites.file_path.as_posix()}",
-        layer="functional_site",
+        layer=MasterMapSiteCols.get_layer_name(),
         mask=boundary,
-        columns=[col.value for col in MasterMapSiteCols] + ["geometry"]
+        columns=[col.value for col in MasterMapSiteCols]
     )
     len_before_filter = len(mm_sites)
     mm_sites = mm_sites[
@@ -757,11 +790,13 @@ def _clean_mastermap_sites(config: model_config.Config, boundary: gpd.GeoDataFra
             MasterMapFunctionTheme.ROAD_TRANSPORT, MasterMapFunctionTheme.WATER_TRANSPORT
         ])
     ]
-    transport_sites = transport_sites.drop_duplicates(subset=[MasterMapSiteCols.ID, "geometry"])
-    transport_sites = transport_sites.rename(columns={MasterMapSiteCols.ID: "id"})
+    transport_sites = transport_sites.drop_duplicates(
+        subset=[MasterMapSiteCols.ID, GEOMETRY_COL]
+    )
+    transport_sites = transport_sites.rename(columns={MasterMapSiteCols.ID: ID_COL})
     transport_sites[MasterMapSiteCols.get_descriptive_cols()] = transport_sites[
         MasterMapSiteCols.get_descriptive_cols()
-    ].fillna("N/A")
+    ].fillna(NA_COL)
     transport_sites = validate_geometries(transport_sites)
     filter_removed = len_before_filter - len(transport_sites)
     LOG.debug(
@@ -773,8 +808,11 @@ def _clean_mastermap_sites(config: model_config.Config, boundary: gpd.GeoDataFra
     return transport_sites
 
 
-def _clean_airports(config: model_config.Config, transport_sites: gpd.GeoDataFrame) -> None:
-    """Read airports dataset, then write to file in new directory."""
+def _clean_airports(
+        config: model_config.Config,
+        transport_sites: gpd.GeoDataFrame
+) -> None:
+    """Filter OS MM Sites for airports and write to file."""
     len_before_filter = len(transport_sites)
     air_transport = transport_sites[
         transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
@@ -802,40 +840,47 @@ def _clean_airports(config: model_config.Config, transport_sites: gpd.GeoDataFra
     )
 
 
-def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_bus_stops(
+        config: model_config.Config,
+        boundary: gpd.GeoDataFrame
+) -> None:
     """Read, combine and clean regional bus stops datasets, then write to file."""
-    # TODO (DJ): #27 Use general data source for bus stops
-    bus_stops_ne = pd.read_csv(
-        config.paths.raw_input / config.infrastructure.other.bus_stops["north_east"]
-    )  # North East
-    bus_stops_nw = pd.read_csv(
-        config.paths.raw_input / config.infrastructure.other.bus_stops["north_west"]
-    )  # North West
-    bus_stops_ys = pd.read_csv(
-        config.paths.raw_input / config.infrastructure.other.bus_stops["yorkshire"]
-    )  # Yorkshire
-
-    bus_stops = pd.concat(
-        [bus_stops_ne, bus_stops_nw, bus_stops_ys], ignore_index=True
-    )  # Combine bus stops
-    bus_stops = _df_to_gdf(bus_stops, "stop_lon", "stop_lat", "EPSG:4326")
-    bus_stops = bus_stops[["stop_id", "stop_name", "geometry"]]
-    len_before_filter = len(bus_stops)
-    bus_stops = bus_stops.drop_duplicates(
-        subset=["stop_id", "geometry"]
-    )  # Remove duplicate rows
-    bus_stops = validate_geometries(bus_stops)
+    # TODO (DJ): Some areas of NaPTAN are missing, e.g. Cumbria Combined Authority
+    # Investigate alternative dataset with full coverage.
+    naptan = pd.read_csv(
+        config.paths.raw_input / config.infrastructure.other.bus_stops,
+        usecols=[col.value for col in NaPTANCols]
+    )
+    len_before_filter = len(naptan)
+    bus_stops = naptan[
+        naptan[NaPTANCols.STOP_TYPE] == "BCT"
+    ]
+    bus_stops = bus_stops[
+        bus_stops[NaPTANCols.STATUS] == "active"
+    ]
+    bus_stops = gpd.GeoDataFrame(
+        bus_stops.copy(),
+        geometry=gpd.points_from_xy(
+            bus_stops[NaPTANCols.LONGITUDE], bus_stops[NaPTANCols.LATITUDE]
+        ),
+        crs="EPSG:4326"
+    )
+    bus_stops = bus_stops.to_crs(BNG_CRS)
+    bus_stops = bus_stops.drop(columns=[
+        NaPTANCols.STOP_TYPE, NaPTANCols.LONGITUDE, NaPTANCols.LATITUDE, NaPTANCols.STATUS
+    ])
+    bus_stops = bus_stops.rename(columns=NaPTANCols.rename_map())
     bus_stops = clip_to_boundary(bus_stops, boundary)
     filter_removed = len_before_filter - len(bus_stops)
     LOG.debug(
-        "Bus stops filtered - %s of %s (%.1f percent) rows removed",
+        "NaPTAN filtered to bus stops - %s of %s (%.1f percent) rows removed",
         filter_removed,
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
     write_to_file(
         bus_stops,
-        config.paths.model_input / file_paths.BUS_STOPS_MODEL_INPUT_PATH,
+        config.paths.model_input / file_paths.BUS_STOPS_MODEL_INPUT_PATH
     )
 
 
@@ -843,7 +888,7 @@ def _clean_train_stations(
         config: model_config.Config,
         transport_sites: gpd.GeoDataFrame
 ) -> None:
-    """Filter OS MMRN for train stations, then clip to boundary and write to file."""
+    """Filter OS MM Sites for train stations and write to file."""
     len_before_filter = len(transport_sites)
     rail_transport = transport_sites[
         transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
@@ -887,7 +932,7 @@ def _clean_tram_stations(
         config: model_config.Config,
         transport_sites: gpd.GeoDataFrame
 ) -> None:
-    """Filter OS MMRN for tram stations, then clip to boundary and write to file."""
+    """Filter OS MM Sites for tram stations and write to file."""
     len_before_filter = len(transport_sites)
     rail_transport = transport_sites[
         transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
@@ -917,7 +962,7 @@ def _clean_rapid_transport_stations(
     config: model_config.Config,
     transport_sites: gpd.GeoDataFrame
 ) -> None:
-    """Filter OS MMRN for rapid transport stations, then clip to boundary and write to file."""
+    """Filter OS MM Sites for rapid transport stations and write to file."""
     len_before_filter = len(transport_sites)
     rail_transport = transport_sites[
         transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
@@ -954,7 +999,7 @@ def _clean_ferry_terminals(
         config: model_config.Config,
         transport_sites: gpd.GeoDataFrame
 ) -> None:
-    """Filter OS MMRN for ferry terminals, then clip to boundary and write to file."""
+    """Filter OS MM Sites for ferry terminals and write to file."""
     len_before_filter = len(transport_sites)
     water_transport = transport_sites[
         transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
@@ -986,7 +1031,7 @@ def _clean_bus_coach_stations(
         config: model_config.Config,
         transport_sites: gpd.GeoDataFrame
 ) -> None:
-    """Filter OS MMRN for bus and coach stations, then clip to boundary and write to file."""
+    """Filter OS MM Sites for bus and coach stations and write to file."""
     len_before_filter = len(transport_sites)
     road_transport = transport_sites[
         transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
@@ -1017,7 +1062,10 @@ def _clean_bus_coach_stations(
     )
 
 
-def _clean_tram_network(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
+def _clean_tram_network(
+        config: model_config.Config,
+        rail_links: gpd.GeoDataFrame
+) -> None:
     """Filter OS rail links for tram network, then write to file."""
     len_before_filter = len(rail_links)
     tram_links = rail_links[
@@ -1074,43 +1122,28 @@ def _clean_rapid_transport_network(
     )
 
 
-def _clean_ncn(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_national_cycle_network(
+        config: model_config.Config,
+        boundary: gpd.GeoDataFrame
+) -> None:
     """Read and clean National Cycle Network data, then write to file."""
     ncn = gpd.read_file(
         config.paths.raw_input / config.infrastructure.other.ncn_sustrans,
         mask=boundary,
-        columns=[
-            "SegmentID",
-            "Desc_",
-            "Greenway",
-            "RouteType",
-            "RouteNo",
-            "LinkNo",
-            "Surface",
-            "Quality",
-            "Lighting",
-            "RoadClass",
-        ],
+        columns=[col.value for col in NationalCycleNetworkCols],
     )
     len_before_filter = len(ncn)
-    ncn = ncn.drop_duplicates(subset=["SegmentID", "geometry"])
+    ncn = ncn.drop_duplicates(subset=[NationalCycleNetworkCols.ID, GEOMETRY_COL])
     ncn_cols_replace = [
-        "Desc_",
-        "Greenway",
-        "RouteType",
-        "RouteNo",
-        "LinkNo",
-        "Surface",
-        "Quality",
-        "Lighting",
-        "RoadClass",
+        col.value for col in NationalCycleNetworkCols if col != NationalCycleNetworkCols.ID
     ]
-    ncn[ncn_cols_replace] = ncn[ncn_cols_replace].replace(0, "N/A")
+    ncn[ncn_cols_replace] = ncn[ncn_cols_replace].replace(0, NA_COL)
+    ncn = ncn.rename(columns=NationalCycleNetworkCols.rename_map())
     ncn = validate_geometries(ncn)
     ncn = clip_to_boundary(ncn, boundary)
     filter_removed = len_before_filter - len(ncn)
     LOG.debug(
-        "NCN filtered - %s of %s (%.1f percent) rows removed",
+        "National Cycle Network filtered - %s of %s (%.1f percent) rows removed",
         filter_removed,
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
@@ -1293,9 +1326,9 @@ def _snap_stations_to_links(
     for idx, station in snapped_stations.iterrows():
         nearest_line_idx = metro_links.distance(station.geometry).idxmin()
 
-        nearest_line = metro_links.loc[nearest_line_idx, "geometry"]
+        nearest_line = metro_links.loc[nearest_line_idx, GEOMETRY_COL]
 
-        snapped_stations.loc[idx, "geometry"] = nearest_line.interpolate(
+        snapped_stations.loc[idx, GEOMETRY_COL] = nearest_line.interpolate(
             nearest_line.project(station.geometry)
         )
 
@@ -1303,10 +1336,10 @@ def _snap_stations_to_links(
     monument_id = snapped_stations.loc[
         snapped_stations["Name"] == "Monument", "id"
     ].to_numpy()[0]
-    link_9 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[0], "geometry"].to_numpy()[0]
-    link_11 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[1], "geometry"].to_numpy()[0]
+    link_9 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[0], GEOMETRY_COL].to_numpy()[0]
+    link_11 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[1], GEOMETRY_COL].to_numpy()[0]
     intersection_point = link_9.intersection(link_11)
-    snapped_stations.loc[snapped_stations["id"] == monument_id, "geometry"] = (
+    snapped_stations.loc[snapped_stations["id"] == monument_id, GEOMETRY_COL] = (
         intersection_point
     )
 
@@ -1336,9 +1369,9 @@ def _manual_metro_adjustments(metro_links: gpd.GeoDataFrame) -> gpd.GeoDataFrame
         if group.empty:
             continue
 
-        merged_geometry = shapely.MultiLineString(group["geometry"].to_list())
+        merged_geometry = shapely.MultiLineString(group[GEOMETRY_COL].to_list())
         new_row = group.iloc[0].copy()
-        new_row["geometry"] = merged_geometry
+        new_row[GEOMETRY_COL] = merged_geometry
 
         new_row["from_station_id"] = _first_not_null(group["from_station_id"])
         new_row["to_station_id"] = _first_not_null(group["to_station_id"])
@@ -1451,7 +1484,7 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         columns=["tasmax_summer_01_20_median", "tasmax_summer_change_40_median"],
     )
     temp_max["grid_id"] = range(1, len(temp_max) + 1)
-    temp_max = temp_max.drop(columns=["geometry"])
+    temp_max = temp_max.drop(columns=[GEOMETRY_COL])
     temp_max = temp_max.rename(
         columns={
             "tasmax_summer_01_20_median": (
@@ -1486,7 +1519,7 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         columns=["tasmin_winter_01_20_median", "tasmin_winter_change_40_median"],
     )
     temp_min["grid_id"] = range(1, len(temp_min) + 1)
-    temp_min = temp_min.drop(columns=["geometry"])
+    temp_min = temp_min.drop(columns=[GEOMETRY_COL])
     temp_min = temp_min.rename(
         columns={
             "tasmin_winter_01_20_median": (
@@ -1524,7 +1557,7 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
         columns=["pr_summer_01_20_median", "pr_summer_change_40_median"],
     )
     precip_sum["grid_id"] = range(1, len(precip_sum) + 1)
-    precip_sum = precip_sum.drop(columns=["geometry"])
+    precip_sum = precip_sum.drop(columns=[GEOMETRY_COL])
     precip_sum = precip_sum.rename(
         columns={
             "pr_summer_01_20_median": (f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}"),
@@ -1561,7 +1594,7 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
         columns=["pr_winter_01_20_median", "pr_winter_change_40_median"],
     )
     precip_win["grid_id"] = range(1, len(precip_win) + 1)
-    precip_win = precip_win.drop(columns=["geometry"])
+    precip_win = precip_win.drop(columns=[GEOMETRY_COL])
     precip_win = precip_win.rename(
         columns={
             "pr_winter_01_20_median": (f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}"),
@@ -1650,7 +1683,7 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
         columns=["HSD_baseline_01_20_median", "HSD_40_median"],
     )
     hot_days["grid_id"] = range(1, len(hot_days) + 1)
-    hot_days = hot_days.drop(columns=["geometry"])
+    hot_days = hot_days.drop(columns=[GEOMETRY_COL])
     hot_days = hot_days.rename(
         columns={
             "HSD_baseline_01_20_median": (
@@ -1680,7 +1713,7 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
         columns=["ESD_baseline_01_20_median", "ESD_40_median"],
     )
     extr_days["grid_id"] = range(1, len(extr_days) + 1)
-    extr_days = extr_days.drop(columns=["geometry"])
+    extr_days = extr_days.drop(columns=[GEOMETRY_COL])
     extr_days = extr_days.rename(
         columns={
             "ESD_baseline_01_20_median": (
@@ -1711,7 +1744,7 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
         columns=["FrostDays_baseline_01_20_median", "FrostDays_40_median"],
     )
     frost_days["grid_id"] = range(1, len(frost_days) + 1)
-    frost_days = frost_days.drop(columns=["geometry"])
+    frost_days = frost_days.drop(columns=[GEOMETRY_COL])
     frost_days = frost_days.rename(
         columns={
             "FrostDays_baseline_01_20_median": (
@@ -1741,7 +1774,7 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
         columns=["IcingDays_baseline_01_20_median", "IcingDays_40_median"],
     )
     ice_days["grid_id"] = range(1, len(ice_days) + 1)
-    ice_days = ice_days.drop(columns=["geometry"])
+    ice_days = ice_days.drop(columns=[GEOMETRY_COL])
     ice_days = ice_days.rename(
         columns={
             "IcingDays_baseline_01_20_median": (
@@ -1788,7 +1821,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
         how="outer",
     ).fillna({col: 0 for col in metric_cols})
 
-    windspd_combined["geometry"] = [
+    windspd_combined[GEOMETRY_COL] = [
         _convert_point_to_grid(x, y, 2500)
         for x, y in zip(
             windspd_combined["projection_x_coordinate"],
@@ -1796,8 +1829,8 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
             strict=False,
         )
     ]
-    windspd_combined = gpd.GeoDataFrame(windspd_combined, geometry="geometry", crs=BNG_CRS)
-    windspd_combined = windspd_combined[[*metric_cols, "geometry"]]
+    windspd_combined = gpd.GeoDataFrame(windspd_combined, geometry=GEOMETRY_COL, crs=BNG_CRS)
+    windspd_combined = windspd_combined[[*metric_cols, GEOMETRY_COL]]
     windspd_combined = clip_to_boundary(windspd_combined, boundary)
     filter_removed = len_before_filter - len(windspd_combined)
     LOG.debug(
@@ -1870,7 +1903,7 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
     # Aggregate by wind direction to calculate mean wind speed
     wind_driven_rain = (
         wind_driven_rain.groupby(["x_coord", "y_coord"])
-        .agg({"WDR_baseline_Median": "mean", "WDR_40_Median": "mean", "geometry": "first"})
+        .agg({"WDR_baseline_Median": "mean", "WDR_40_Median": "mean", GEOMETRY_COL: "first"})
         .reset_index()
     )
 
@@ -1881,7 +1914,7 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
             "WDR_40_Median": f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FORECAST}",
         }
     )
-    wind_driven_rain = gpd.GeoDataFrame(wind_driven_rain, geometry="geometry", crs="EPSG:3857")
+    wind_driven_rain = gpd.GeoDataFrame(wind_driven_rain, geometry=GEOMETRY_COL, crs="EPSG:3857")
     wind_driven_rain = clip_to_boundary(wind_driven_rain, boundary)
     filter_removed = len_before_filter - len(wind_driven_rain)
     LOG.debug(
@@ -2143,7 +2176,7 @@ def _clean_ncerm(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
             LOG.debug("NCERM %s layer empty after filtering. Writing empty file.", year)
             write_to_file(
                 gpd.GeoDataFrame(
-                    columns=["smp_name", "geometry"], geometry="geometry", crs=BNG_CRS
+                    columns=["smp_name", GEOMETRY_COL], geometry=GEOMETRY_COL, crs=BNG_CRS
                 ),
                 config.paths.model_input
                 / file_paths.NCERM_MODEL_INPUT_PATH
@@ -2274,7 +2307,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
         / f"noham_{config.infrastructure.road.noham.year}.gpkg"
     )
-    network_link_ids = set(noham_network["link_id"])
+    network_link_ids = set(noham_network[ID_COL])
 
     scenario_flows = {}
     for year_label, year in config.impact.noham_years.items():
@@ -2289,19 +2322,19 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         flows = _aggregate_link_flows_year(config, year, network_link_ids)
 
         flows = flows.rename(
-            columns={col: f"{col}_{scenario}" for col in flows.columns if col != "link_id"}
+            columns={col: f"{col}_{scenario}" for col in flows.columns if col != ID_COL}
         )
 
         scenario_flows[scenario] = flows
 
-    current_ids = set(scenario_flows[Scenarios.CURRENT]["link_id"])
-    forecast_ids = set(scenario_flows[Scenarios.FORECAST]["link_id"])
+    current_ids = set(scenario_flows[Scenarios.CURRENT][ID_COL])
+    forecast_ids = set(scenario_flows[Scenarios.FORECAST][ID_COL])
     common_ids = current_ids & forecast_ids
     current_only_ids = current_ids - forecast_ids
     forecast_only_ids = forecast_ids - current_ids
 
     noham_flows = scenario_flows[Scenarios.CURRENT].merge(
-        scenario_flows[Scenarios.FORECAST], on="link_id", how="inner"
+        scenario_flows[Scenarios.FORECAST], on=ID_COL, how="inner"
     )
 
     LOG.debug(
@@ -2315,10 +2348,10 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         len(forecast_only_ids),
     )
 
-    noham_net_flows = noham_network.merge(noham_flows, on="link_id", how="left")
+    noham_net_flows = noham_network.merge(noham_flows, on=ID_COL, how="left")
 
     noham_net_flows = gpd.GeoDataFrame(
-        noham_net_flows, geometry="geometry", crs=noham_network.crs
+        noham_net_flows, geometry=GEOMETRY_COL, crs=noham_network.crs
     )
 
     write_to_file(
@@ -2485,7 +2518,9 @@ def _aggregate_link_flows_year(
         [f"all_vehs_{tp}" for tp in TimePeriods]
     ].sum(axis=1)
 
-    return combined_ts_df[["link_id", "all_vehs_total"] + [f"{uc}_total" for uc in noham_ucs]]
+    combined_ts_df = combined_ts_df.rename(columns={"link_id": ID_COL })
+
+    return combined_ts_df[[ID_COL, "all_vehs_total"] + [f"{uc}_total" for uc in noham_ucs]]
 
 
 ### TRANSPORT MODEL FLOWS
@@ -2590,13 +2625,13 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
     ].sum(axis=1)
 
     model_road_uc_link_flows = model_road_uc_link_flows.merge(
-        model_road_links[["link_id", "geometry"]],
+        model_road_links[["link_id", GEOMETRY_COL]],
         on="link_id",
         how="left",
     )
 
     model_road_uc_link_flows = gpd.GeoDataFrame(
-        model_road_uc_link_flows, geometry="geometry", crs=BNG_CRS
+        model_road_uc_link_flows, geometry=GEOMETRY_COL, crs=BNG_CRS
     )
 
     write_to_file(
