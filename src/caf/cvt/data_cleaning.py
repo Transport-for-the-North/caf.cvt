@@ -22,6 +22,7 @@ from caf.cvt.definitions import (
     GEOMETRY_COL,
     ID_COL,
     NA_COL,
+    CombinedAuthorities,
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
@@ -44,6 +45,7 @@ from caf.cvt.definitions import (
     OSRoadCols,
     Scenarios,
     StormCols,
+    SubnationalTransportBodies,
     TimePeriods,
     UserClasses,
 )
@@ -238,7 +240,6 @@ def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
     )
 
 
-
 def _convert_point_to_grid(x: int, y: int, size: int) -> shapely.geometry.Polygon:
     """Take a point and convert it to a grid of the given size."""
     return shapely.geometry.Polygon(
@@ -343,10 +344,7 @@ def data_cleaning(config: model_config.Config) -> None:
 ## INFRASTRUCTURE
 
 
-def _clean_infrastructure(
-        config: model_config.Config,
-        boundary: gpd.GeoDataFrame
-) -> None:
+def _clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all infrastructure datasets ready for analysis."""
     LOG.info("Cleaning infrastructure data...")
     _clean_roads(config, boundary)
@@ -361,9 +359,7 @@ def _clean_infrastructure(
     )
 
     if any_rail:
-        rail_links = _get_rail_links(
-            config, boundary
-        )
+        rail_links = _get_rail_links(config, boundary)
     else:
         rail_links = None
 
@@ -395,10 +391,7 @@ def _clean_infrastructure(
 ### ROAD
 
 
-def _clean_roads(
-        config: model_config.Config,
-        boundary: gpd.GeoDataFrame
-) -> None:
+def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all roads datasets ready for analysis."""
     road_cleaning_enabled = any(
         [
@@ -421,10 +414,7 @@ def _clean_roads(
         LOG.info("Finished cleaning roads data.")
 
 
-def _clean_os_roads(
-        config: model_config.Config,
-        boundary: gpd.GeoDataFrame
-) -> None:
+def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean OS Open Roads dataset, then write to file."""
     mm_highways = gpd.read_file(
         f"zip://{config.paths.raw_input / config.infrastructure.road.mm_highways.zip_path}!"
@@ -432,7 +422,7 @@ def _clean_os_roads(
         # mask=boundary,
         columns=["toid", "road_structure"],
         layer="road_link",
-        ignore_geometry=True
+        ignore_geometry=True,
     )
 
     os_road = gpd.read_file(
@@ -461,10 +451,7 @@ def _clean_os_roads(
     )
 
 
-def _clean_noham_roads(
-        config: model_config.Config,
-        boundary: gpd.GeoDataFrame
-) -> None:
+def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean NoHAM network dataset, then write to file."""
     year = config.infrastructure.road.noham.year
     noham_network = gpd.read_file(
@@ -504,10 +491,7 @@ def _clean_noham_roads(
     )
 
 
-def _clean_model_roads(
-        config: model_config.Config,
-        boundary: gpd.GeoDataFrame
-) -> None:
+def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean transport model road network dataset, then write to file."""
     nodes = pd.read_csv(config.infrastructure.road.model_roads.nodes)
     zone_nodes = nodes.loc[nodes["is_zone"] == 1, "id"]
@@ -582,10 +566,7 @@ def _clean_model_roads(
 ### RAIL
 
 
-def _clean_rail(
-        config: model_config.Config,
-        rail_links: gpd.GeoDataFrame | None
-) -> None:
+def _clean_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame | None) -> None:
     """Clean all rail datasets ready for analysis."""
     rail_cleaning_enabled = any(
         [
@@ -605,7 +586,8 @@ def _clean_rail(
 
 
 def _get_rail_links(
-    config: model_config.Config, boundary: gpd.GeoDataFrame,
+    config: model_config.Config,
+    boundary: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """Read and clean OS Rail Network data from the Multi-Modal Routing Network."""
     rail_links = gpd.read_file(
@@ -613,7 +595,7 @@ def _get_rail_links(
         f"{config.infrastructure.rail.rail_links.file_path}",
         mask=boundary,
         columns=[col.value for col in OSRailCols],
-     )
+    )
     len_before_filter = len(rail_links)
     rail_links = rail_links[
         rail_links[OSRailCols.OPERATIONAL_STATUS] == OSRailOperationalStatus.ACTIVE
@@ -650,10 +632,7 @@ def _get_rail_links(
     return rail_links
 
 
-def _clean_passenger_rail(
-        config: model_config.Config,
-        rail_links: gpd.GeoDataFrame
-) -> None:
+def _clean_passenger_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
     """Filter OS rail data to passenger rail network, then write to file."""
     len_before_filter = len(rail_links)
     passenger_rail = rail_links[
@@ -666,7 +645,7 @@ def _clean_passenger_rail(
             [
                 OSRailDescription.MAIN_LINE,
                 OSRailDescription.MAIN_LINE_AND_TRAM,
-                OSRailDescription.MAIN_LINE_AND_RAPID_TRANSPORT_SYSTEM
+                OSRailDescription.MAIN_LINE_AND_RAPID_TRANSPORT_SYSTEM,
             ]
         )
     ]
@@ -683,10 +662,7 @@ def _clean_passenger_rail(
     )
 
 
-def _clean_freight_rail(
-        config: model_config.Config,
-        rail_links: gpd.GeoDataFrame
-) -> None:
+def _clean_freight_rail(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
     """Filter OS rail data to freight rail network, then write to file."""
     len_before_filter = len(rail_links)
     freight_rail = rail_links[
@@ -710,7 +686,7 @@ def _clean_freight_rail(
 ### OTHER
 
 
-def _clean_other(   # noqa: C901
+def _clean_other(  # noqa: C901
     config: model_config.Config,
     boundary: gpd.GeoDataFrame,
     rail_links: gpd.GeoDataFrame | None,
@@ -766,10 +742,7 @@ def _clean_other(   # noqa: C901
         LOG.info("Finished cleaning other infrastructure data.")
 
 
-def _clean_mastermap_sites(
-        config: model_config.Config,
-        boundary: gpd.GeoDataFrame
-) -> None:
+def _clean_mastermap_sites(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read, clean and prepare mastermap sites data for further filtering."""
     mm_sites = gpd.read_file(
         f"zip://"
@@ -777,7 +750,7 @@ def _clean_mastermap_sites(
         f"{config.infrastructure.other.mastermap_sites.file_path.as_posix()}",
         layer=MasterMapSiteCols.get_layer_name(),
         mask=boundary,
-        columns=[col.value for col in MasterMapSiteCols]
+        columns=[col.value for col in MasterMapSiteCols],
     )
     len_before_filter = len(mm_sites)
     mm_sites = mm_sites[
@@ -785,10 +758,14 @@ def _clean_mastermap_sites(
     ]
     mm_sites = mm_sites.drop(columns=[MasterMapSiteCols.FUNCTION_STATUS])
     transport_sites = mm_sites[
-        mm_sites[MasterMapSiteCols.FUNCTION_THEME].isin([
-            MasterMapFunctionTheme.RAIL_TRANSPORT, MasterMapFunctionTheme.AIR_TRANSPORT,
-            MasterMapFunctionTheme.ROAD_TRANSPORT, MasterMapFunctionTheme.WATER_TRANSPORT
-        ])
+        mm_sites[MasterMapSiteCols.FUNCTION_THEME].isin(
+            [
+                MasterMapFunctionTheme.RAIL_TRANSPORT,
+                MasterMapFunctionTheme.AIR_TRANSPORT,
+                MasterMapFunctionTheme.ROAD_TRANSPORT,
+                MasterMapFunctionTheme.WATER_TRANSPORT,
+            ]
+        )
     ]
     transport_sites = transport_sites.drop_duplicates(
         subset=[MasterMapSiteCols.ID, GEOMETRY_COL]
@@ -808,25 +785,27 @@ def _clean_mastermap_sites(
     return transport_sites
 
 
-def _clean_airports(
-        config: model_config.Config,
-        transport_sites: gpd.GeoDataFrame
-) -> None:
+def _clean_airports(config: model_config.Config, transport_sites: gpd.GeoDataFrame) -> None:
     """Filter OS MM Sites for airports and write to file."""
     len_before_filter = len(transport_sites)
     air_transport = transport_sites[
-        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
-        MasterMapFunctionTheme.AIR_TRANSPORT
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME]
+        == MasterMapFunctionTheme.AIR_TRANSPORT
     ]
     airports = air_transport[
         air_transport[MasterMapSiteCols.FUNCTION] == MasterMapFunction.AIRPORT
     ]
-    airports = airports.drop(columns=[
-        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.FUNCTION,
-        MasterMapSiteCols.STAKEHOLDER_1, MasterMapSiteCols.STAKEHOLDER_1_ROLE,
-        MasterMapSiteCols.EXTENT_DEFINITION, MasterMapSiteCols.DISTINCTIVE_NAME_3,
-        MasterMapSiteCols.DISTINCTIVE_NAME_4
-    ])
+    airports = airports.drop(
+        columns=[
+            MasterMapSiteCols.FUNCTION_THEME,
+            MasterMapSiteCols.FUNCTION,
+            MasterMapSiteCols.STAKEHOLDER_1,
+            MasterMapSiteCols.STAKEHOLDER_1_ROLE,
+            MasterMapSiteCols.EXTENT_DEFINITION,
+            MasterMapSiteCols.DISTINCTIVE_NAME_3,
+            MasterMapSiteCols.DISTINCTIVE_NAME_4,
+        ]
+    )
     filter_removed = len_before_filter - len(airports)
     LOG.debug(
         "Transport sites filtered to airports - %s of %s (%.1f percent) rows removed",
@@ -834,41 +813,45 @@ def _clean_airports(
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    write_to_file(
-        airports,
-        config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH
-    )
+    write_to_file(airports, config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH)
 
 
-def _clean_bus_stops(
-        config: model_config.Config,
-        boundary: gpd.GeoDataFrame
-) -> None:
+def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read, combine and clean regional bus stops datasets, then write to file."""
     # TODO (DJ): Some areas of NaPTAN are missing, e.g. Cumbria Combined Authority
     # Investigate alternative dataset with full coverage.
+    if config.parameters.stb.isin(
+        [
+            SubnationalTransportBodies.TRANSPORT_FOR_THE_NORTH,
+            SubnationalTransportBodies.TRANSPORT_SCOTLAND,
+            SubnationalTransportBodies.ENGLANDS_ECONOMIC_HEARTLAND,
+            SubnationalTransportBodies.TRANSPORT_EAST,
+        ]
+    ) or config.parameters.ca.isin([CombinedAuthorities.CAMBRIDGESHIRE_OR_PETERBOROUGH]):
+        LOG.warning("Bus Stops data is partially missing for %s", config.parameters.stb)
     naptan = pd.read_csv(
         config.paths.raw_input / config.infrastructure.other.bus_stops,
-        usecols=[col.value for col in NaPTANCols]
+        usecols=[col.value for col in NaPTANCols],
     )
     len_before_filter = len(naptan)
-    bus_stops = naptan[
-        naptan[NaPTANCols.STOP_TYPE] == "BCT"
-    ]
-    bus_stops = bus_stops[
-        bus_stops[NaPTANCols.STATUS] == "active"
-    ]
+    bus_stops = naptan[naptan[NaPTANCols.STOP_TYPE] == "BCT"]
+    bus_stops = bus_stops[bus_stops[NaPTANCols.STATUS] == "active"]
     bus_stops = gpd.GeoDataFrame(
         bus_stops.copy(),
         geometry=gpd.points_from_xy(
             bus_stops[NaPTANCols.LONGITUDE], bus_stops[NaPTANCols.LATITUDE]
         ),
-        crs="EPSG:4326"
+        crs="EPSG:4326",
     )
     bus_stops = bus_stops.to_crs(BNG_CRS)
-    bus_stops = bus_stops.drop(columns=[
-        NaPTANCols.STOP_TYPE, NaPTANCols.LONGITUDE, NaPTANCols.LATITUDE, NaPTANCols.STATUS
-    ])
+    bus_stops = bus_stops.drop(
+        columns=[
+            NaPTANCols.STOP_TYPE,
+            NaPTANCols.LONGITUDE,
+            NaPTANCols.LATITUDE,
+            NaPTANCols.STATUS,
+        ]
+    )
     bus_stops = bus_stops.rename(columns=NaPTANCols.rename_map())
     bus_stops = clip_to_boundary(bus_stops, boundary)
     filter_removed = len_before_filter - len(bus_stops)
@@ -878,43 +861,50 @@ def _clean_bus_stops(
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    write_to_file(
-        bus_stops,
-        config.paths.model_input / file_paths.BUS_STOPS_MODEL_INPUT_PATH
-    )
+    write_to_file(bus_stops, config.paths.model_input / file_paths.BUS_STOPS_MODEL_INPUT_PATH)
 
 
 def _clean_train_stations(
-        config: model_config.Config,
-        transport_sites: gpd.GeoDataFrame
+    config: model_config.Config, transport_sites: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MM Sites for train stations and write to file."""
     len_before_filter = len(transport_sites)
     rail_transport = transport_sites[
-        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
-        MasterMapFunctionTheme.RAIL_TRANSPORT
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME]
+        == MasterMapFunctionTheme.RAIL_TRANSPORT
     ]
     train_stations = rail_transport[
-        rail_transport[MasterMapSiteCols.FUNCTION].str.contains(MasterMapFunction.RAILWAY_STATION)
+        rail_transport[MasterMapSiteCols.FUNCTION].str.contains(
+            MasterMapFunction.RAILWAY_STATION
+        )
     ]
     train_stations = train_stations[
         ~(
             train_stations[MasterMapSiteCols.STAKEHOLDER_1].str.contains(
-                "|".join([
-                    MasterMapStakeholder.LONDON_UNDERGROUND,
-                    MasterMapStakeholder.DOCKLANDS_LIGHT_RAILWAY,
-                    MasterMapStakeholder.TYNE_AND_WEAR_METRO,
-                    MasterMapStakeholder.GLASGOW_SUBWAY,
-                ])
-            ) & ~(train_stations[MasterMapSiteCols.STAKEHOLDER_1].str.contains(
-                MasterMapStakeholder.NETWORK_RAIL)
+                "|".join(
+                    [
+                        MasterMapStakeholder.LONDON_UNDERGROUND,
+                        MasterMapStakeholder.DOCKLANDS_LIGHT_RAILWAY,
+                        MasterMapStakeholder.TYNE_AND_WEAR_METRO,
+                        MasterMapStakeholder.GLASGOW_SUBWAY,
+                    ]
+                )
+            )
+            & ~(
+                train_stations[MasterMapSiteCols.STAKEHOLDER_1].str.contains(
+                    MasterMapStakeholder.NETWORK_RAIL
+                )
             )
         )
     ]
-    train_stations = train_stations.drop(columns=[
-        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.DISTINCTIVE_NAME_3,
-        MasterMapSiteCols.DISTINCTIVE_NAME_4, MasterMapSiteCols.STAKEHOLDER_1_ROLE
-    ])
+    train_stations = train_stations.drop(
+        columns=[
+            MasterMapSiteCols.FUNCTION_THEME,
+            MasterMapSiteCols.DISTINCTIVE_NAME_3,
+            MasterMapSiteCols.DISTINCTIVE_NAME_4,
+            MasterMapSiteCols.STAKEHOLDER_1_ROLE,
+        ]
+    )
     filter_removed = len_before_filter - len(train_stations)
     LOG.debug(
         "Train stations filtered - %s of %s (%.1f percent) rows removed",
@@ -929,22 +919,25 @@ def _clean_train_stations(
 
 
 def _clean_tram_stations(
-        config: model_config.Config,
-        transport_sites: gpd.GeoDataFrame
+    config: model_config.Config, transport_sites: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MM Sites for tram stations and write to file."""
     len_before_filter = len(transport_sites)
     rail_transport = transport_sites[
-        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
-        MasterMapFunctionTheme.RAIL_TRANSPORT
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME]
+        == MasterMapFunctionTheme.RAIL_TRANSPORT
     ]
     tram_stations = rail_transport[
         rail_transport[MasterMapSiteCols.FUNCTION].str.contains(MasterMapFunction.TRAM_STATION)
     ]
-    tram_stations = tram_stations.drop(columns=[
-        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.DISTINCTIVE_NAME_3,
-        MasterMapSiteCols.DISTINCTIVE_NAME_4, MasterMapSiteCols.STAKEHOLDER_1_ROLE
-    ])
+    tram_stations = tram_stations.drop(
+        columns=[
+            MasterMapSiteCols.FUNCTION_THEME,
+            MasterMapSiteCols.DISTINCTIVE_NAME_3,
+            MasterMapSiteCols.DISTINCTIVE_NAME_4,
+            MasterMapSiteCols.STAKEHOLDER_1_ROLE,
+        ]
+    )
     filter_removed = len_before_filter - len(tram_stations)
     LOG.debug(
         "Tram stations filtered - %s of %s (%.1f percent) rows removed",
@@ -959,29 +952,34 @@ def _clean_tram_stations(
 
 
 def _clean_rapid_transport_stations(
-    config: model_config.Config,
-    transport_sites: gpd.GeoDataFrame
+    config: model_config.Config, transport_sites: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MM Sites for rapid transport stations and write to file."""
     len_before_filter = len(transport_sites)
     rail_transport = transport_sites[
-        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
-        MasterMapFunctionTheme.RAIL_TRANSPORT
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME]
+        == MasterMapFunctionTheme.RAIL_TRANSPORT
     ]
     rapid_transport_stations = rail_transport[
         rail_transport[MasterMapSiteCols.STAKEHOLDER_1].str.contains(
-            "|".join([
-                MasterMapStakeholder.TYNE_AND_WEAR_METRO,
-                MasterMapStakeholder.GLASGOW_SUBWAY,
-                MasterMapStakeholder.LONDON_UNDERGROUND,
-                MasterMapStakeholder.DOCKLANDS_LIGHT_RAILWAY,
-            ])
+            "|".join(
+                [
+                    MasterMapStakeholder.TYNE_AND_WEAR_METRO,
+                    MasterMapStakeholder.GLASGOW_SUBWAY,
+                    MasterMapStakeholder.LONDON_UNDERGROUND,
+                    MasterMapStakeholder.DOCKLANDS_LIGHT_RAILWAY,
+                ]
+            )
         )
     ]
-    rapid_transport_stations = rapid_transport_stations.drop(columns=[
-        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.DISTINCTIVE_NAME_3,
-        MasterMapSiteCols.DISTINCTIVE_NAME_4, MasterMapSiteCols.STAKEHOLDER_1_ROLE
-    ])
+    rapid_transport_stations = rapid_transport_stations.drop(
+        columns=[
+            MasterMapSiteCols.FUNCTION_THEME,
+            MasterMapSiteCols.DISTINCTIVE_NAME_3,
+            MasterMapSiteCols.DISTINCTIVE_NAME_4,
+            MasterMapSiteCols.STAKEHOLDER_1_ROLE,
+        ]
+    )
     filter_removed = len_before_filter - len(rapid_transport_stations)
     LOG.debug(
         "Rapid transport stations filtered - %s of %s (%.1f percent) rows removed",
@@ -996,24 +994,27 @@ def _clean_rapid_transport_stations(
 
 
 def _clean_ferry_terminals(
-        config: model_config.Config,
-        transport_sites: gpd.GeoDataFrame
+    config: model_config.Config, transport_sites: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MM Sites for ferry terminals and write to file."""
     len_before_filter = len(transport_sites)
     water_transport = transport_sites[
-        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
-        MasterMapFunctionTheme.WATER_TRANSPORT
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME]
+        == MasterMapFunctionTheme.WATER_TRANSPORT
     ]
     ferry_terminals = water_transport[
         water_transport[MasterMapSiteCols.FUNCTION].str.contains(
             MasterMapFunction.FERRY_TERMINAL
         )
     ]
-    ferry_terminals = ferry_terminals.drop(columns=[
-        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.DISTINCTIVE_NAME_3,
-        MasterMapSiteCols.DISTINCTIVE_NAME_4, MasterMapSiteCols.STAKEHOLDER_1_ROLE
-    ])
+    ferry_terminals = ferry_terminals.drop(
+        columns=[
+            MasterMapSiteCols.FUNCTION_THEME,
+            MasterMapSiteCols.DISTINCTIVE_NAME_3,
+            MasterMapSiteCols.DISTINCTIVE_NAME_4,
+            MasterMapSiteCols.STAKEHOLDER_1_ROLE,
+        ]
+    )
     filter_removed = len_before_filter - len(water_transport)
     LOG.debug(
         "Ferry terminals filtered - %s of %s (%.1f percent) rows removed",
@@ -1028,27 +1029,32 @@ def _clean_ferry_terminals(
 
 
 def _clean_bus_coach_stations(
-        config: model_config.Config,
-        transport_sites: gpd.GeoDataFrame
+    config: model_config.Config, transport_sites: gpd.GeoDataFrame
 ) -> None:
     """Filter OS MM Sites for bus and coach stations and write to file."""
     len_before_filter = len(transport_sites)
     road_transport = transport_sites[
-        transport_sites[MasterMapSiteCols.FUNCTION_THEME] ==
-        MasterMapFunctionTheme.ROAD_TRANSPORT
+        transport_sites[MasterMapSiteCols.FUNCTION_THEME]
+        == MasterMapFunctionTheme.ROAD_TRANSPORT
     ]
     bus_coach_stations = road_transport[
         road_transport[MasterMapSiteCols.FUNCTION].str.contains(
-            "|".join([
-                MasterMapFunction.BUS_STATION,
-                MasterMapFunction.COACH_STATION,
-            ])
+            "|".join(
+                [
+                    MasterMapFunction.BUS_STATION,
+                    MasterMapFunction.COACH_STATION,
+                ]
+            )
         )
     ]
-    bus_coach_stations = bus_coach_stations.drop(columns=[
-        MasterMapSiteCols.FUNCTION_THEME, MasterMapSiteCols.DISTINCTIVE_NAME_3,
-        MasterMapSiteCols.DISTINCTIVE_NAME_4, MasterMapSiteCols.STAKEHOLDER_1_ROLE
-    ])
+    bus_coach_stations = bus_coach_stations.drop(
+        columns=[
+            MasterMapSiteCols.FUNCTION_THEME,
+            MasterMapSiteCols.DISTINCTIVE_NAME_3,
+            MasterMapSiteCols.DISTINCTIVE_NAME_4,
+            MasterMapSiteCols.STAKEHOLDER_1_ROLE,
+        ]
+    )
     filter_removed = len_before_filter - len(bus_coach_stations)
     LOG.debug(
         "Bus and coach stations filtered - %s of %s (%.1f percent) rows removed",
@@ -1062,10 +1068,7 @@ def _clean_bus_coach_stations(
     )
 
 
-def _clean_tram_network(
-        config: model_config.Config,
-        rail_links: gpd.GeoDataFrame
-) -> None:
+def _clean_tram_network(config: model_config.Config, rail_links: gpd.GeoDataFrame) -> None:
     """Filter OS rail links for tram network, then write to file."""
     len_before_filter = len(rail_links)
     tram_links = rail_links[
@@ -1104,7 +1107,7 @@ def _clean_rapid_transport_network(
         rapid_transport_links[OSRailCols.DESCRIPTION].isin(
             [
                 OSRailDescription.RAPID_TRANSPORT_SYSTEM,
-                OSRailDescription.MAIN_LINE_AND_RAPID_TRANSPORT_SYSTEM
+                OSRailDescription.MAIN_LINE_AND_RAPID_TRANSPORT_SYSTEM,
             ]
         )
     ]
@@ -1123,8 +1126,7 @@ def _clean_rapid_transport_network(
 
 
 def _clean_national_cycle_network(
-        config: model_config.Config,
-        boundary: gpd.GeoDataFrame
+    config: model_config.Config, boundary: gpd.GeoDataFrame
 ) -> None:
     """Read and clean National Cycle Network data, then write to file."""
     ncn = gpd.read_file(
@@ -1299,7 +1301,6 @@ def _split_metro_links(
             new_row.geometry = segment
             split_rows.append(new_row)
 
-
     metro_links = gpd.GeoDataFrame(
         split_rows,
         columns=[
@@ -1336,8 +1337,12 @@ def _snap_stations_to_links(
     monument_id = snapped_stations.loc[
         snapped_stations["Name"] == "Monument", "id"
     ].to_numpy()[0]
-    link_9 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[0], GEOMETRY_COL].to_numpy()[0]
-    link_11 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[1], GEOMETRY_COL].to_numpy()[0]
+    link_9 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[0], GEOMETRY_COL].to_numpy()[
+        0
+    ]
+    link_11 = metro_links.loc[metro_links["id"] == MONUMENT_LINKS[1], GEOMETRY_COL].to_numpy()[
+        0
+    ]
     intersection_point = link_9.intersection(link_11)
     snapped_stations.loc[snapped_stations["id"] == monument_id, GEOMETRY_COL] = (
         intersection_point
@@ -1914,7 +1919,9 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
             "WDR_40_Median": f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FORECAST}",
         }
     )
-    wind_driven_rain = gpd.GeoDataFrame(wind_driven_rain, geometry=GEOMETRY_COL, crs="EPSG:3857")
+    wind_driven_rain = gpd.GeoDataFrame(
+        wind_driven_rain, geometry=GEOMETRY_COL, crs="EPSG:3857"
+    )
     wind_driven_rain = clip_to_boundary(wind_driven_rain, boundary)
     filter_removed = len_before_filter - len(wind_driven_rain)
     LOG.debug(
@@ -2518,7 +2525,7 @@ def _aggregate_link_flows_year(
         [f"all_vehs_{tp}" for tp in TimePeriods]
     ].sum(axis=1)
 
-    combined_ts_df = combined_ts_df.rename(columns={"link_id": ID_COL })
+    combined_ts_df = combined_ts_df.rename(columns={"link_id": ID_COL})
 
     return combined_ts_df[[ID_COL, "all_vehs_total"] + [f"{uc}_total" for uc in noham_ucs]]
 

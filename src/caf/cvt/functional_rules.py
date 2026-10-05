@@ -118,16 +118,12 @@ def min_max_scaling_pair(
 
         # Transform each column using the same scaler
         data.loc[data[col_current].notna(), col_current] = (
-            scaler.transform(
-                data.loc[data[col_current].notna(), [col_current]].to_numpy()
-            )
+            scaler.transform(data.loc[data[col_current].notna(), [col_current]].to_numpy())
             .clip(*feature_range)
             .flatten()
         )
         data.loc[data[col_forecast].notna(), col_forecast] = (
-            scaler.transform(
-                data.loc[data[col_forecast].notna(), [col_forecast]].to_numpy()
-            )
+            scaler.transform(data.loc[data[col_forecast].notna(), [col_forecast]].to_numpy())
             .clip(*feature_range)
             .flatten()
         )
@@ -531,9 +527,7 @@ def _validate_index(
     """Validate a given index."""
     na_counts = index.isna().sum()
     if na_counts.any():
-        LOG.warning(
-            "Index contains missing values: \n%s", na_counts[na_counts > 0]
-        )
+        LOG.warning("Index contains missing values: \n%s", na_counts[na_counts > 0])
 
     for scenario in Scenarios:
         for var in index_vars:
@@ -1217,7 +1211,6 @@ def _flooding_index(
         f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}",
     ]:
         flooding_risk[col] = flooding_risk[col].map(_FLOODING_RISK_SCORE_MAP).astype(float)
-
 
     feature_range = (config.constants.score_min, config.constants.score_max)
     flooding_risk = min_max_scaling_pair(

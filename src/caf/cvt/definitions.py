@@ -14,6 +14,43 @@ GEOMETRY_COL = "geometry"
 # CLASSES
 
 
+class SubnationalTransportBodies(enum.StrEnum):
+    """Enumeration for subnational transport bodies."""
+
+    TRANSPORT_FOR_THE_NORTH = "Transport for the North"
+    TRANSPORT_SCOTLAND = "Transport Scotland"
+    MIDLANDS_CONNECT = "Midlands Connect"
+    ENGLANDS_ECONOMIC_HEARTLAND = "England's Economic Heartland"
+    TRANSPORT_EAST = "Transport East"
+    TRANSPORT_FOR_LONDON = "Transport for London"
+    TRANSPORT_FOR_THE_SOUTH_EAST = "Transport for the South East"
+    WESTERN_GATEWAY = "Western Gateway"
+    PENINSULA_TRANSPORT = "Peninsula Transport"
+
+
+class CombinedAuthorities(enum.StrEnum):
+    """Enumeration for combined authorities."""
+
+    # Northern CAs
+    GREATER_MANCHESTER = "Greater Manchester"
+    SOUTH_YORKSHIRE = "South Yorkshire"
+    WEST_YORKSHIRE = "West Yorkshire"
+    LIVERPOOL_CITY_REGION = "Liverpool City Region"
+    TEES_VALLEY = "Tees Valley"
+    YORK_AND_NORTH_YORKSHIRE = "York and North Yorkshire"
+    NORTH_EAST = "North East"
+    HULL_AND_EAST_YORKSHIRE = "Hull and East Yorkshire"
+    LANCASHIRE = "Lancashire"
+
+    # Other CAs
+    EAST_MIDLANDS = "East Midlands"
+    GREATER_LINCOLNSHIRE = "Greater Lincolnshire"
+    CAMBRIDGESHIRE_OR_PETERBOROUGH = "Cambridgeshire or Peterborough"
+    WEST_MIDLANDS = "West Midlands"
+    WEST_OF_ENGLAND = "West of England"
+    DEVON_AND_TORBAY = "Devon and Torbay"
+
+
 class RiskColumn(enum.StrEnum):
     """Plotting column definition base class."""
 
@@ -69,7 +106,7 @@ class FloodingRiskCols(RiskColumn):
 
     RIVERS_SEA = "rivers_sea_flooding_risk"
     SURFACE_WATER = "surface_water_flooding_risk"
-    #    GROUNDWATER = "groundwater_flooding_risk"
+    # GROUNDWATER = "groundwater_flooding_risk"
 
     def get_cmap(self) -> str:
         """Return the appropriate colormap for a given flooding subhazard column."""
@@ -334,7 +371,6 @@ class OSRoadStructure(enum.StrEnum):
         return mapping[self]
 
 
-
 class VulnerabilityModifier(float, enum.Enum):
     """Definitions for vulnerability modifiers."""
 
@@ -362,7 +398,6 @@ class OSRoadCols(enum.StrEnum):
     def get_layer_name(cls) -> str:
         """Return the name of the layer for OS roads."""
         return "road_link"
-
 
 
 class NoHAMRoadCols(enum.StrEnum):
@@ -426,6 +461,7 @@ class OSRailDescription(enum.StrEnum):
     FUNICULAR = "Funicular"
     MINERAL = "Mineral"
     STATIC_MUSEUM = "Static Museum"
+
 
 class OSRailRailwayUse(enum.StrEnum):
     """Definitions for values of OS rail railway use."""
@@ -581,9 +617,8 @@ class MasterMapSiteCols(enum.StrEnum):
             MasterMapSiteCols.DISTINCTIVE_NAME_4,
             MasterMapSiteCols.STAKEHOLDER_1,
             MasterMapSiteCols.STAKEHOLDER_1_ROLE,
-            MasterMapSiteCols.EXTENT_DEFINITION
+            MasterMapSiteCols.EXTENT_DEFINITION,
         ]
-
 
 
 class MasterMapFunctionStatus(enum.StrEnum):
@@ -641,6 +676,7 @@ class NationalCycleNetworkCols(enum.StrEnum):
 
     @classmethod
     def rename_map(cls) -> dict[str, str]:
+        """Return mapping of column names to standardized names."""
         return {
             NationalCycleNetworkCols.ID: "id",
             NationalCycleNetworkCols.DESCRIPTION: "description",

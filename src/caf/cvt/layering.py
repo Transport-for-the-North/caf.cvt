@@ -62,6 +62,7 @@ _RISK_CATEGORY_COLOURS = {
 
 # GENERAL FUNCTIONS
 
+
 def _aggregate_risk(series: pd.Series) -> float | None:
     """Aggregate risk by taking the maximum value, returning NaN if any values are missing."""
     if series.isna().any():
@@ -78,7 +79,6 @@ def _infrastructure_risk_intersect(
     then calculate hazard risk score as the max risk value of the intersection. Return merged
     GeoDataFrame with hazard risk columns added.
     """
-    # TODO (DJ): Test function with polygon transport infra, such as airports, train stations etc.
     infrastructure_with_risk = infrastructure_data.copy()
 
     for _hazard_name, hazard_data in hazards_dict.items():
@@ -98,10 +98,8 @@ def _infrastructure_risk_intersect(
         agg = intersections.groupby(intersections.index)[risk_columns].agg(_aggregate_risk)
 
         # Find which infrastructure segments intersect with any hazard
-        intersected_agg = (
-            intersections
-            .groupby(intersections.index)["index_right"]
-            .apply(lambda x: x.notna().any())
+        intersected_agg = intersections.groupby(intersections.index)["index_right"].apply(
+            lambda x: x.notna().any()
         )
 
         # Merge back into main DataFrame
@@ -1757,7 +1755,6 @@ def _train_stations_risk(
     LOG.info("Finished layering train stations with hazard risk.")
 
 
-
 #### Airports
 
 
@@ -2096,8 +2093,11 @@ def _ncn_risk(
     _create_risk_summary(
         ncn_risk,
         risk_cols,
-        [col.value for col in NationalCycleNetworkCols
-         if col != NationalCycleNetworkCols.ID_COL],
+        [
+            col.value
+            for col in NationalCycleNetworkCols
+            if col != NationalCycleNetworkCols.ID_COL
+        ],
         config.paths.audit_path / "Summary" / "Other" / "National Cycle Network",
         "National Cycle Network Risk Summary.xlsx",
     )
