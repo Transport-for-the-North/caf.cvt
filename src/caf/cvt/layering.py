@@ -14,6 +14,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 from caf.cvt.definitions import (
     AssetTypes,
+    DemandCols,
     ExtremeWeatherRiskCols,
     FloodingRiskCols,
     GroundStabilityRiskCols,
@@ -2527,11 +2528,13 @@ def _nexus_metro_links_risk(
         / "nexus_metro_links_risk.gpkg",
     )
 
+    LOG.info("tEST.")
+
     metro_links_risk = _prepare_model_output(
         risk_data=metro_links_risk,
         drop_cols=[],
         rename_map={},
-        risk_cols_order=risk_cols,
+        risk_cols_order=[*risk_cols, DemandCols.DEMAND, ImpactCols.IMPACT],
     )
 
     _split_csv_shapefile(
