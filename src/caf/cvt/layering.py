@@ -16,6 +16,7 @@ from caf.cvt.definitions import (
     GEOMETRY_COL,
     ID_COL,
     AssetTypes,
+    DemandCols,
     ExtremeWeatherRiskCols,
     FloodingRiskCols,
     GroundStabilityRiskCols,
@@ -2349,7 +2350,7 @@ def _nexus_metro_links_risk(
         risk_data=metro_links_risk,
         drop_cols=[],
         rename_map={},
-        risk_cols_order=risk_cols,
+        risk_cols_order=[*risk_cols, DemandCols.DEMAND, ImpactCols.IMPACT],
     )
 
     _split_csv_shapefile(

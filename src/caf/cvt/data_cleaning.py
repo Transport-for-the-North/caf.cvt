@@ -1168,6 +1168,7 @@ def _clean_bespoke(config: model_config.Config) -> None:
 
         _clean_nexus_metro(config)
 
+# TODO (DJ): Generalise cleaning of specific nexus infrastructure
 
 def _clean_nexus_metro(
     config: model_config.Config,
