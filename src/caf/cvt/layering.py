@@ -2528,8 +2528,6 @@ def _nexus_metro_links_risk(
         / "nexus_metro_links_risk.gpkg",
     )
 
-    LOG.info("tEST.")
-
     metro_links_risk = _prepare_model_output(
         risk_data=metro_links_risk,
         drop_cols=[],
