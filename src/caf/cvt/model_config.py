@@ -196,26 +196,6 @@ class Other(ctk.BaseConfig):
     mastermap_sites: ZipFileEntry
 
 
-class Bespoke(ctk.BaseConfig):
-    """Configuration for bespoke infrastructure data.
-
-    Attributes
-    ----------
-    nexus_metro_lines : pathlib.Path
-        Path to the Nexus Metro lines data.
-    nexus_metro_stations : pathlib.Path
-        Path to the Nexus Metro stations data.
-    nexus_metro_ext_lines : pathlib.Path
-        Path to the extended Nexus Metro lines data.
-    nexus_metro_ext_stations : pathlib.Path
-        Path to the extended Nexus Metro stations data.
-    """
-
-    nexus_metro_lines: pathlib.Path
-    nexus_metro_stations: pathlib.Path
-    nexus_metro_ext_lines: pathlib.Path
-    nexus_metro_ext_stations: pathlib.Path
-
 
 class InfrastructureConfig(ctk.BaseConfig):
     """Configuration for infrastructure data.
@@ -233,7 +213,6 @@ class InfrastructureConfig(ctk.BaseConfig):
     road: Road
     rail: Rail
     other: Other
-    bespoke: Bespoke
 
 
 class ExtremeWeather(ctk.BaseConfig):
