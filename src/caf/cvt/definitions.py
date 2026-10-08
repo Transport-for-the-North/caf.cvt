@@ -275,6 +275,13 @@ class StormCols(RiskColumn):
         }
 
 
+class DemandCols(RiskColumn):
+    """Column definitions for demand cold layers."""
+
+    DEMAND = "demand"
+
+
+
 class ImpactCols(RiskColumn):
     """Column definitions for impact layers."""
 
