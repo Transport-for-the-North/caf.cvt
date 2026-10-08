@@ -146,6 +146,9 @@ def _reshape_for_scenarios(
         if col not in risk_cols and col not in (id_col, "geometry")
     ]
 
+    # Fill NA values in descriptive columns
+    risk_data[descriptive_cols] = risk_data[descriptive_cols].fillna("N/A")
+
     # Separate geometry for later
     geometry = risk_data[[id_col, "geometry"]].copy()
 
@@ -194,7 +197,10 @@ def _prepare_model_output(
     risk_data = risk_data.rename(columns=rename_map)
     risk_data = risk_data.to_crs(data_cleaning.BNG_CRS)
     risk_data = _duplicate_non_scenario_hazards(risk_data)
+    len_before_reshape = len(risk_data)
     risk_data = _reshape_for_scenarios(risk_data, "id", risk_cols_order)
+    if len(risk_data) != (len_before_reshape * 2):
+        raise ValueError("Reshape did not double the number of rows.")
     risk_data[risk_cols_order] = risk_data[risk_cols_order].round(1)
     return risk_data.rename(columns={col: f"{col}_score" for col in risk_cols_order})
 
