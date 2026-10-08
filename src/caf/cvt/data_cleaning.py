@@ -1756,7 +1756,7 @@ def _clean_flooding_layer(
 
         # TODO (DJ): Investigate not clipping to boundary here to keep boundary grid cells
         # intact, and thus consistent with raster format
-        flooding_data = clip_to_boundary(flooding_data, boundary)
+        #flooding_data = clip_to_boundary(flooding_data, boundary)
 
         if flooding_data.empty:
             LOG.debug("%s layer empty. Continuing.", metadata["tile"])
@@ -1783,7 +1783,7 @@ def _get_flooding_zip_files(
     flooding_type: str,
 ) -> list[pathlib.Path]:
     """Return all flooding zip files."""
-    flooding_root = config.hazards.flooding[flooding_type]
+    flooding_root = getattr(config.hazards.flooding, flooding_type)
     return sorted(flooding_root.rglob("*.zip"))
 
 
