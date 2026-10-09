@@ -10,9 +10,11 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import rasterio
 import sklearn
 import xyzservices
 from pyogrio.errors import DataLayerError, DataSourceError
+from rasterio.features import rasterize
 from shapely.geometry import Polygon, box
 
 from caf.cvt import data_cleaning, file_paths, model_config
@@ -62,6 +64,7 @@ _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenari
 
 _FLOODING_TILE_SIZE_M = 10000
 _NUM_TILES_DONE = 0
+_FLOODING_PIXEL_SIZE_M = 2
 _FLOODING_RISK_SCORE_MAP = {
     0: 0,  # No risk areas stay 0
     "Unavailable": np.nan,
@@ -129,6 +132,56 @@ def min_max_scaling_pair(
 
     return data
 
+
+def min_max_scaling_pair_raster(
+    stack: np.ndarray,
+    pairs: list[tuple[int, int]],
+    feature_range: tuple[int, int],
+) -> np.ndarray:
+    """Apply min-max scaling to pairs of raster bands in a stack."""
+    stack = stack.astype(float).copy()
+
+    out_min, out_max = feature_range
+
+    for current_band, forecast_band in pairs:
+        current = stack[current_band]
+        forecast = stack[forecast_band]
+
+        combined = np.concatenate([
+            current[~np.isnan(current)],
+            forecast[~np.isnan(forecast)]
+        ])
+
+        if len(combined) == 0:
+            continue
+
+        combined_min = combined.min()
+        combined_max = combined.max()
+
+        if combined_max == combined_min:
+            current_scaled = np.full_like(current, out_min)
+            forecast_scaled = np.full_like(forecast, out_min)
+        else:
+            current_scaled = (
+                (current - combined_min)
+                / (combined_max - combined_min)
+                * (out_max - out_min)
+                + out_min
+            )
+            forecast_scaled = (
+                (forecast - combined_min)
+                / (combined_max - combined_min)
+                * (out_max - out_min)
+                + out_min
+            )
+
+        current_scaled[np.isnan(current)] = np.nan
+        forecast_scaled[np.isnan(forecast)] = np.nan
+
+        stack[current_band] = current_scaled
+        stack[forecast_band] = forecast_scaled
+
+    return stack
 
 def _min_max_scaling(
     data: pd.DataFrame,
@@ -563,6 +616,76 @@ def _audit_index(
                 + CARTO_API_KEY
             ),
         )
+
+
+def _rasterize_flood_layer(
+        flood_layer: gpd.GeoDataFrame,
+        risk_column: str,
+        risk_score_map: dict[str, float],
+        transform: rasterio.transform.Affine,
+        width: int,
+        height: int,
+) -> np.ndarray:
+    """Convert a flood layer into a raster array."""
+    flood_risk = flood_layer.copy()
+    flood_risk[risk_column] = (
+        flood_risk[risk_column]
+        .map(risk_score_map)
+    )
+
+    shapes = [
+        (geom, value)
+        for geom, value
+        in zip(flood_risk.geometry, flood_risk[risk_column], strict=False)
+    ]
+    raster = rasterize(
+        shapes,
+        out_shape=(height, width),
+        transform=transform,
+        fill=0,
+        dtype="int32",
+        all_touched=False, # only take values if cell center is within the polygon
+    )
+
+    _write_raster(
+        raster=raster,
+        height=height,
+        width=width,
+        crs=flood_risk.crs,
+        transform=transform,
+        # TODO (DJ): Replace the hardcoded output path with a defined path 
+        output_path=f"D:/Climate Vulnerability Tool/Localisation/v2/Testing/{risk_column}_raster.tif",
+        multiband=False,
+    )
+
+    return raster
+
+
+def _write_raster(
+        raster: np.ndarray,
+        height: int,
+        width: int,
+        crs: str,
+        transform: rasterio.transform.Affine,
+        output_path: str,
+        multiband: bool,
+) -> None:
+    """Write a raster array to a GeoTIFF file."""
+    out_meta = {
+        "driver": "GTiff",
+        "height": height,
+        "width": width,
+        "count": raster.shape[0] if multiband else 1,
+        "dtype": raster.dtype,
+        "crs": crs,
+        "transform": transform,
+    }
+    with rasterio.open(output_path, "w", **out_meta) as dst:
+        if multiband:
+            for band in range(raster.shape[0]):
+                dst.write(raster[band], band + 1)
+        else:
+            dst.write(raster, 1)
 
 
 # FUNCTIONAL RULES
@@ -1134,24 +1257,107 @@ def _wind_risk_scaled(speed_metres_per_second: float) -> float:
 
 ### FLOODING
 
-
 def _flooding_index(
     config: model_config.Config, boundary: gpd.GeoDataFrame, audit_path: pathlib.Path
+) -> gpd.GeoDataFrame:
+    """Calculate the flooding index, either raster or vector methods based on configuration."""
+    flooding_paths = {
+        f"{flooding_type}_flooding_risk_{scenario}": (
+            config.paths.model_input
+            / file_paths.FLOODING_MODEL_INPUT_PATH
+            / flooding_type
+            / scenario
+            / f"{flooding_type}_{scenario}.gpkg"
+        )
+        for flooding_type in dict(config.hazards.flooding.model_dump())
+        for scenario in Scenarios
+    }
+
+    if config.switches.flooding_index_raster:
+         _flooding_index_raster(config, boundary, audit_path, flooding_paths)
+    else:
+         _flooding_index_vector(config, boundary, audit_path, flooding_paths)
+
+
+def _flooding_index_raster(
+    config: model_config.Config,
+    boundary: gpd.GeoDataFrame,
+    audit_path: pathlib.Path,
+    flooding_paths: dict[str, pathlib.Path]
+) -> gpd.GeoDataFrame:
+    """Calculate the flooding index using raster data."""
+    LOG.info("Calculating flooding index using raster data.")
+    flood_risk_stack = _rasterize_and_stack(flooding_paths)
+
+    flood_risk_stack = min_max_scaling_pair_raster(
+        flood_risk_stack,
+        pairs=[(0, 1), (2, 3)],
+        feature_range=(config.constants.score_min, config.constants.score_max),
+    )
+
+
+
+def _rasterize_and_stack(flooding_paths: dict[str, pathlib.Path]) -> np.ndarray:
+    """Rasterize and stack flood layers from the given paths."""
+    flood_layers = {}
+    for flood_layer_name, flood_path in flooding_paths.items():
+        flood_layers[flood_layer_name] = gpd.read_file(flood_path)
+
+    all_bounds = np.array([
+        flood_layers[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}"].total_bounds,
+        flood_layers[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FORECAST}"].total_bounds,
+        flood_layers[f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}"].total_bounds,
+        flood_layers[f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}"].total_bounds,
+    ])
+
+    minx = all_bounds[:, 0].min()
+    miny = all_bounds[:, 1].min()
+    maxx = all_bounds[:, 2].max()
+    maxy = all_bounds[:, 3].max()
+
+    width = int((maxx - minx) / _FLOODING_PIXEL_SIZE_M)
+    height = int((maxy - miny) / _FLOODING_PIXEL_SIZE_M)
+
+    global_minx = np.floor(minx / 2) * 2
+    global_maxy = np.floor(maxy / 2) * 2
+    transform = rasterio.transform.from_origin(
+        global_minx, global_maxy, _FLOODING_PIXEL_SIZE_M, _FLOODING_PIXEL_SIZE_M
+    )
+    for flood_layer_name, flood_layer in flood_layers.items():
+        # Rasterize each flood layer
+        LOG.info("Rasterizing flood layer: %s", flood_layer_name)
+        flood_layer_rasters = _rasterize_flood_layer(
+            flood_layer,
+            flood_layer_name,
+            _FLOODING_RISK_SCORE_MAP,
+            transform,
+            width,
+            height
+        )
+    flood_risk_stack = np.stack(list(flood_layer_rasters.values()), axis=0)
+    _write_raster(
+        raster=flood_risk_stack,
+        height=height,
+        width=width,
+        crs="EPSG:27700",
+        transform=transform,
+        # TODO (DJ): Define this path elsewhere, or remove this write entirely
+        output_path="D:/Climate Vulnerability Tool/Localisation/v2/Testing/flooding_risk_stack_raster.tif",
+        multiband=True,
+    )
+    return flood_risk_stack
+
+
+def _flooding_index_vector(
+    config: model_config.Config,
+    boundary: gpd.GeoDataFrame,
+    audit_path: pathlib.Path,
+    flooding_paths: dict[str, pathlib.Path]
 ) -> gpd.GeoDataFrame:
     """Overlay all four flooding datasets using a tiled chunking method."""
     # If the direct tiled overlay hasn't been done yet, do it
     if config.switches.compute_flooding_overlay:
         LOG.info("Combining all four flooding datasets...")
-        flooding_paths = []
-        for flooding_type in config.hazards.flooding:
-            for scenario in Scenarios:
-                flooding_paths.append(
-                    config.paths.model_input
-                    / file_paths.FLOODING_MODEL_INPUT_PATH
-                    / flooding_type
-                    / scenario
-                    / f"{flooding_type}_{scenario}.gpkg"
-                )
 
         _tile_polygon_flooding_overlay(
             config,
@@ -1257,7 +1463,7 @@ def _flooding_index(
 def _tile_polygon_flooding_overlay(
     config: model_config.Config,
     boundary: gpd.GeoDataFrame,
-    layer_paths: list[pathlib.Path],
+    layer_paths: dict[str, pathlib.Path],
     crs: str,
     tile_size_m: int = 5000,
 ) -> None:
@@ -1318,7 +1524,7 @@ def _create_flooding_tiles(
 
 
 def _process_flooding_overlay_tile(
-    *, tile: gpd.GeoSeries, layer_paths: list[pathlib.Path], crs: str
+    *, tile: gpd.GeoSeries, layer_paths: dict[str, pathlib.Path], crs: str
 ) -> gpd.GeoDataFrame | None:
     """Process flooding overlay for a single tile."""
     tile_geom = tile.geometry

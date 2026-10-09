@@ -2,14 +2,12 @@
 
 ### LOAD LIBRARIES
 import gc
-import itertools
 import logging
 import os
 import pathlib
 
 import fiona
 import geopandas as gpd
-import networkx as nx
 import osbng
 import pandas as pd
 import py7zr
@@ -1690,6 +1688,8 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
 
 def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean RoFRS and RoFSW data ready for analysis."""
+    if config.parameters.stb == SubnationalTransportBodies.TRANSPORT_SCOTLAND:
+        LOG.warning("Flooding data is unavailable for Scotland.")
     bng_codes = _get_bng_codes(boundary)
     for flooding_type in [FloodingTypes.RIVERS_SEA, FloodingTypes.SURFACE_WATER]:
         for scenario in Scenarios:
@@ -1753,10 +1753,6 @@ def _clean_flooding_layer(
         LOG.debug("Processing tile: %s...", metadata["tile"])
 
         flooding_data = _read_flooding_zip(zip_path, boundary)
-
-        # TODO (DJ): Investigate not clipping to boundary here to keep boundary grid cells
-        # intact, and thus consistent with raster format
-        #flooding_data = clip_to_boundary(flooding_data, boundary)
 
         if flooding_data.empty:
             LOG.debug("%s layer empty. Continuing.", metadata["tile"])

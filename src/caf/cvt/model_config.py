@@ -316,7 +316,7 @@ class Flooding(ctk.BaseConfig):
 
     rivers_sea: pathlib.Path
     surface_water: pathlib.Path
-    groundwater: pathlib.Path
+    #groundwater: pathlib.Path
 
 
 class HazardsConfig(ctk.BaseConfig):
@@ -435,6 +435,8 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to include coastal erosion hazards in the analysis.
     compute_flooding_overlay: bool
         Whether to compute the direct flooding overlay.
+    flooding_index_raster: bool
+        Whether to use the flooding index raster in the analysis.
     noham_zip_extract : bool
         Whether to extract NoHAM zip files.
     """
@@ -467,6 +469,7 @@ class SwitchConfig(ctk.BaseConfig):
     coastal_erosion: bool
 
     compute_flooding_overlay: bool = False
+    flooding_index_raster: bool = False
     noham_zip_extract: bool = False
 
     @pydantic.model_validator(mode="after")
