@@ -37,11 +37,6 @@ LOG = logging.getLogger(__name__)
 
 _DEMAND_WEIGHT = 0.5
 
-_TRAIN_STATIONS_BUFFER_SIZE_M = 25
-_BUS_COACH_STATIONS_BUFFER_SIZE_M = 50
-_TRAM_STATIONS_BUFFER_SIZE_M = 25
-_RAPID_TRANSPORT_STATIONS_BUFFER_SIZE_M = 50
-_FERRY_TERMINALS_BUFFER_SIZE_M = 50
 _METRO_STATION_BUFFER_SIZE_M = 25
 
 _RISK_CATEGORIES = {
@@ -71,8 +66,29 @@ def _aggregate_risk(series: pd.Series) -> float | None:
     return series.max()
 
 
+def _flood_risk_statistic(values: np.array) -> float | None:
+    values = values.compressed()
+    if len(values) == 0:
+        return 0
+    if np.any(np.isnan(values)):
+        return np.nan
+    return values.max()
+
+
+def _infrastructure_flooding_risk_raster(
+    infrastructure_with_risk: gpd.GeoDataFrame,
+    flooding_data: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """Calculate flooding risk for infrastructure using a rasterized flooding layer."""
+    for col, band in _FLOODING_BAND_MAP.items():
+        
+
+    return infrastructure_with_risk
+
 def _infrastructure_risk_intersect(
-    infrastructure_data: gpd.GeoDataFrame, hazards_dict: dict[str, gpd.GeoDataFrame]
+    infrastructure_data: gpd.GeoDataFrame,
+    hazards_dict: dict[str, gpd.GeoDataFrame],
+    config: model_config.Config
 ) -> gpd.GeoDataFrame:
     """Intersect infrastructure with hazard risk layers.
 
@@ -83,6 +99,12 @@ def _infrastructure_risk_intersect(
     infrastructure_with_risk = infrastructure_data.copy()
 
     for _hazard_name, hazard_data in hazards_dict.items():
+        if _hazard_name == MainHazardRiskCols.FLOODING and config.switches.flooding_index_raster:
+            infrastructure_with_risk = _infrastructure_flooding_risk_raster(
+                infrastructure_with_risk,
+                flooding_data=hazard_data,
+            )
+            continue
         # Spatial join to find intersections with hazards
         hazard_gdf_match = hazard_data.to_crs(infrastructure_with_risk.crs)  # Match CRS
         intersections = gpd.sjoin(

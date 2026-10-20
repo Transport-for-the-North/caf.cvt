@@ -19,11 +19,13 @@ from shapely.geometry import Polygon, box
 
 from caf.cvt import data_cleaning, file_paths, model_config
 from caf.cvt.definitions import (
+    BNG_CRS,
     GEOMETRY_COL,
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
     ExtremeWeatherRiskCols,
+    FloodingBands,
     FloodingRiskCols,
     GroundStabilityRiskCols,
     MainHazardRiskCols,
@@ -72,6 +74,22 @@ _FLOODING_RISK_SCORE_MAP = {
     "Low": 0.1,  # 0.1% to 1% chance of flooding
     "Medium": 1,  # 1% to 3.3% chance of flooding
     "High": 3.3,  # Greater than 3.3% chance of flooding
+}
+
+
+_FLOODING_BAND_MAP = {
+    FloodingRiskCols.RIVERS_SEA: (
+        FloodingBands.RIVERS_CURRENT.value,
+        FloodingBands.RIVERS_FORECAST.value,
+    ),
+    FloodingRiskCols.SURFACE_WATER: (
+        FloodingBands.SURFACE_CURRENT.value,
+        FloodingBands.SURFACE_FORECAST.value,
+    ),
+    MainHazardRiskCols.FLOODING: (
+        FloodingBands.FLOODING_CURRENT.value,
+        FloodingBands.FLOODING_FORECAST.value,
+    )
 }
 
 _PLOT_ALPHA_BASEMAP = 0.7
@@ -139,8 +157,6 @@ def min_max_scaling_pair_raster(
     feature_range: tuple[int, int],
 ) -> np.ndarray:
     """Apply min-max scaling to pairs of raster bands in a stack."""
-    stack = stack.astype(float).copy()
-
     out_min, out_max = feature_range
 
     for current_band, forecast_band in pairs:
@@ -182,6 +198,7 @@ def min_max_scaling_pair_raster(
         stack[forecast_band] = forecast_scaled
 
     return stack
+
 
 def _min_max_scaling(
     data: pd.DataFrame,
@@ -395,6 +412,33 @@ def _calculate_composite_score_scenarios(
     return risk_data
 
 
+def _calculate_flooding_composite_raster(
+    raster_stack: np.ndarray, weights: dict[str, float]
+) -> np.ndarray:
+    """Calculate composite score for each scenario in a raster stack."""
+    flooding_current = (
+        raster_stack[FloodingBands.RIVERS_CURRENT.value]
+        * weights[FloodingRiskCols.RIVERS_SEA]
+        + raster_stack[FloodingBands.SURFACE_CURRENT.value]
+        * weights[FloodingRiskCols.SURFACE_WATER]
+    )
+    flooding_forecast = (
+        raster_stack[FloodingBands.RIVERS_FORECAST.value]
+        * weights[FloodingRiskCols.RIVERS_SEA]
+        + raster_stack[FloodingBands.SURFACE_FORECAST.value]
+        * weights[FloodingRiskCols.SURFACE_WATER]
+    )
+
+    return np.concatenate(
+        [
+            raster_stack,
+            flooding_current[np.newaxis],
+            flooding_forecast[np.newaxis]
+        ],
+        axis=0,
+    )
+
+
 def _calculate_composite_score(
     risk_data: pd.DataFrame, weights: dict[str, float], output_col: str
 ) -> pd.DataFrame:
@@ -573,6 +617,45 @@ def plot_choropleth(
     plt.close()
 
 
+def _plot_raster_choropleth(
+    raster: np.ndarray,
+    column: RiskColumn,
+    band_current: int,
+    band_forecast: int,
+    title: str,
+    out_path: pathlib.Path,
+    feature_range: tuple[int, int],
+) -> None:
+    """Plot a raster choropleth for the current and forecast bands."""
+    fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+
+    cmap = column.get_cmap()
+
+    im_current = ax[0].imshow(
+        raster[band_current],
+        cmap=cmap,
+        vmin=feature_range[0],
+        vmax=feature_range[1]
+    )
+
+    im_forecast = ax[1].imshow(
+        raster[band_forecast],
+        cmap=cmap,
+        vmin=feature_range[0],
+        vmax=feature_range[1]
+    )
+
+    ax[0].set_title(f"{title} - {Scenarios.CURRENT.title()}")
+    ax[1].set_title(f"{title} - {Scenarios.FORECAST.title()}")
+    ax[0].set_axis_off()
+    ax[1].set_axis_off()
+
+    fig.colorbar(im_current, ax=ax)
+    plt.tight_layout()
+    plt.savefig(out_path)
+    plt.close()
+
+
 def _validate_index(
     index: gpd.GeoDataFrame, index_vars: list[RiskColumn], feature_range: tuple[int, int]
 ) -> None:
@@ -594,8 +677,25 @@ def _validate_index(
                 )
 
 
+def _validate_raster_index(
+    index: np.ndarray, feature_range: tuple[int, int]
+) -> None:
+    """Validate a given raster index."""
+    na_counts = np.isnan(index).sum()
+    if na_counts > 0:
+        LOG.warning("Raster index contains missing values: %d", na_counts)
+
+    if not np.all(
+        (index[~np.isnan(index)] >= feature_range[0]) &
+        (index[~np.isnan(index)] <= feature_range[1])
+    ):
+        raise ValueError(
+            f"Raster index contains values outside {feature_range[0]}-{feature_range[1]}."
+        )
+
+
 def _audit_index(
-    index: gpd.GeoDataFrame,
+    index: gpd.GeoDataFrame | np.ndarray,
     index_vars: list[RiskColumn],
     out_path: pathlib.Path,
     feature_range: tuple[int, int],
@@ -606,15 +706,38 @@ def _audit_index(
     for var in index_vars:
         # Plot Choropleth Maps for each variable
         plot_choropleth(
-            risk_data=index,
+           risk_data=index,
+           column=var,
+           title=f"{var.replace('_', ' ').title()}",
+           out_path=out_path / f"{var}_choropleth.png",
+           feature_range=feature_range,
+           basemap_source=(
+               "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key="
+               + CARTO_API_KEY
+           ),
+        )
+
+
+def _audit_raster_index(
+    index: np.ndarray,
+    index_vars: list[RiskColumn],
+    out_path: pathlib.Path,
+    feature_range: tuple[int, int],
+) -> None:
+    """Audit a given raster index."""
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    for var in index_vars:
+        band_current, band_forecast = _FLOODING_BAND_MAP[var]
+        # Plot Choropleth Maps for each variable
+        _plot_raster_choropleth(
+            raster=index,
             column=var,
+            band_current=band_current,
+            band_forecast=band_forecast,
             title=f"{var.replace('_', ' ').title()}",
             out_path=out_path / f"{var}_choropleth.png",
             feature_range=feature_range,
-            basemap_source=(
-                "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png?key="
-                + CARTO_API_KEY
-            ),
         )
 
 
@@ -638,27 +761,15 @@ def _rasterize_flood_layer(
         for geom, value
         in zip(flood_risk.geometry, flood_risk[risk_column], strict=False)
     ]
-    raster = rasterize(
+    return rasterize(
         shapes,
         out_shape=(height, width),
         transform=transform,
         fill=0,
-        dtype="int32",
+        dtype="float32",
         all_touched=False, # only take values if cell center is within the polygon
     )
 
-    _write_raster(
-        raster=raster,
-        height=height,
-        width=width,
-        crs=flood_risk.crs,
-        transform=transform,
-        # TODO (DJ): Replace the hardcoded output path with a defined path 
-        output_path=f"D:/Climate Vulnerability Tool/Localisation/v2/Testing/{risk_column}_raster.tif",
-        multiband=False,
-    )
-
-    return raster
 
 
 def _write_raster(
@@ -1281,28 +1392,55 @@ def _flooding_index(
 
 def _flooding_index_raster(
     config: model_config.Config,
-    boundary: gpd.GeoDataFrame,
     audit_path: pathlib.Path,
     flooding_paths: dict[str, pathlib.Path]
 ) -> gpd.GeoDataFrame:
     """Calculate the flooding index using raster data."""
     LOG.info("Calculating flooding index using raster data.")
-    flood_risk_stack = _rasterize_and_stack(flooding_paths)
+    flooding_risk_stack, raster_metadata = _rasterize_and_stack(flooding_paths)
 
-    flood_risk_stack = min_max_scaling_pair_raster(
-        flood_risk_stack,
+    feature_range = (config.constants.score_min, config.constants.score_max)
+    flooding_risk_stack = min_max_scaling_pair_raster(
+        flooding_risk_stack,
         pairs=[(0, 1), (2, 3)],
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=feature_range,
     )
 
+    flooding_risk = _calculate_flooding_composite_raster(
+        flooding_risk_stack,
+        MainHazardRiskCols.FLOODING.get_weights(),
+    )
+
+    _validate_raster_index(
+        flooding_risk, feature_range
+    )
+
+    # TODO (DJ): Auditing flooding index is memory hungry, this function is untested
+    #_audit_raster_index(
+    #    flooding_risk,
+    #    [*FloodingRiskCols, MainHazardRiskCols.FLOODING],
+    #    audit_path / "Flooding" / "Flooding Risk Index",
+    #    feature_range,
+    #)
+
+    _write_raster(
+        raster=flooding_risk,
+        height=raster_metadata["height"],
+        width=raster_metadata["width"],
+        crs=BNG_CRS,
+        transform=raster_metadata["transform"],
+        output_path=(
+            config.paths.model_interim_output /
+            file_paths.FLOODING_RISK_MODEL_INTERIM_OUTPUT_RASTER_PATH,
+        ),
+        multiband=True,
+    )
+
+    LOG.info("Flooding risk index calculation complete.")
 
 
-def _rasterize_and_stack(flooding_paths: dict[str, pathlib.Path]) -> np.ndarray:
-    """Rasterize and stack flood layers from the given paths."""
-    flood_layers = {}
-    for flood_layer_name, flood_path in flooding_paths.items():
-        flood_layers[flood_layer_name] = gpd.read_file(flood_path)
-
+def _get_raster_metadata(flood_layers: dict[str, gpd.GeoDataFrame]) -> dict:
+    """Retrieve metadata needed for rasterizing."""
     all_bounds = np.array([
         flood_layers[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}"].total_bounds,
         flood_layers[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FORECAST}"].total_bounds,
@@ -1323,29 +1461,46 @@ def _rasterize_and_stack(flooding_paths: dict[str, pathlib.Path]) -> np.ndarray:
     transform = rasterio.transform.from_origin(
         global_minx, global_maxy, _FLOODING_PIXEL_SIZE_M, _FLOODING_PIXEL_SIZE_M
     )
+
+    return {
+        "height": height,
+        "width": width,
+        "transform": transform,
+    }
+
+
+def _rasterize_and_stack(flooding_paths: dict[str, pathlib.Path]) -> tuple[np.ndarray, dict]:
+    """Rasterize and stack flood layers from the given paths."""
+    flood_layers = {}
+    for flood_layer_name, flood_path in flooding_paths.items():
+        flood_layers[flood_layer_name] = gpd.read_file(flood_path)
+
+    raster_metadata = _get_raster_metadata(flood_layers)
+
+    flood_layer_rasters = {}
     for flood_layer_name, flood_layer in flood_layers.items():
         # Rasterize each flood layer
         LOG.info("Rasterizing flood layer: %s", flood_layer_name)
-        flood_layer_rasters = _rasterize_flood_layer(
+        raster = _rasterize_flood_layer(
             flood_layer,
             flood_layer_name,
             _FLOODING_RISK_SCORE_MAP,
-            transform,
-            width,
-            height
+            raster_metadata["transform"],
+            raster_metadata["width"],
+            raster_metadata["height"]
         )
-    flood_risk_stack = np.stack(list(flood_layer_rasters.values()), axis=0)
-    _write_raster(
-        raster=flood_risk_stack,
-        height=height,
-        width=width,
-        crs="EPSG:27700",
-        transform=transform,
-        # TODO (DJ): Define this path elsewhere, or remove this write entirely
-        output_path="D:/Climate Vulnerability Tool/Localisation/v2/Testing/flooding_risk_stack_raster.tif",
-        multiband=True,
+        flood_layer_rasters[flood_layer_name] = raster
+
+    flood_risk_stack = np.stack(
+        [
+            flood_layer_rasters[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}"],
+            flood_layer_rasters[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FORECAST}"],
+            flood_layer_rasters[f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}"],
+            flood_layer_rasters[f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}"],
+        ]
     )
-    return flood_risk_stack
+
+    return flood_risk_stack, raster_metadata
 
 
 def _flooding_index_vector(
@@ -1457,7 +1612,6 @@ def _flooding_index_vector(
     )
 
     LOG.info("Flooding risk index calculation complete.")
-    return flooding_risk
 
 
 def _tile_polygon_flooding_overlay(

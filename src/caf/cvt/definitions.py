@@ -122,6 +122,17 @@ class FloodingRiskCols(RiskColumn):
         }
 
 
+class FloodingBands(enum.Enum):
+    """Enumeration for different flood bands."""
+
+    RIVERS_CURRENT = 0
+    RIVERS_FORECAST = 1
+    SURFACE_CURRENT = 2
+    SURFACE_FORECAST = 3
+    FLOODING_CURRENT = 4
+    FLOODING_FORECAST = 5
+
+
 class GroundStabilityRiskCols(RiskColumn):
     """Column definitions for ground stability subhazard layers."""
 
