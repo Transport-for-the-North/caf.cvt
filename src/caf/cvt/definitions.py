@@ -106,7 +106,7 @@ class FloodingRiskCols(RiskColumn):
 
     RIVERS_SEA = "rivers_sea_flooding_risk"
     SURFACE_WATER = "surface_water_flooding_risk"
-    # GROUNDWATER = "groundwater_flooding_risk"
+    # TODO (DJ): Add groundwater flooding column
 
     def get_cmap(self) -> str:
         """Return the appropriate colormap for a given flooding subhazard column."""
@@ -118,7 +118,7 @@ class FloodingRiskCols(RiskColumn):
         return {
             FloodingRiskCols.RIVERS_SEA: 0.5,
             FloodingRiskCols.SURFACE_WATER: 0.5,
-            # FloodingRiskCols.GROUNDWATER: 0.33
+            # TODO (DJ): Add groundwater flooding weighting
         }
 
 
@@ -371,6 +371,7 @@ class OSRoadStructure(enum.StrEnum):
     BRIDGE = "Road On Bridge"
     TUNNEL = "Road In Tunnel"
 
+    # TODO (DJ): Add groundwater flooding to vulnerability modifiers
     def get_vulnerability(self) -> dict[RiskColumn, VulnerabilityModifier]:
         """Return the vulnerability modifiers for the road structure type."""
         mapping = {
@@ -519,6 +520,7 @@ class OSRailStructure(enum.StrEnum):
     TUNNEL = "In Tunnel"
     BUILDING = "In Building"
 
+    # TODO (DJ): Update vulnerability modifiers with groundwater flooding risk
     def get_vulnerability(self) -> dict[RiskColumn, VulnerabilityModifier]:
         """Return the vulnerability modifiers for the rail structure type."""
         mapping: dict[OSRailStructure, dict[RiskColumn, VulnerabilityModifier]] = {

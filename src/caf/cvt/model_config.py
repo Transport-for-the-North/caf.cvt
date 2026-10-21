@@ -311,12 +311,20 @@ class Flooding(ctk.BaseConfig):
     surface_water : pathlib.Path
         Path to the surface water flooding data.
     groundwater : pathlib.Path
-        Path to the groundwater flooding data.
+        Path to the groundwater flooding data, if available.
     """
 
     rivers_sea: pathlib.Path
     surface_water: pathlib.Path
-    #groundwater: pathlib.Path
+    groundwater: pathlib.Path | None = None
+
+    # Empty yaml values are loaded as strings, so need to convert to None
+    @pydantic.field_validator("groundwater", mode="before")
+    @classmethod
+    def _empty_to_none(cls, v: str) -> str | None:
+        if v == "":
+            return None
+        return v
 
 
 class HazardsConfig(ctk.BaseConfig):

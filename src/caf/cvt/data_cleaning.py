@@ -410,6 +410,7 @@ def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
 
 def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean OS Open Roads dataset, then write to file."""
+    # TODO (DJ): #39 Use mm highways data to populate missing road structure in OS roads
     mm_highways = gpd.read_file(
         f"zip://{config.paths.raw_input / config.infrastructure.road.mm_highways.zip_path}!"
         f"{config.infrastructure.road.mm_highways.file_path.as_posix()}",
@@ -1682,7 +1683,8 @@ def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     """Clean flooding data ready for analysis."""
     LOG.info("Cleaning flooding data...")
     _clean_rofrs_rofsw(config, boundary)
-    # _clean_groundwater(config, boundary)
+    if config.hazards.flooding.groundwater is not None:
+        _clean_groundwater(config, boundary)
     LOG.info("Finished cleaning flooding data.")
 
 
@@ -2314,16 +2316,10 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         .reset_index()
     )
 
-    # TODO (DJ): Alter the following slightly when future demand is available
+    # TODO (DJ): #40 Add forecast year link flow data when available, for now just copy
     years = sorted(model_road_uc_link_flows["year"].unique())
-    if len(years) == 1:
-        current_year = years[0]
-        forecast_year = years[0]
-    elif len(years) == 2:
-        current_year = min(years)
-        forecast_year = max(years)
-    else:
-        raise ValueError(f"Expected 1 or 2 years. Found {years}")
+    current_year = years[0]
+    forecast_year = years[0]
 
     current_flows = model_road_uc_link_flows[
         model_road_uc_link_flows["year"] == current_year

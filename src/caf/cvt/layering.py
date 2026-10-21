@@ -10,6 +10,7 @@ import numpy as np
 import openpyxl
 import pandas as pd
 from openpyxl.utils.dataframe import dataframe_to_rows
+from rasterstats import zonal_stats
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config
 from caf.cvt.definitions import (
@@ -66,7 +67,7 @@ def _aggregate_risk(series: pd.Series) -> float | None:
     return series.max()
 
 
-def _flood_risk_statistic(values: np.array) -> float | None:
+def _flooding_risk_statistic(values: np.ma.MaskedArray) -> float | None:
     values = values.compressed()
     if len(values) == 0:
         return 0
@@ -77,13 +78,30 @@ def _flood_risk_statistic(values: np.array) -> float | None:
 
 def _infrastructure_flooding_risk_raster(
     infrastructure_with_risk: gpd.GeoDataFrame,
-    flooding_data: gpd.GeoDataFrame,
+    flooding_path: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """Calculate flooding risk for infrastructure using a rasterized flooding layer."""
-    for col, band in _FLOODING_BAND_MAP.items():
-        
+    for col, (current_band, forecast_band) in functional_rules._FLOODING_BAND_MAP.items():
+        for scenario, band in {
+            Scenarios.CURRENT: current_band,
+            Scenarios.FORECAST: forecast_band
+        }.items():
+            stats = zonal_stats(
+                infrastructure_with_risk,
+                flooding_path,
+                band=band + 1,
+                add_stats={"flooding_risk": _flooding_risk_statistic},
+                all_touched=True,
+                # TODO (DJ): Decide on a nodata value
+                #nodata=np.nan
+            )
+
+            infrastructure_with_risk[f"{col}_{scenario}"] = [
+                stat["flooding_risk"] for stat in stats
+            ]
 
     return infrastructure_with_risk
+
 
 def _infrastructure_risk_intersect(
     infrastructure_data: gpd.GeoDataFrame,
@@ -98,11 +116,15 @@ def _infrastructure_risk_intersect(
     """
     infrastructure_with_risk = infrastructure_data.copy()
 
-    for _hazard_name, hazard_data in hazards_dict.items():
-        if _hazard_name == MainHazardRiskCols.FLOODING and config.switches.flooding_index_raster:
+    for hazard_name, hazard_data in hazards_dict.items():
+        if (hazard_name == MainHazardRiskCols.FLOODING
+            and config.switches.flooding_index_raster):
             infrastructure_with_risk = _infrastructure_flooding_risk_raster(
                 infrastructure_with_risk,
-                flooding_data=hazard_data,
+                flooding_path=(
+                    config.paths.model_interim_output /
+                    file_paths.FLOODING_RISK_MODEL_INTERIM_OUTPUT_RASTER_PATH
+                ),
             )
             continue
         # Spatial join to find intersections with hazards
@@ -376,6 +398,7 @@ def _apply_asset_hazard_weighting(
 
 
 def _create_risk_summary(
+    config: model_config.Config,
     asset_risk: gpd.GeoDataFrame,
     risk_cols: list[str],
     descriptive_cols: list[str],
@@ -434,6 +457,7 @@ def _create_risk_summary(
             continue
         for sub_hazard in MainHazardRiskCols.get_sub_hazards(main_hazard):
             risk_distribution, risk_averages = _fill_risk_summary_column(
+                config,
                 asset_risk_summary,
                 sub_hazard,
                 risk_distribution,
@@ -453,6 +477,7 @@ def _create_risk_summary(
             )
 
         risk_distribution, risk_averages = _fill_risk_summary_column(
+            config,
             asset_risk_summary,
             main_hazard,
             risk_distribution,
@@ -1059,9 +1084,13 @@ def _read_hazard_layers(
         )
     if config.switches.flooding:
         LOG.info("Reading flooding layer.")
-        hazard_layers[MainHazardRiskCols.FLOODING] = gpd.read_file(
-            config.paths.model_interim_output
-            / file_paths.FLOODING_RISK_MODEL_INTERIM_OUTPUT_PATH
+        if config.switches.flooding_index_raster:
+            # Only path is needed if using the raster flooding index
+            hazard_layers[MainHazardRiskCols.FLOODING] = gpd.GeoDataFrame()
+        else:
+            hazard_layers[MainHazardRiskCols.FLOODING] = gpd.read_file(
+                config.paths.model_interim_output
+                / file_paths.FLOODING_RISK_MODEL_INTERIM_OUTPUT_PATH
         )
     if config.switches.ground_stability:
         LOG.info("Reading ground stability layer.")
@@ -1135,7 +1164,7 @@ def _os_open_road_risk(
         LOG.warning("OS Open Roads layer is empty. Skipping.")
         return
 
-    os_road_risk = _infrastructure_risk_intersect(os_road, hazard_layers)
+    os_road_risk = _infrastructure_risk_intersect(os_road, hazard_layers, config)
 
     os_road_risk = _apply_asset_hazard_weighting(
         os_road_risk, AssetTypes.ROAD, hazards=hazard_layers
@@ -1149,6 +1178,7 @@ def _os_open_road_risk(
     )
 
     _create_risk_summary(
+        config,
         os_road_risk,
         risk_cols,
         [
@@ -1213,7 +1243,7 @@ def _noham_road_risk(
         LOG.warning("NoHAM network flows layer is empty. Skipping.")
         return
 
-    noham_risk = _infrastructure_risk_intersect(noham_net_flows, hazard_layers)
+    noham_risk = _infrastructure_risk_intersect(noham_net_flows, hazard_layers, config)
 
     noham_risk = _apply_asset_hazard_weighting(
         noham_risk, AssetTypes.ROAD, hazards=hazard_layers
@@ -1225,6 +1255,7 @@ def _noham_road_risk(
     risk_impact_cols = [*risk_cols, *ImpactCols.get_noham_impact_cols()]
 
     _create_risk_summary(
+        config,
         noham_risk,
         risk_impact_cols,
         [],
@@ -1349,7 +1380,7 @@ def _model_road_risk(
         LOG.warning("Transport model network flows layer is empty. Skipping.")
         return
 
-    model_road_risk = _infrastructure_risk_intersect(model_net_flows, hazard_layers)
+    model_road_risk = _infrastructure_risk_intersect(model_net_flows, hazard_layers, config)
 
     model_road_risk = _apply_asset_hazard_weighting(
         model_road_risk, AssetTypes.ROAD, hazards=hazard_layers
@@ -1363,6 +1394,7 @@ def _model_road_risk(
     risk_impact_cols = [*risk_cols, *ImpactCols]
 
     _create_risk_summary(
+        config,
         model_road_risk,
         risk_impact_cols,
         [],
@@ -1489,7 +1521,7 @@ def _passenger_rail_risk(
         return
 
     passenger_rail_network_risk = _infrastructure_risk_intersect(
-        passenger_rail_network, hazard_layers
+        passenger_rail_network, hazard_layers, config
     )
 
     passenger_rail_network_risk = _apply_asset_hazard_weighting(
@@ -1504,6 +1536,7 @@ def _passenger_rail_risk(
     )
 
     _create_risk_summary(
+        config,
         passenger_rail_network_risk,
         risk_cols,
         OSRailCols.get_descriptive_cols(),
@@ -1569,7 +1602,7 @@ def _freight_rail_risk(
         return
 
     freight_rail_network_risk = _infrastructure_risk_intersect(
-        freight_rail_network, hazard_layers
+        freight_rail_network, hazard_layers, config
     )
 
     freight_rail_network_risk = _apply_asset_hazard_weighting(
@@ -1593,6 +1626,7 @@ def _freight_rail_risk(
     )
 
     _create_risk_summary(
+        config,
         freight_rail_network_risk,
         risk_cols,
         OSRailCols.get_descriptive_cols(),
@@ -1753,7 +1787,7 @@ def _train_stations_risk(
         LOG.warning("Train stations layer is empty. Skipping.")
         return
 
-    train_stations_risk = _infrastructure_risk_intersect(train_stations, hazard_layers)
+    train_stations_risk = _infrastructure_risk_intersect(train_stations, hazard_layers, config)
 
     _audit_infrastructure_risk(
         train_stations_risk,
@@ -1804,7 +1838,7 @@ def _airports_risk(
         LOG.warning("Airports layer is empty. Skipping.")
         return
 
-    airports_risk = _infrastructure_risk_intersect(airports, hazard_layers)
+    airports_risk = _infrastructure_risk_intersect(airports, hazard_layers, config)
 
     _audit_infrastructure_risk(
         airports_risk,
@@ -1854,7 +1888,9 @@ def _bus_coach_stations_risk(
         LOG.warning("Bus and coach stations layer is empty. Skipping.")
         return
 
-    bus_coach_stations_risk = _infrastructure_risk_intersect(bus_coach_stations, hazard_layers)
+    bus_coach_stations_risk = _infrastructure_risk_intersect(
+        bus_coach_stations, hazard_layers, config
+    )
 
     _audit_infrastructure_risk(
         bus_coach_stations_risk,
@@ -1905,7 +1941,7 @@ def _bus_stops_risk(
         LOG.warning("Bus stops layer is empty. Skipping.")
         return
 
-    bus_stops_risk = _infrastructure_risk_intersect(bus_stops, hazard_layers)
+    bus_stops_risk = _infrastructure_risk_intersect(bus_stops, hazard_layers, config)
 
     _audit_infrastructure_risk(
         bus_stops_risk,
@@ -1958,7 +1994,7 @@ def _tram_stations_risk(
         LOG.warning("Tram stations layer is empty. Skipping.")
         return
 
-    tram_stations_risk = _infrastructure_risk_intersect(tram_stations, hazard_layers)
+    tram_stations_risk = _infrastructure_risk_intersect(tram_stations, hazard_layers, config)
 
     _audit_infrastructure_risk(
         tram_stations_risk,
@@ -2013,7 +2049,7 @@ def _rapid_transport_stations_risk(
         return
 
     rapid_transport_stations_risk = _infrastructure_risk_intersect(
-        rapid_transport_stations, hazard_layers
+        rapid_transport_stations, hazard_layers, config
     )
 
     _audit_infrastructure_risk(
@@ -2067,7 +2103,9 @@ def _ferry_terminals_risk(
         LOG.warning("Ferry terminals layer is empty. Skipping.")
         return
 
-    ferry_terminals_risk = _infrastructure_risk_intersect(ferry_terminals, hazard_layers)
+    ferry_terminals_risk = _infrastructure_risk_intersect(
+        ferry_terminals, hazard_layers, config
+    )
 
     _audit_infrastructure_risk(
         ferry_terminals_risk,
@@ -2117,9 +2155,10 @@ def _ncn_risk(
         LOG.warning("National Cycle Network layer is empty. Skipping.")
         return
 
-    ncn_risk = _infrastructure_risk_intersect(ncn, hazard_layers)
+    ncn_risk = _infrastructure_risk_intersect(ncn, hazard_layers, config)
 
     _create_risk_summary(
+        config,
         ncn_risk,
         risk_cols,
         [
@@ -2182,7 +2221,7 @@ def _tram_network_risk(
         LOG.warning("Tram network layer is empty. Skipping.")
         return
 
-    tram_risk = _infrastructure_risk_intersect(tram_network, hazard_layers)
+    tram_risk = _infrastructure_risk_intersect(tram_network, hazard_layers, config)
 
     tram_risk = _apply_asset_vulnerability(
         tram_risk,
@@ -2192,6 +2231,7 @@ def _tram_network_risk(
     )
 
     _create_risk_summary(
+        config,
         tram_risk,
         risk_cols,
         OSRailCols.get_descriptive_cols(),
@@ -2251,7 +2291,9 @@ def _rapid_transport_network_risk(
         LOG.warning("Rapid transport network layer is empty. Skipping.")
         return
 
-    rapid_transport_risk = _infrastructure_risk_intersect(rapid_transport, hazard_layers)
+    rapid_transport_risk = _infrastructure_risk_intersect(
+        rapid_transport, hazard_layers, config
+    )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
 
@@ -2263,6 +2305,7 @@ def _rapid_transport_network_risk(
     )
 
     _create_risk_summary(
+        config,
         rapid_transport_risk,
         risk_cols,
         OSRailCols.get_descriptive_cols(),
@@ -2344,13 +2387,14 @@ def _nexus_metro_links_risk(
         columns={"id": "nexus_id", "metro_link_id": "id"}
     )
 
-    metro_links_risk = _infrastructure_risk_intersect(metro_link_flows, hazard_layers)
+    metro_links_risk = _infrastructure_risk_intersect(metro_link_flows, hazard_layers, config)
 
     feature_range = (config.constants.score_min, config.constants.score_max)
 
     metro_links_risk = _metro_impact_index(metro_links_risk, feature_range)
 
     _create_risk_summary(
+        config,
         metro_links_risk,
         risk_cols,
         ["Ownership", "extension"],
@@ -2445,7 +2489,7 @@ def _nexus_metro_stations_risk(
 
     metro_stations = _buffer_geometry(metro_stations, _METRO_STATION_BUFFER_SIZE_M)
 
-    metro_stations_risk = _infrastructure_risk_intersect(metro_stations, hazard_layers)
+    metro_stations_risk = _infrastructure_risk_intersect(metro_stations, hazard_layers, config)
 
     feature_range = (config.constants.score_min, config.constants.score_max)
 
