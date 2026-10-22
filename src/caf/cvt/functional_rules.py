@@ -1411,7 +1411,7 @@ def _flooding_index_raster(
         flooding_risk, feature_range
     )
 
-    # TODO (DJ): Auditing flooding index is memory hungry, this function is untested
+    # TODO (DJ): #42 Auditing flooding index is memory hungry, this function is untested
     if _AUDIT_FLOODING_INDEX:
         _audit_raster_index(
             flooding_risk,

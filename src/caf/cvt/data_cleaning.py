@@ -5,6 +5,7 @@ import gc
 import logging
 import os
 import pathlib
+import zipfile
 
 import fiona
 import geopandas as gpd
@@ -30,6 +31,7 @@ from caf.cvt.definitions import (
     MasterMapFunction,
     MasterMapFunctionStatus,
     MasterMapFunctionTheme,
+    MasterMapHighwaysCols,
     MasterMapSiteCols,
     MasterMapStakeholder,
     NaPTANCols,
@@ -41,6 +43,8 @@ from caf.cvt.definitions import (
     OSRailRailwayUse,
     OSRailTrackRepresentation,
     OSRoadCols,
+    OSRoadLookupCols,
+    OSRoadStructure,
     Scenarios,
     StormCols,
     SubnationalTransportBodies,
@@ -410,23 +414,15 @@ def _clean_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> Non
 
 def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean OS Open Roads dataset, then write to file."""
-    # TODO (DJ): #39 Use mm highways data to populate missing road structure in OS roads
-    mm_highways = gpd.read_file(
-        f"zip://{config.paths.raw_input / config.infrastructure.road.mm_highways.zip_path}!"
-        f"{config.infrastructure.road.mm_highways.file_path.as_posix()}",
-        # mask=boundary,
-        columns=["toid", "road_structure"],
-        layer="road_link",
-        ignore_geometry=True,
-    )
-
     os_road = gpd.read_file(
         f"zip://{config.paths.raw_input / config.infrastructure.road.os_road.zip_path}!"
         f"{config.infrastructure.road.os_road.file_path.as_posix()}",
-        mask=boundary,
+        #mask=boundary,
         columns=[col.value for col in OSRoadCols],
         layer=OSRoadCols.get_layer_name(),
+        #rows=1000
     )
+    os_road = _populate_os_road_structure(config, os_road)
     len_before_filter = len(os_road)
     os_road = os_road.drop_duplicates(subset=[OSRoadCols.ID, GEOMETRY_COL])
     os_road = os_road.rename(columns={OSRoadCols.ID: ID_COL})
@@ -444,6 +440,84 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         os_road,
         config.paths.model_input / file_paths.OS_ROAD_MODEL_INPUT_PATH,
     )
+
+
+def _populate_os_road_structure(
+        config: model_config.Config,
+        os_road: gpd.GeoDataFrame
+    ) -> gpd.GeoDataFrame:
+    """Populate OS road structure column based on MasterMap Highways data."""
+    # TODO (DJ): #39 Use mm highways data to populate missing road structure in OS roads
+    mm_highways = gpd.read_file(
+        f"zip://{config.paths.raw_input / config.infrastructure.road.mm_highways.zip_path}!"
+        f"{config.infrastructure.road.mm_highways.file_path.as_posix()}",
+        columns=[
+            MasterMapHighwaysCols.ID,
+            MasterMapHighwaysCols.ROAD_STRUCTURE,
+            MasterMapHighwaysCols.START_GRADE_SEPARATION,
+            MasterMapHighwaysCols.END_GRADE_SEPARATION
+        ],
+        layer=MasterMapHighwaysCols.get_layer_name(),
+        ignore_geometry=True,
+#        rows=10000
+    )
+
+    # Filter to only include bridges (grade separation >= 1 and not tunnels)
+    mm_highways = mm_highways[
+        ((mm_highways[MasterMapHighwaysCols.START_GRADE_SEPARATION] >= 1) |
+        (mm_highways[MasterMapHighwaysCols.END_GRADE_SEPARATION] >= 1)) &
+        (mm_highways[MasterMapHighwaysCols.ROAD_STRUCTURE] != OSRoadStructure.TUNNEL)
+    ]
+    mm_highways[MasterMapHighwaysCols.ROAD_STRUCTURE] = OSRoadStructure.BRIDGE
+
+    with (
+        zipfile.ZipFile(
+        config.paths.raw_input / config.infrastructure.road.os_road_lookup.outer_zip_path
+    ) as outer,
+        outer.open(
+            config.infrastructure.road.os_road_lookup.inner_zip_path.as_posix()
+        ) as inner_zip_bytes,
+        zipfile.ZipFile(inner_zip_bytes) as inner,
+        inner.open(
+            config.infrastructure.road.os_road_lookup.file_path.as_posix()
+        ) as csv_file,
+    ):
+        os_road_lookup = pd.read_csv(
+            csv_file,
+            usecols=[OSRoadLookupCols.MASTERMAP_ID, OSRoadLookupCols.OS_OPEN_ROADS_ID]
+        )
+
+    bridges_in_mm = len(mm_highways)
+    os_road_lookup = os_road_lookup[
+        os_road_lookup[OSRoadLookupCols.MASTERMAP_ID].isin(mm_highways[MasterMapHighwaysCols.ID])
+    ]
+    LOG.info(
+        "Bridges in MasterMap missing from OS Road Lookup: %s",
+        bridges_in_mm - len(os_road_lookup)
+    )
+
+    # OS Road Lookup contains duplicates,
+    # where one MasterMap ID may map to multiple OS Open Roads IDs.
+    mm_highways = mm_highways[
+        [MasterMapHighwaysCols.ID, MasterMapHighwaysCols.ROAD_STRUCTURE]
+    ].merge(
+        os_road_lookup,
+        left_on=MasterMapHighwaysCols.ID,
+        right_on=OSRoadLookupCols.MASTERMAP_ID,
+        how="left",
+        validate="many_to_one" # Check this
+    )
+
+    os_road = os_road.merge(
+        mm_highways,
+        left_on=OSRoadCols.ID,
+        right_on=OSRoadLookupCols.OS_OPEN_ROADS_ID,
+        how="left",
+        validate="many_to_one" # Check this
+    )
+
+    return os_road
+
 
 
 def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:

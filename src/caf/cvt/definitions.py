@@ -106,7 +106,7 @@ class FloodingRiskCols(RiskColumn):
 
     RIVERS_SEA = "rivers_sea_flooding_risk"
     SURFACE_WATER = "surface_water_flooding_risk"
-    # TODO (DJ): Add groundwater flooding column
+    # TODO (DJ): #41 Add groundwater flooding column
 
     def get_cmap(self) -> str:
         """Return the appropriate colormap for a given flooding subhazard column."""
@@ -118,7 +118,7 @@ class FloodingRiskCols(RiskColumn):
         return {
             FloodingRiskCols.RIVERS_SEA: 0.5,
             FloodingRiskCols.SURFACE_WATER: 0.5,
-            # TODO (DJ): Add groundwater flooding weighting
+            # TODO (DJ): #41 Add groundwater flooding weighting
         }
 
 
@@ -371,7 +371,7 @@ class OSRoadStructure(enum.StrEnum):
     BRIDGE = "Road On Bridge"
     TUNNEL = "Road In Tunnel"
 
-    # TODO (DJ): Add groundwater flooding to vulnerability modifiers
+    # TODO (DJ): #41 Add groundwater flooding to vulnerability modifiers
     def get_vulnerability(self) -> dict[RiskColumn, VulnerabilityModifier]:
         """Return the vulnerability modifiers for the road structure type."""
         mapping = {
@@ -520,7 +520,7 @@ class OSRailStructure(enum.StrEnum):
     TUNNEL = "In Tunnel"
     BUILDING = "In Building"
 
-    # TODO (DJ): Update vulnerability modifiers with groundwater flooding risk
+    # TODO (DJ): #41 Update vulnerability modifiers with groundwater flooding risk
     def get_vulnerability(self) -> dict[RiskColumn, VulnerabilityModifier]:
         """Return the vulnerability modifiers for the rail structure type."""
         mapping: dict[OSRailStructure, dict[RiskColumn, VulnerabilityModifier]] = {
@@ -735,3 +735,24 @@ class AssetTypes(enum.StrEnum):
                 }
             return default_weights
         raise ValueError(f"Unknown asset type: {self}")
+
+
+class MasterMapHighwaysCols(enum.StrEnum):
+    """Column definitions for MasterMap Highways."""
+
+    ID = "toid"
+    ROAD_STRUCTURE = "road_structure"
+    START_GRADE_SEPARATION = "start_grade_separation"
+    END_GRADE_SEPARATION = "end_grade_separation"
+
+    @classmethod
+    def get_layer_name(cls) -> str:
+        """Return the name of the layer for OS roads."""
+        return "road_link"
+
+
+class OSRoadLookupCols(enum.StrEnum):
+    """Column definitions for OS Road Lookup."""
+
+    MASTERMAP_ID = "Roadlink_Id"
+    OS_OPEN_ROADS_ID = "OSOpenRoads_RoadLinkIdentifier"

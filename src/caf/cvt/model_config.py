@@ -21,9 +21,25 @@ class ZipFileEntry(ctk.BaseConfig):
     """
 
     zip_path: pathlib.Path
-    """Path to the zip file"""
     file_path: pathlib.Path
-    """Path within the zip file."""
+
+
+class NestedZipFileEntry(ctk.BaseConfig):
+    """Configuration for a nested zip file entry.
+
+    Attributes
+    ----------
+    outer_zip_path : pathlib.Path
+        Path to the outer zip file.
+    inner_zip_path : pathlib.Path
+        Path to the inner zip file within the outer zip.
+    file_path : pathlib.Path
+        Path to the file within the inner zip file.
+    """
+
+    outer_zip_path: pathlib.Path
+    inner_zip_path: pathlib.Path
+    file_path: pathlib.Path
 
 
 # -------------------------
@@ -149,8 +165,8 @@ class Road(ctk.BaseConfig):
     ----------
     os_road : ZipFileEntry
         Configuration for the OS road zip file entry.
-    os_road_lookup: ZipFileEntry
-        Configuration for the OS road lookup zip file entry.
+    os_road_lookup: NestedZipFileEntry
+        Configuration for the nested OS road lookup zip file entry.
     mm_highways: ZipFileEntry
         Configuration for the MasterMap Highways Network zip file entry.
     noham: NoHAMEntry
@@ -160,7 +176,7 @@ class Road(ctk.BaseConfig):
     """
 
     os_road: ZipFileEntry
-    os_road_lookup: ZipFileEntry
+    os_road_lookup: NestedZipFileEntry
     mm_highways: ZipFileEntry
     noham: NoHAMEntry
     model_roads: ModelRoadsEntry

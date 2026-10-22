@@ -71,7 +71,7 @@ def _flooding_risk_statistic(values: np.ma.MaskedArray) -> float | None:
     values = values.compressed()
     if len(values) == 0:
         return 0
-    if np.any(np.isnan(values)):
+    if np.any(values == functional_rules._RASTER_UNAVAILABLE):
         return np.nan
     return values.max()
 
@@ -92,8 +92,7 @@ def _infrastructure_flooding_risk_raster(
                 band=band + 1,
                 add_stats={"flooding_risk": _flooding_risk_statistic},
                 all_touched=True,
-                # TODO (DJ): Decide on a nodata value
-                #nodata=np.nan
+                nodata=-999
             )
 
             infrastructure_with_risk[f"{col}_{scenario}"] = [
@@ -357,17 +356,19 @@ def _apply_asset_vulnerability(
         for hazard, modifier in structure.get_vulnerability().items():
             risk_cols = [col for col in risk_data.columns if hazard in col]
             for risk_col in risk_cols:
+                dtype = risk_data[risk_col].dtype
                 risk_data.loc[mask, risk_col] = (
                     risk_data.loc[mask, risk_col] * modifier
-                ).clip(lower=feature_range[0], upper=feature_range[1])
+                ).clip(lower=feature_range[0], upper=feature_range[1]).astype(dtype)
 
         main_hazard_modifiers = _get_main_hazard_modifiers(vulnerabilities)
         for main_hazard, modifier in main_hazard_modifiers.items():
             risk_cols = [col for col in risk_data.columns if main_hazard in col]
             for risk_col in risk_cols:
+                dtype = risk_data[risk_col].dtype
                 risk_data.loc[mask, risk_col] = (
                     risk_data.loc[mask, risk_col] * modifier
-                ).clip(lower=feature_range[0], upper=feature_range[1])
+                ).clip(lower=feature_range[0], upper=feature_range[1]).astype(dtype)
     return risk_data
 
 
