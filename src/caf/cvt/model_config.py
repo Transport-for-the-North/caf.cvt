@@ -212,7 +212,6 @@ class Other(ctk.BaseConfig):
     mastermap_sites: ZipFileEntry
 
 
-
 class InfrastructureConfig(ctk.BaseConfig):
     """Configuration for infrastructure data.
 

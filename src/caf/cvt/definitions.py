@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import enum
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import openpyxl
 
 # GLOBAL CONSTANTS
 
@@ -290,7 +295,6 @@ class DemandCols(RiskColumn):
     """Column definitions for demand cold layers."""
 
     DEMAND = "demand"
-
 
 
 class ImpactCols(RiskColumn):
@@ -763,6 +767,8 @@ class ColourMaps(enum.StrEnum):
 
     GREEN_YELLOW_RED = "RdYlGn_r"
     ORANGES = "Oranges"
+    ROYAL_BLUE = "royalblue"
+    DARK_ORANGE = "darkorange"
 
 
 class HexColourCodes(enum.StrEnum):
@@ -774,3 +780,31 @@ class HexColourCodes(enum.StrEnum):
     GREY = "808080"
     LIGHT_GREEN = "90ee90"
     PALE_VIOLET_RED = "db7093"
+    DARK_BLUE = "00008b"
+    TEAL = "008080"
+    GOLD = "ffd700"
+    DARK_ORANGE = "ff8c00"
+    RED = "F8696B"
+    DARK_RED = "8b0000"
+    GREEN = "63BE7B"
+    YELLOW = "FFEB84"
+
+
+class RiskCategories(enum.StrEnum):
+    """Risk category definitions."""
+
+    VERY_HIGH = "Very High"
+    HIGH = "High"
+    MEDIUM = "Medium"
+    LOW = "Low"
+    VERY_LOW = "Very Low"
+
+
+@dataclass
+class CellStyle:
+    """Cell style definitions for risk summary spreadsheet."""
+
+    fill_colour: str
+    text_colour: str
+    bold: bool
+    border: openpyxl.styles.Border | None

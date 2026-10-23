@@ -71,6 +71,7 @@ SOUTH_HYLTON_TO_STATION_ID = 31
 
 # GENERAL FUNCTIONS
 
+
 def _first_not_null(series: pd.Series) -> int | None:
     """Return the first non-null value in a pandas Series."""
     values = series.dropna()
@@ -91,29 +92,18 @@ def _clean_nexus_metro() -> None:
 
     metro_links = _split_metro_links(metro_links, snapped_metro_stations)
 
-    metro_links.to_file(
-        MODEL_INPUT_PATH / NEXUS_METRO_LINKS_MODEL_INPUT_PATH,
-        driver="GPKG"
-    )
+    metro_links.to_file(MODEL_INPUT_PATH / NEXUS_METRO_LINKS_MODEL_INPUT_PATH, driver="GPKG")
     snapped_metro_stations.to_file(
-        MODEL_INPUT_PATH / NEXUS_METRO_STATIONS_MODEL_INPUT_PATH,
-        driver="GPKG"
+        MODEL_INPUT_PATH / NEXUS_METRO_STATIONS_MODEL_INPUT_PATH, driver="GPKG"
     )
-
 
 
 def _aggregate_metro_links() -> gpd.GeoDataFrame:
     """Aggregate existing and extension metro links."""
-    metro_links = gpd.read_file(
-        METRO_LINES_PATH,
-        columns=["OBJECTID_1", "Ownership"]
-    )
+    metro_links = gpd.read_file(METRO_LINES_PATH, columns=["OBJECTID_1", "Ownership"])
     metro_links["extension"] = False
 
-    metro_ext_lines = gpd.read_file(
-        METRO_EXT_LINES_PATH,
-        columns=["Section"]
-    )
+    metro_ext_lines = gpd.read_file(METRO_EXT_LINES_PATH, columns=["Section"])
     metro_ext_lines = metro_ext_lines.explode(index_parts=False).reset_index(drop=True)
     metro_ext_lines["extension"] = True
     metro_ext_lines["Ownership"] = None
@@ -135,10 +125,7 @@ def _aggregate_metro_stations() -> gpd.GeoDataFrame:
     )
     metro_stations["extension"] = False
 
-    metro_ext_stations = gpd.read_file(
-        METRO_EXT_STATIONS_PATH,
-        columns=["StationName"]
-    )
+    metro_ext_stations = gpd.read_file(METRO_EXT_STATIONS_PATH, columns=["StationName"])
     metro_ext_stations = metro_ext_stations.rename(columns={"StationName": "Name"})
     metro_ext_stations["OBJECTID"] = range(
         max(metro_stations["OBJECTID"]) + 1,
@@ -300,36 +287,31 @@ def _manual_metro_adjustments(metro_links: gpd.GeoDataFrame) -> gpd.GeoDataFrame
 
     # Assign from and to stations
     metro_links.loc[
-        metro_links["metro_link_id"] == SOUTH_GOSFORTH_LINK_ID,
-        "from_station_id"
+        metro_links["metro_link_id"] == SOUTH_GOSFORTH_LINK_ID, "from_station_id"
     ] = SOUTH_GOSFORTH_FROM_STATION_ID
     metro_links.loc[
-        metro_links["metro_link_id"] == SOUTH_GOSFORTH_LINK_ID,
-        "from_station_name"
+        metro_links["metro_link_id"] == SOUTH_GOSFORTH_LINK_ID, "from_station_name"
     ] = "South Gosforth"
 
-    metro_links.loc[
-        metro_links["metro_link_id"] == PELAW_LINK_ID,
-        "from_station_id"
-    ] = PELAW_FROM_STATION_ID
-    metro_links.loc[
-        metro_links["metro_link_id"] == PELAW_LINK_ID,
-        "from_station_name"
-    ] = "Pelaw"
+    metro_links.loc[metro_links["metro_link_id"] == PELAW_LINK_ID, "from_station_id"] = (
+        PELAW_FROM_STATION_ID
+    )
+    metro_links.loc[metro_links["metro_link_id"] == PELAW_LINK_ID, "from_station_name"] = (
+        "Pelaw"
+    )
 
+    metro_links.loc[metro_links["metro_link_id"] == SOUTH_HYLTON_LINK_ID, "to_station_id"] = (
+        SOUTH_HYLTON_TO_STATION_ID
+    )
     metro_links.loc[
-        metro_links["metro_link_id"] == SOUTH_HYLTON_LINK_ID,
-        "to_station_id"
-    ] = SOUTH_HYLTON_TO_STATION_ID
-    metro_links.loc[
-        metro_links["metro_link_id"] == SOUTH_HYLTON_LINK_ID,
-        "to_station_name"
+        metro_links["metro_link_id"] == SOUTH_HYLTON_LINK_ID, "to_station_name"
     ] = "South Hylton"
 
     return metro_links
 
 
 # METRO DEMAND FUNCTIONS
+
 
 def _clean_nexus_demand() -> None:
     """Clean nexus infrastructure demand data."""
@@ -406,8 +388,7 @@ def _clean_nexus_demand() -> None:
     metro_flows = _map_demand_to_metro_links(demand)
 
     metro_flows.to_file(
-        MODEL_INPUT_PATH / NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH,
-        driver="GPKG"
+        MODEL_INPUT_PATH / NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH, driver="GPKG"
     )
 
     return metro_flows
@@ -427,13 +408,9 @@ def _aggregate_nexus_demand(demand: pd.DataFrame) -> pd.DataFrame:
     ].sum()
 
 
-def _map_demand_to_metro_links(
-    demand: pd.DataFrame
-) -> gpd.GeoDataFrame:
+def _map_demand_to_metro_links(demand: pd.DataFrame) -> gpd.GeoDataFrame:
     """Map aggregated nexus demand onto metro network links."""
-    metro_network = gpd.read_file(
-        MODEL_INPUT_PATH / NEXUS_METRO_LINKS_MODEL_INPUT_PATH
-    )
+    metro_network = gpd.read_file(MODEL_INPUT_PATH / NEXUS_METRO_LINKS_MODEL_INPUT_PATH)
 
     routable_network = metro_network[
         metro_network["from_station_id"].notna() & metro_network["to_station_id"].notna()
@@ -464,12 +441,8 @@ def _map_demand_to_metro_links(
 
         # Add OD demand onto each metro link along the shortest path
         for u, v in itertools.pairwise(path):
-            metro_graph[u][v][f"demand_{CURRENT}"] += row[
-                f"Demand_{CURRENT}"
-            ]
-            metro_graph[u][v][f"demand_{FORECAST}"] += row[
-                f"Demand_{FORECAST}"
-            ]
+            metro_graph[u][v][f"demand_{CURRENT}"] += row[f"Demand_{CURRENT}"]
+            metro_graph[u][v][f"demand_{FORECAST}"] += row[f"Demand_{FORECAST}"]
 
     # Write the flows back to the network
     demand_lookup = {}
