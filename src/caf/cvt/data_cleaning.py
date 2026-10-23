@@ -420,7 +420,7 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         #mask=boundary,
         columns=[col.value for col in OSRoadCols],
         layer=OSRoadCols.get_layer_name(),
-        #rows=1000
+        rows=500000
     )
     os_road = _populate_os_road_structure(config, os_road)
     len_before_filter = len(os_road)
@@ -459,7 +459,7 @@ def _populate_os_road_structure(
         ],
         layer=MasterMapHighwaysCols.get_layer_name(),
         ignore_geometry=True,
-#        rows=10000
+        rows=500000
     )
 
     # Filter to only include bridges (grade separation >= 1 and not tunnels)
@@ -468,7 +468,7 @@ def _populate_os_road_structure(
         (mm_highways[MasterMapHighwaysCols.END_GRADE_SEPARATION] >= 1)) &
         (mm_highways[MasterMapHighwaysCols.ROAD_STRUCTURE] != OSRoadStructure.TUNNEL)
     ]
-    mm_highways[MasterMapHighwaysCols.ROAD_STRUCTURE] = OSRoadStructure.BRIDGE
+    mm_highways.loc[:, MasterMapHighwaysCols.ROAD_STRUCTURE] = OSRoadStructure.BRIDGE
 
     with (
         zipfile.ZipFile(
@@ -493,30 +493,53 @@ def _populate_os_road_structure(
     ]
     LOG.info(
         "Bridges in MasterMap missing from OS Road Lookup: %s",
-        bridges_in_mm - len(os_road_lookup)
+        bridges_in_mm - os_road_lookup[OSRoadLookupCols.MASTERMAP_ID].nunique()
     )
+    os_road_lookup = os_road_lookup[~os_road_lookup[OSRoadLookupCols.OS_OPEN_ROADS_ID].isna()]
 
     # OS Road Lookup contains duplicates,
     # where one MasterMap ID may map to multiple OS Open Roads IDs.
-    mm_highways = mm_highways[
-        [MasterMapHighwaysCols.ID, MasterMapHighwaysCols.ROAD_STRUCTURE]
-    ].merge(
-        os_road_lookup,
-        left_on=MasterMapHighwaysCols.ID,
-        right_on=OSRoadLookupCols.MASTERMAP_ID,
-        how="left",
-        validate="many_to_one" # Check this
+    mm_highways = (
+        mm_highways[[MasterMapHighwaysCols.ID, MasterMapHighwaysCols.ROAD_STRUCTURE]]
+        .merge(
+            os_road_lookup,
+            left_on=MasterMapHighwaysCols.ID,
+            right_on=OSRoadLookupCols.MASTERMAP_ID,
+            how="right",
+            validate="one_to_many"
+        )
+        .drop(columns=[OSRoadLookupCols.MASTERMAP_ID, MasterMapHighwaysCols.ID])
+        .drop_duplicates(subset=[OSRoadLookupCols.OS_OPEN_ROADS_ID])
     )
 
-    os_road = os_road.merge(
-        mm_highways,
-        left_on=OSRoadCols.ID,
-        right_on=OSRoadLookupCols.OS_OPEN_ROADS_ID,
-        how="left",
-        validate="many_to_one" # Check this
+    return (
+        os_road
+        .merge(
+            mm_highways,
+            left_on=OSRoadCols.ID,
+            right_on=OSRoadLookupCols.OS_OPEN_ROADS_ID,
+            how="left",
+            suffixes=("_os", "_mm"),
+            validate="one_to_one"
+        )
+        .assign(
+            **{
+                OSRoadCols.ROAD_STRUCTURE: lambda df: df[
+                    f"{OSRoadCols.ROAD_STRUCTURE}_os"
+                ].combine_first(
+                    df[f"{OSRoadCols.ROAD_STRUCTURE}_mm"]
+                )
+            }
+        )
+        .drop(
+            columns=[
+                OSRoadLookupCols.OS_OPEN_ROADS_ID,
+                f"{OSRoadCols.ROAD_STRUCTURE}_os",
+                f"{OSRoadCols.ROAD_STRUCTURE}_mm"
+            ]
+        )
     )
 
-    return os_road
 
 
 

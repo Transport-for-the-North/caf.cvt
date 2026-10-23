@@ -17,6 +17,7 @@ from caf.cvt.definitions import (
     GEOMETRY_COL,
     ID_COL,
     AssetTypes,
+    ColourMaps,
     DemandCols,
     ExtremeWeatherRiskCols,
     FloodingRiskCols,
@@ -855,8 +856,8 @@ def _write_risk_averages(
 ) -> openpyxl.Workbook:
     """Write risk averages data and plots to an Excel workbook sheet."""
     ws = workbook.create_sheet(title="Risk Averages")
-    gn_yl_red_cmap = mpl.colormaps["RdYlGn_r"]
-    oranges_cmap = mpl.colormaps["Oranges"]
+    gn_yl_red_cmap = mpl.colormaps[ColourMaps.GREEN_YELLOW_RED]
+    oranges_cmap = mpl.colormaps[ColourMaps.ORANGES]
 
     # Write risk averages data to the sheet
     for r_idx, row in enumerate(dataframe_to_rows(risk_averages, index=False, header=True), 1):

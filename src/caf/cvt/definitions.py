@@ -756,3 +756,21 @@ class OSRoadLookupCols(enum.StrEnum):
 
     MASTERMAP_ID = "Roadlink_Id"
     OS_OPEN_ROADS_ID = "OSOpenRoads_RoadLinkIdentifier"
+
+
+class ColourMaps(enum.StrEnum):
+    """Matplotlib colour map definitions."""
+
+    GREEN_YELLOW_RED = "RdYlGn_r"
+    ORANGES = "Oranges"
+
+
+class HexColourCodes(enum.StrEnum):
+    """Hex colour code definitions."""
+
+    BLACK = "000000"
+    WHITE = "FFFFFF"
+    DARK_GREY = "a9a9a9"
+    GREY = "808080"
+    LIGHT_GREEN = "90ee90"
+    PALE_VIOLET_RED = "db7093"
