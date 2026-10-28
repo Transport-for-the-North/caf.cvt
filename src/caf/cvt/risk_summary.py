@@ -263,8 +263,7 @@ def _fill_risk_summary_column(
             config, asset_risk, risk_column, total_length
         ).items():
             risk_distribution.loc[
-                risk_distribution["Risk Category"] == category,
-                out_risk_column
+                risk_distribution["Risk Category"] == category, out_risk_column
             ] = pct
 
         length_weighted_avgs[scenario] = round(
@@ -307,12 +306,7 @@ def _calculate_risk_distribution_percentages(
             mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] <= upper)
         else:
             mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] < upper)
-        percentages.append(
-            (
-                asset_risk.loc[mask, _LENGTH_M_COL].sum()
-                / total_length
-            ) * 100
-        )
+        percentages.append((asset_risk.loc[mask, _LENGTH_M_COL].sum() / total_length) * 100)
         categories.append(category)
 
     floored_pcts = [int(pct) for pct in percentages]

@@ -819,6 +819,7 @@ class CellStyle:
     bold: bool
     border: openpyxl.styles.Border | None
 
+
 # CONSTANTS (That depend on class definitions)
 
 FLOODING_BAND_MAP: dict[RiskColumn, tuple[int, int]] = {
