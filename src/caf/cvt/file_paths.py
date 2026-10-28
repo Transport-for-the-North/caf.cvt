@@ -2,7 +2,7 @@
 
 import pathlib
 
-from caf.cvt import functional_rules
+from caf.cvt.definitions import FLOODING_TILE_SIZE_M
 
 # Infrastructure Model Inputs Paths
 
@@ -132,7 +132,7 @@ EXTREME_WEATHER_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
 )
 
 TILE_GRID_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
-    f"Flooding Risk/flooding_tiles_{functional_rules._FLOODING_TILE_SIZE_M}m.gpkg"
+    f"Flooding Risk/flooding_tiles_{FLOODING_TILE_SIZE_M}m.gpkg"
 )
 FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH = pathlib.Path(
     "Flooding Risk/flooding_risk_tile_overlay.gpkg"

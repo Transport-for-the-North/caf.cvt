@@ -1,4 +1,5 @@
 """Module to derive asset-specific hazard weights."""
+# pylint: disable=duplicate-code
 
 import logging
 import pathlib

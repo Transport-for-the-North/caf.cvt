@@ -132,6 +132,7 @@ def _is_hazard_change_column(c_idx: int) -> bool:
 
 def create_risk_summary(
     config: model_config.Config,
+    *,
     asset_risk: gpd.GeoDataFrame,
     risk_cols: list[RiskColumn],
     descriptive_cols: list[str],
@@ -191,11 +192,11 @@ def create_risk_summary(
         for sub_hazard in MainHazardRiskCols.get_sub_hazards(main_hazard):
             risk_distribution, risk_averages = _fill_risk_summary_column(
                 config,
-                asset_risk_summary,
-                sub_hazard,
-                risk_distribution,
-                risk_averages,
-                total_length,
+                asset_risk=asset_risk_summary,
+                hazard=sub_hazard,
+                risk_distribution=risk_distribution,
+                risk_averages=risk_averages,
+                total_length=total_length,
             )
 
             descriptive_risk_averages = _fill_descriptive_risk_averages(
@@ -211,11 +212,11 @@ def create_risk_summary(
 
         risk_distribution, risk_averages = _fill_risk_summary_column(
             config,
-            asset_risk_summary,
-            main_hazard,
-            risk_distribution,
-            risk_averages,
-            total_length,
+            asset_risk=asset_risk_summary,
+            hazard=main_hazard,
+            risk_distribution=risk_distribution,
+            risk_averages=risk_averages,
+            total_length=total_length,
         )
 
         descriptive_risk_averages = _fill_descriptive_risk_averages(
@@ -243,6 +244,7 @@ def create_risk_summary(
 
 def _fill_risk_summary_column(
     config: model_config.Config,
+    *,
     asset_risk: gpd.GeoDataFrame,
     hazard: MainHazardRiskCols | str,
     risk_distribution: pd.DataFrame,
@@ -251,34 +253,18 @@ def _fill_risk_summary_column(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Fill the risk distribution column for a given main hazard and scenario."""
     length_weighted_avgs = {}
-    change_in_risk = {}
-    pct_increased_risks = {}
 
     for scenario in Scenarios:
         risk_column = f"{hazard}_{scenario}"
         out_risk_column = f"{scenario.capitalize()} {hazard.replace('_', ' ').title()}"
         risk_distribution[out_risk_column] = 0.0
-        percentages = []
-        categories = []
-        for category, (lower, upper) in _RISK_CATEGORIES.items():
-            if upper == config.constants.score_max:
-                mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] <= upper)
-            else:
-                mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] < upper)
-            risk_length = asset_risk.loc[mask, _LENGTH_M_COL].sum()
-            pct_risk_in_category = (risk_length / total_length) * 100
-            percentages.append(pct_risk_in_category)
-            categories.append(category)
 
-        floored_pcts = [int(pct) for pct in percentages]
-        remainder = 100 - sum(floored_pcts)
-        decimal_parts = [pct - int(pct) for pct in percentages]
-        indices = np.argsort(decimal_parts)[::-1]
-        for idx in indices[:remainder]:
-            floored_pcts[idx] += 1
-        for category, pct in zip(categories, floored_pcts, strict=True):
+        for category, pct in _calculate_risk_distribution_percentages(
+            config, asset_risk, risk_column, total_length
+        ).items():
             risk_distribution.loc[
-                risk_distribution["Risk Category"] == category, out_risk_column
+                risk_distribution["Risk Category"] == category,
+                out_risk_column
             ] = pct
 
         length_weighted_avgs[scenario] = round(
@@ -291,9 +277,9 @@ def _fill_risk_summary_column(
             > asset_risk[f"{hazard}_{Scenarios.CURRENT}"]
         )
     ][_LENGTH_M_COL].sum()
-    pct_increased_risks[hazard] = round((increased_risk_length / total_length) * 100)
+    pct_increased_risk = round((increased_risk_length / total_length) * 100)
 
-    change_in_risk[hazard] = round(
+    change_in_risk = round(
         (length_weighted_avgs[Scenarios.FORECAST] - length_weighted_avgs[Scenarios.CURRENT]), 1
     )
 
@@ -301,11 +287,42 @@ def _fill_risk_summary_column(
         hazard.replace("_", " ").title(),
         length_weighted_avgs[Scenarios.CURRENT],
         length_weighted_avgs[Scenarios.FORECAST],
-        change_in_risk[hazard],
-        pct_increased_risks[hazard],
+        change_in_risk,
+        pct_increased_risk,
     ]
 
     return risk_distribution, risk_averages
+
+
+def _calculate_risk_distribution_percentages(
+    config: model_config.Config,
+    asset_risk: gpd.GeoDataFrame,
+    risk_column: str,
+    total_length: float,
+) -> dict[RiskCategories, int]:
+    percentages = []
+    categories = []
+    for category, (lower, upper) in _RISK_CATEGORIES.items():
+        if upper == config.constants.score_max:
+            mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] <= upper)
+        else:
+            mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] < upper)
+        percentages.append(
+            (
+                asset_risk.loc[mask, _LENGTH_M_COL].sum()
+                / total_length
+            ) * 100
+        )
+        categories.append(category)
+
+    floored_pcts = [int(pct) for pct in percentages]
+    remainder = 100 - sum(floored_pcts)
+    decimal_parts = [pct - int(pct) for pct in percentages]
+    indices = np.argsort(decimal_parts)[::-1]
+    for idx in indices[:remainder]:
+        floored_pcts[idx] += 1
+
+    return dict(zip(categories, floored_pcts, strict=True))
 
 
 def _fill_descriptive_risk_averages(
@@ -738,6 +755,7 @@ def _get_risk_average_style(
     """Determine the style for a risk average cell."""
     # Default settings
     text_colour = HexColourCodes.BLACK
+    fill_colour = HexColourCodes.WHITE
     bold = False
     cell_border = None
     # Determine formatting dynamically
@@ -800,14 +818,13 @@ def _write_descriptive_risk_averages(
                 column_letter = openpyxl.utils.get_column_letter(c_idx)
                 ws.column_dimensions[column_letter].width = _COLUMN_WIDTH
                 horizontal_alignment = _LEFT_HORIZONTAL_ALIGNMENT  # Default alignment
-                current_row = total_length + r_idx
 
                 cell_value = value
 
                 if _is_hazard_change_column(c_idx) and r_idx != _HEADER_ROW:
                     cell_value = _format_hazard_change(int(value))
 
-                cell = ws.cell(row=current_row, column=c_idx, value=cell_value)
+                cell = ws.cell(row=total_length + r_idx, column=c_idx, value=cell_value)
 
                 style = _get_descriptive_risk_average_style(
                     r_idx=r_idx,

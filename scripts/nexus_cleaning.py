@@ -1,4 +1,5 @@
 """Module to clean and prepare Nexus transport data."""
+# pylint: disable=duplicate-code
 
 import itertools
 import logging

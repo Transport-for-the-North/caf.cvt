@@ -20,7 +20,10 @@ from shapely.geometry import Polygon, box
 from caf.cvt import data_cleaning, file_paths, model_config
 from caf.cvt.definitions import (
     BNG_CRS,
+    FLOODING_BAND_MAP,
+    FLOODING_TILE_SIZE_M,
     GEOMETRY_COL,
+    RASTER_UNAVAILABLE,
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
@@ -64,10 +67,8 @@ _GROUND_STABILITY_RISK_SCORE_MAP = {
 
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
 
-_FLOODING_TILE_SIZE_M = 10000
 _NUM_TILES_DONE = 0
 _FLOODING_PIXEL_SIZE_M = 2
-_RASTER_UNAVAILABLE = -9999
 _FLOODING_RISK_SCORE_MAP: dict[str | int, float] = {
     0: 0,  # No risk areas stay 0
     "Unavailable": np.nan,
@@ -77,22 +78,6 @@ _FLOODING_RISK_SCORE_MAP: dict[str | int, float] = {
     "High": 3.3,  # Greater than 3.3% chance of flooding
 }
 _AUDIT_FLOODING_INDEX = False
-
-
-_FLOODING_BAND_MAP = {
-    FloodingRiskCols.RIVERS_SEA: (
-        FloodingBands.RIVERS_CURRENT.value,
-        FloodingBands.RIVERS_FORECAST.value,
-    ),
-    FloodingRiskCols.SURFACE_WATER: (
-        FloodingBands.SURFACE_CURRENT.value,
-        FloodingBands.SURFACE_FORECAST.value,
-    ),
-    MainHazardRiskCols.FLOODING: (
-        FloodingBands.FLOODING_CURRENT.value,
-        FloodingBands.FLOODING_FORECAST.value,
-    ),
-}
 
 _PLOT_ALPHA_BASEMAP = 0.7
 _PLOT_ALPHA_NO_BASEMAP = 1.0
@@ -388,7 +373,7 @@ def _calculate_risk_threshold(
     return risk_data
 
 
-def _calculate_composite_score_scenarios(
+def calculate_composite_score_scenarios(
     risk_data: pd.DataFrame, weights: dict[RiskColumn, float], output_col: RiskColumn
 ) -> pd.DataFrame:
     """Calculate composite score given a dataframe with variables and corresponding weights."""
@@ -420,7 +405,7 @@ def _calculate_flooding_composite_raster(
     return flooding_raster_stack
 
 
-def _calculate_composite_score(
+def calculate_composite_score(
     risk_data: pd.DataFrame, weights: dict[RiskColumn, float], output_col: str
 ) -> pd.DataFrame:
     """Calculate composite score given a dataframe with variables and corresponding weights."""
@@ -601,6 +586,7 @@ def plot_choropleth(
 def _plot_raster_choropleth(
     raster: np.ndarray,
     column: RiskColumn,
+    *,
     band_current: int,
     band_forecast: int,
     title: str,
@@ -701,7 +687,7 @@ def _audit_raster_index(
     out_path.mkdir(parents=True, exist_ok=True)
 
     for var in index_vars:
-        band_current, band_forecast = _FLOODING_BAND_MAP[var]
+        band_current, band_forecast = FLOODING_BAND_MAP[var]
         # Plot Choropleth Maps for each variable
         _plot_raster_choropleth(
             raster=index,
@@ -716,6 +702,7 @@ def _audit_raster_index(
 
 def _rasterize_flood_layer(
     flood_layer: gpd.GeoDataFrame,
+    *,
     risk_column: str,
     risk_score_map: dict[str | int, float],
     transform: rasterio.transform.Affine,
@@ -726,10 +713,7 @@ def _rasterize_flood_layer(
     flood_risk = flood_layer.copy()
     flood_risk[risk_column] = flood_risk[risk_column].map(risk_score_map)
 
-    shapes = [
-        (geom, value)
-        for geom, value in zip(flood_risk.geometry, flood_risk[risk_column], strict=False)
-    ]
+    shapes = list(zip(flood_risk.geometry, flood_risk[risk_column], strict=False))
     return rasterize(
         shapes,
         out_shape=(height, width),
@@ -742,6 +726,7 @@ def _rasterize_flood_layer(
 
 def _write_raster(
     raster: np.ndarray,
+    *,
     height: int,
     width: int,
     crs: str,
@@ -873,7 +858,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
         _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE,
     )
 
-    extreme_weather_risk = _calculate_composite_score_scenarios(
+    extreme_weather_risk = calculate_composite_score_scenarios(
         extreme_weather_risk,
         MainHazardRiskCols.EXTREME_WEATHER.get_weights(),
         MainHazardRiskCols.EXTREME_WEATHER,
@@ -950,7 +935,7 @@ def _extreme_heat_index(
         feature_range,
     )
 
-    extreme_heat = _calculate_composite_score_scenarios(
+    extreme_heat = calculate_composite_score_scenarios(
         extreme_heat,
         ExtremeHeatCols.get_weights(),
         ExtremeWeatherRiskCols.EXTREME_HEAT,
@@ -1028,7 +1013,7 @@ def _extreme_cold_index(
         feature_range,
     )
 
-    extreme_cold = _calculate_composite_score_scenarios(
+    extreme_cold = calculate_composite_score_scenarios(
         extreme_cold,
         ExtremeColdCols.get_weights(),
         ExtremeWeatherRiskCols.EXTREME_COLD,
@@ -1142,7 +1127,7 @@ def _drought_index(
         - drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}"]
     )
 
-    drought_risk = _calculate_composite_score_scenarios(
+    drought_risk = calculate_composite_score_scenarios(
         drought_risk,
         DroughtCols.get_weights(),
         ExtremeWeatherRiskCols.DROUGHT,
@@ -1289,7 +1274,7 @@ def _storm_index(
         f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}"
     ].clip(*feature_range)
 
-    storm_risk = _calculate_composite_score_scenarios(
+    storm_risk = calculate_composite_score_scenarios(
         storm_risk,
         StormCols.get_weights(),
         ExtremeWeatherRiskCols.STORM,
@@ -1398,7 +1383,7 @@ def _flooding_index_raster(
     nan_mask = np.isnan(flooding_risk)
 
     if nan_mask.any():
-        flooding_risk[nan_mask] = _RASTER_UNAVAILABLE
+        flooding_risk[nan_mask] = RASTER_UNAVAILABLE
 
     _write_raster(
         raster=flooding_risk,
@@ -1464,7 +1449,7 @@ def _rasterize_and_stack(flooding_paths: dict[str, pathlib.Path]) -> tuple[np.nd
     )
 
     col_band_map = {}
-    for col, (current_band, forecast_band) in _FLOODING_BAND_MAP.items():
+    for col, (current_band, forecast_band) in FLOODING_BAND_MAP.items():
         col_band_map[f"{col}_{Scenarios.CURRENT}"] = current_band
         col_band_map[f"{col}_{Scenarios.FORECAST}"] = forecast_band
 
@@ -1473,12 +1458,12 @@ def _rasterize_and_stack(flooding_paths: dict[str, pathlib.Path]) -> tuple[np.nd
         LOG.info("Rasterizing flood layer: %s", flood_layer_name)
         band = col_band_map[flood_layer_name]
         flooding_raster_stack[band] = _rasterize_flood_layer(
-            flood_layer,
-            flood_layer_name,
-            _FLOODING_RISK_SCORE_MAP,
-            raster_metadata["transform"],
-            raster_metadata["width"],
-            raster_metadata["height"],
+            flood_layer=flood_layer,
+            risk_column=flood_layer_name,
+            risk_score_map=_FLOODING_RISK_SCORE_MAP,
+            transform=raster_metadata["transform"],
+            width=raster_metadata["width"],
+            height=raster_metadata["height"],
         )
 
     return flooding_raster_stack, raster_metadata
@@ -1500,7 +1485,7 @@ def _flooding_index_vector(
             boundary,
             flooding_paths,
             crs=data_cleaning.BNG_CRS,
-            tile_size_m=_FLOODING_TILE_SIZE_M,
+            tile_size_m=FLOODING_TILE_SIZE_M,
         )
 
     overlay_path = (
@@ -1569,7 +1554,7 @@ def _flooding_index_vector(
         feature_range,
     )
 
-    flooding_risk = _calculate_composite_score_scenarios(
+    flooding_risk = calculate_composite_score_scenarios(
         flooding_risk,
         MainHazardRiskCols.FLOODING.get_weights(),
         MainHazardRiskCols.FLOODING,
@@ -1613,10 +1598,7 @@ def _tile_polygon_flooding_overlay(
         / file_paths.FLOODING_RISK_TILE_MODEL_INTERIM_OUTPUT_PATH
     )
     layer_name = "flooding_overlay"
-    if _NUM_TILES_DONE == 0:
-        first_write = True
-    else:
-        first_write = False
+    first_write = _NUM_TILES_DONE == 0
 
     # For each tile, do spatial filtering and run overlay and clean
     for tile_idx, tile in tiles.iterrows():
@@ -1736,7 +1718,7 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
         ground_stability, list(GroundStabilityRiskCols), feature_range
     )
 
-    ground_stability = _calculate_composite_score(
+    ground_stability = calculate_composite_score(
         ground_stability,
         MainHazardRiskCols.GROUND_STABILITY.get_weights(),
         MainHazardRiskCols.GROUND_STABILITY,

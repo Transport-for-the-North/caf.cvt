@@ -15,6 +15,8 @@ BNG_CRS = "EPSG:27700"  # British National Grid CRS, for use in spatially mergin
 ID_COL = "id"
 NA_COL = "N/A"
 GEOMETRY_COL = "geometry"
+FLOODING_TILE_SIZE_M = 10000
+RASTER_UNAVAILABLE = -9999
 
 # CLASSES
 
@@ -59,7 +61,7 @@ class CombinedAuthorities(enum.StrEnum):
 class RiskColumn(enum.StrEnum):
     """Plotting column definition base class."""
 
-    def get_cmap(self) -> str:
+    def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given plotting column."""
         raise NotImplementedError("Subclasses must implement the get_cmap method.")
 
@@ -77,13 +79,13 @@ class ExtremeWeatherRiskCols(RiskColumn):
     DROUGHT = "drought_risk"
     STORM = "storm_risk"
 
-    def get_cmap(self) -> str:
+    def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given extreme weather subhazard column."""
         cmap_mapping = {
-            ExtremeWeatherRiskCols.EXTREME_HEAT: "Reds",
-            ExtremeWeatherRiskCols.EXTREME_COLD: "Blues",
-            ExtremeWeatherRiskCols.DROUGHT: "Oranges",
-            ExtremeWeatherRiskCols.STORM: "Blues",
+            ExtremeWeatherRiskCols.EXTREME_HEAT: ColourMaps.REDS,
+            ExtremeWeatherRiskCols.EXTREME_COLD: ColourMaps.BLUES,
+            ExtremeWeatherRiskCols.DROUGHT: ColourMaps.ORANGES,
+            ExtremeWeatherRiskCols.STORM: ColourMaps.BLUES,
         }
         return cmap_mapping[self]
 
@@ -113,9 +115,9 @@ class FloodingRiskCols(RiskColumn):
     SURFACE_WATER = "surface_water_flooding_risk"
     # TODO (DJ): #41 Add groundwater flooding column
 
-    def get_cmap(self) -> str:
+    def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given flooding subhazard column."""
-        return "Blues"
+        return ColourMaps.BLUES
 
     @classmethod
     def get_weights(cls) -> dict[RiskColumn, float]:
@@ -148,9 +150,9 @@ class GroundStabilityRiskCols(RiskColumn):
     SHRINK_SWELL = "shrink_swell_risk"
     SOLUBLE_ROCKS = "soluble_rocks_risk"
 
-    def get_cmap(self) -> str:
+    def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given ground stability subhazard column."""
-        return "Oranges"
+        return ColourMaps.ORANGES
 
     @classmethod
     def get_weights(cls) -> dict[RiskColumn, float]:
@@ -173,13 +175,13 @@ class MainHazardRiskCols(RiskColumn):
     GROUND_STABILITY = "ground_stability_risk"
     COASTAL_EROSION = "coastal_erosion_risk"
 
-    def get_cmap(self) -> str:
+    def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given hazard column."""
         cmap_mapping = {
-            MainHazardRiskCols.EXTREME_WEATHER: "Reds",
-            MainHazardRiskCols.FLOODING: "Blues",
-            MainHazardRiskCols.GROUND_STABILITY: "Oranges",
-            MainHazardRiskCols.COASTAL_EROSION: "Purples",
+            MainHazardRiskCols.EXTREME_WEATHER: ColourMaps.REDS,
+            MainHazardRiskCols.FLOODING: ColourMaps.BLUES,
+            MainHazardRiskCols.GROUND_STABILITY: ColourMaps.ORANGES,
+            MainHazardRiskCols.COASTAL_EROSION: ColourMaps.PURPLES,
         }
         return cmap_mapping[self]
 
@@ -212,9 +214,9 @@ class ExtremeHeatCols(RiskColumn):
     HOT_SUMMER_DAYS = "hot_summer_days"
     EXTREME_SUMMER_DAYS = "extreme_summer_days"
 
-    def get_cmap(self) -> str:
+    def get_cmap(self) -> ColourMaps:
         """Return extreme heat colourmap."""
-        return "Reds"
+        return ColourMaps.REDS
 
     @classmethod
     def get_weights(cls) -> dict[RiskColumn, float]:
@@ -233,9 +235,9 @@ class ExtremeColdCols(RiskColumn):
     FROST_DAYS = "frost_days"
     ICING_DAYS = "icing_days"
 
-    def get_cmap(self) -> str:
+    def get_cmap(self) -> ColourMaps:
         """Return extreme cold colourmap."""
-        return "Blues"
+        return ColourMaps.BLUES
 
     @classmethod
     def get_weights(cls) -> dict[RiskColumn, float]:
@@ -253,9 +255,9 @@ class DroughtCols(RiskColumn):
     DROUGHT_SEVERITY_INDEX = "drought_severity_index"
     PRECIP_SUMMER = "precip_summer"
 
-    def get_cmap(self) -> str:
+    def get_cmap(self) -> ColourMaps:
         """Return drought colourmap."""
-        return "Oranges"
+        return ColourMaps.ORANGES
 
     @classmethod
     def get_weights(cls) -> dict[RiskColumn, float]:
@@ -275,9 +277,9 @@ class StormCols(RiskColumn):
     WIND_SPEED = "wind_speed"
     WIND_DRIVEN_RAIN_INDEX = "wind_driven_rain_index"
 
-    def get_cmap(self) -> str:
+    def get_cmap(self) -> ColourMaps:
         """Return storm colourmap."""
-        return "Blues"
+        return ColourMaps.BLUES
 
     @classmethod
     def get_weights(cls) -> dict[RiskColumn, float]:
@@ -296,6 +298,10 @@ class DemandCols(RiskColumn):
 
     DEMAND = "demand"
 
+    def get_cmap(self) -> ColourMaps:
+        """Return demand colourmap."""
+        return ColourMaps.VIRIDIS
+
 
 class ImpactCols(RiskColumn):
     """Column definitions for impact layers."""
@@ -309,9 +315,9 @@ class ImpactCols(RiskColumn):
     UC7_IMPACT = "uc7_impact"
     IMPACT = "impact"
 
-    def get_cmap(self) -> str:
+    def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given impact column."""
-        return "viridis"
+        return ColourMaps.VIRIDIS
 
     @classmethod
     def get_noham_impact_cols(cls) -> list[RiskColumn]:
@@ -769,6 +775,10 @@ class ColourMaps(enum.StrEnum):
     ORANGES = "Oranges"
     ROYAL_BLUE = "royalblue"
     DARK_ORANGE = "darkorange"
+    REDS = "Reds"
+    BLUES = "Blues"
+    PURPLES = "Purples"
+    VIRIDIS = "viridis"
 
 
 class HexColourCodes(enum.StrEnum):
@@ -808,3 +818,20 @@ class CellStyle:
     text_colour: str
     bold: bool
     border: openpyxl.styles.Border | None
+
+# CONSTANTS (That depend on class definitions)
+
+FLOODING_BAND_MAP: dict[RiskColumn, tuple[int, int]] = {
+    FloodingRiskCols.RIVERS_SEA: (
+        FloodingBands.RIVERS_CURRENT.value,
+        FloodingBands.RIVERS_FORECAST.value,
+    ),
+    FloodingRiskCols.SURFACE_WATER: (
+        FloodingBands.SURFACE_CURRENT.value,
+        FloodingBands.SURFACE_FORECAST.value,
+    ),
+    MainHazardRiskCols.FLOODING: (
+        FloodingBands.FLOODING_CURRENT.value,
+        FloodingBands.FLOODING_FORECAST.value,
+    ),
+}

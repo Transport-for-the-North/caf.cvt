@@ -10,8 +10,10 @@ from rasterstats import zonal_stats
 
 from caf.cvt import data_cleaning, file_paths, functional_rules, model_config, risk_summary
 from caf.cvt.definitions import (
+    FLOODING_BAND_MAP,
     GEOMETRY_COL,
     ID_COL,
+    RASTER_UNAVAILABLE,
     AssetTypes,
     DemandCols,
     ExtremeWeatherRiskCols,
@@ -50,7 +52,7 @@ def _flooding_risk_statistic(values: np.ma.MaskedArray) -> float | None:
     values = values.compressed()
     if len(values) == 0:
         return 0
-    if np.any(values == functional_rules._RASTER_UNAVAILABLE):
+    if np.any(values == RASTER_UNAVAILABLE):
         return np.nan
     return values.max()
 
@@ -60,7 +62,7 @@ def _infrastructure_flooding_risk_raster(
     flooding_path: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """Calculate flooding risk for infrastructure using a rasterized flooding layer."""
-    for col, (current_band, forecast_band) in functional_rules._FLOODING_BAND_MAP.items():
+    for col, (current_band, forecast_band) in FLOODING_BAND_MAP.items():
         for scenario, band in {
             Scenarios.CURRENT: current_band,
             Scenarios.FORECAST: forecast_band,
@@ -366,7 +368,7 @@ def _apply_asset_hazard_weighting(
     for main_hazard in hazards:
         weights = asset_type.get_asset_hazard_weights(main_hazard)
         if main_hazard == MainHazardRiskCols.GROUND_STABILITY:
-            asset_risk = functional_rules._calculate_composite_score(
+            asset_risk = functional_rules.calculate_composite_score(
                 asset_risk,
                 weights,
                 main_hazard,
@@ -375,7 +377,7 @@ def _apply_asset_hazard_weighting(
             # Special case since sub hazards not included for coastal erosion
             continue
         else:
-            asset_risk = functional_rules._calculate_composite_score_scenarios(
+            asset_risk = functional_rules.calculate_composite_score_scenarios(
                 asset_risk,
                 weights,
                 main_hazard,
@@ -531,9 +533,9 @@ def _os_open_road_risk(
 
     risk_summary.create_risk_summary(
         config,
-        os_road_risk,
-        risk_cols,
-        [
+        asset_risk=os_road_risk,
+        risk_cols=risk_cols,
+        descriptive_cols=[
             OSRoadCols.ROAD_CLASSIFICATION,
             OSRoadCols.ROAD_FUNCTION,
             OSRoadCols.FORM_OF_WAY,
@@ -542,8 +544,8 @@ def _os_open_road_risk(
             OSRoadCols.PRIMARY_ROUTE,
             OSRoadCols.TRUNK_ROAD,
         ],
-        audit_path / "Summary" / "Road" / "OS Roads",
-        "OS Roads Risk Summary.xlsx",
+        out_path=audit_path / "Summary" / "Road" / "OS Roads",
+        out_filename="OS Roads Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
@@ -608,11 +610,11 @@ def _noham_road_risk(
 
     risk_summary.create_risk_summary(
         config,
-        noham_risk,
-        risk_impact_cols,
-        [],
-        audit_path / "Summary" / "Road" / "NoHAM",
-        "NoHAM Roads Risk Summary.xlsx",
+        asset_risk=noham_risk,
+        risk_cols=risk_impact_cols,
+        descriptive_cols=[],
+        out_path=audit_path / "Summary" / "Road" / "NoHAM",
+        out_filename="NoHAM Roads Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
@@ -747,11 +749,11 @@ def _model_road_risk(
 
     risk_summary.create_risk_summary(
         config,
-        model_road_risk,
-        risk_impact_cols,
-        [],
-        audit_path / "Summary" / "Road" / "Model Roads",
-        "Model Roads Risk Summary.xlsx",
+        asset_risk=model_road_risk,
+        risk_cols=risk_impact_cols,
+        descriptive_cols=[],
+        out_path=audit_path / "Summary" / "Road" / "Model Roads",
+        out_filename="Model Roads Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
@@ -889,11 +891,11 @@ def _passenger_rail_risk(
 
     risk_summary.create_risk_summary(
         config,
-        passenger_rail_network_risk,
-        risk_cols,
-        OSRailCols.get_descriptive_cols(),
-        config.paths.audit_path / "Summary" / "Rail" / "Passenger Rail",
-        "Passenger Rail Risk Summary.xlsx",
+        asset_risk=passenger_rail_network_risk,
+        risk_cols=risk_cols,
+        descriptive_cols=OSRailCols.get_descriptive_cols(),
+        out_path=config.paths.audit_path / "Summary" / "Rail" / "Passenger Rail",
+        out_filename="Passenger Rail Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
@@ -979,11 +981,11 @@ def _freight_rail_risk(
 
     risk_summary.create_risk_summary(
         config,
-        freight_rail_network_risk,
-        risk_cols,
-        OSRailCols.get_descriptive_cols(),
-        config.paths.audit_path / "Summary" / "Rail" / "Freight Rail",
-        "Freight Rail Risk Summary.xlsx",
+        asset_risk=freight_rail_network_risk,
+        risk_cols=risk_cols,
+        descriptive_cols=OSRailCols.get_descriptive_cols(),
+        out_path=config.paths.audit_path / "Summary" / "Rail" / "Freight Rail",
+        out_filename="Freight Rail Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
@@ -1511,11 +1513,13 @@ def _ncn_risk(
 
     risk_summary.create_risk_summary(
         config,
-        ncn_risk,
-        risk_cols,
-        [col.value for col in NationalCycleNetworkCols if col != NationalCycleNetworkCols.ID],
-        config.paths.audit_path / "Summary" / "Other" / "National Cycle Network",
-        "National Cycle Network Risk Summary.xlsx",
+        asset_risk=ncn_risk,
+        risk_cols=risk_cols,
+        descriptive_cols=[
+            col.value for col in NationalCycleNetworkCols if col != NationalCycleNetworkCols.ID
+        ],
+        out_path=config.paths.audit_path / "Summary" / "Other" / "National Cycle Network",
+        out_filename="National Cycle Network Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
@@ -1580,11 +1584,11 @@ def _tram_network_risk(
 
     risk_summary.create_risk_summary(
         config,
-        tram_risk,
-        risk_cols,
-        OSRailCols.get_descriptive_cols(),
-        config.paths.audit_path / "Summary" / "Other" / "Tram Network Risk",
-        "Tram Network Risk Summary.xlsx",
+        asset_risk=tram_risk,
+        risk_cols=risk_cols,
+        descriptive_cols=OSRailCols.get_descriptive_cols(),
+        out_path=config.paths.audit_path / "Summary" / "Other" / "Tram Network Risk",
+        out_filename="Tram Network Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
@@ -1654,11 +1658,11 @@ def _rapid_transport_network_risk(
 
     risk_summary.create_risk_summary(
         config,
-        rapid_transport_risk,
-        risk_cols,
-        OSRailCols.get_descriptive_cols(),
-        config.paths.audit_path / "Summary" / "Other" / "Rapid Transport Network",
-        "Rapid Transport Network Risk Summary.xlsx",
+        asset_risk=rapid_transport_risk,
+        risk_cols=risk_cols,
+        descriptive_cols=OSRailCols.get_descriptive_cols(),
+        out_path=config.paths.audit_path / "Summary" / "Other" / "Rapid Transport Network",
+        out_filename="Rapid Transport Network Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
@@ -1743,11 +1747,11 @@ def _nexus_metro_links_risk(
 
     risk_summary.create_risk_summary(
         config,
-        metro_links_risk,
-        risk_cols,
-        ["Ownership", "extension"],
-        config.paths.audit_path / "Summary" / "Bespoke" / "Nexus Metro Network",
-        "Nexus Metro Network Risk Summary.xlsx",
+        asset_risk=metro_links_risk,
+        risk_cols=risk_cols,
+        descriptive_cols=["Ownership", "extension"],
+        out_path=config.paths.audit_path / "Summary" / "Bespoke" / "Nexus Metro Network",
+        out_filename="Nexus Metro Network Risk Summary.xlsx",
     )
 
     _audit_infrastructure_risk(
