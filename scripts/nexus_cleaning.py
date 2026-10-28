@@ -10,7 +10,7 @@ import networkx as nx
 import pandas as pd
 import shapely
 
-import caf.cvt as cvt
+from caf import cvt
 
 _NAME = pathlib.Path(__file__).stem
 

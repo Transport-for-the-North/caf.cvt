@@ -25,7 +25,6 @@ from caf.cvt.definitions import (
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
-    FloodingRiskCols,
     FloodingTypes,
     GroundStabilityRiskCols,
     MasterMapFunction,
@@ -827,7 +826,9 @@ def _clean_other(  # noqa: C901
         LOG.info("Finished cleaning other infrastructure data.")
 
 
-def _clean_mastermap_sites(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_mastermap_sites(
+    config: model_config.Config, boundary: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
     """Read, clean and prepare mastermap sites data for further filtering."""
     mm_sites = gpd.read_file(
         f"zip://"
@@ -905,17 +906,19 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     """Read, combine and clean regional bus stops datasets, then write to file."""
     # TODO (DJ): #33 Some areas of NaPTAN are missing, e.g. Cumbria Combined Authority
     # Investigate alternative dataset with full coverage.
-    if config.parameters.stb.isin(
-        [
-            SubnationalTransportBodies.TRANSPORT_FOR_THE_NORTH,
-            SubnationalTransportBodies.TRANSPORT_SCOTLAND,
-            SubnationalTransportBodies.ENGLANDS_ECONOMIC_HEARTLAND,
-            SubnationalTransportBodies.TRANSPORT_EAST,
-        ]
+    if config.parameters.stb and config.parameters.stb in (
+        SubnationalTransportBodies.TRANSPORT_FOR_THE_NORTH,
+        SubnationalTransportBodies.TRANSPORT_SCOTLAND,
+        SubnationalTransportBodies.ENGLANDS_ECONOMIC_HEARTLAND,
+        SubnationalTransportBodies.TRANSPORT_EAST,
     ):
         LOG.warning("Bus Stops data is partially missing for %s", config.parameters.stb)
-    elif config.parameters.ca.isin([CombinedAuthorities.CAMBRIDGESHIRE_OR_PETERBOROUGH]):
+
+    if config.parameters.ca and (
+        config.parameters.ca == CombinedAuthorities.CAMBRIDGESHIRE_OR_PETERBOROUGH,
+    ):
         LOG.warning("Bus Stops data is partially missing for %s", config.parameters.ca)
+
     naptan = pd.read_csv(
         config.paths.raw_input / config.infrastructure.other.bus_stops,
         usecols=[col.value for col in NaPTANCols],
@@ -1805,8 +1808,9 @@ def _clean_groundwater(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     groundwater_flooding = gpd.read_file(
         config.hazards.flooding.groundwater, columns=["CLASS"], mask=boundary
     )
+    # TODO (DJ): #41 Replace with RiskColumn.GROUNDWATER_FLOODING when available
     groundwater_flooding = groundwater_flooding.rename(
-        columns={"CLASS": f"{FloodingRiskCols.GROUNDWATER}"}
+        columns={"CLASS": "groundwater_flooding_risk"}
     )
     groundwater_flooding = clip_to_boundary(groundwater_flooding, boundary)
     groundwater_flooding = explode_to_polygons(groundwater_flooding)
@@ -1898,7 +1902,7 @@ def _parse_flooding_metadata(zip_path: pathlib.Path) -> dict:
 def _read_flooding_zip(
     zip_path: pathlib.Path,
     boundary: gpd.GeoDataFrame,
-) -> gpd.GeoDataFrame | None:
+) -> gpd.GeoDataFrame:
     """Read flooding gdb file from zip."""
     vsi_path = f"zip://{zip_path}!/{zip_path.stem}.gdb"
     layers = fiona.listlayers(vsi_path)
@@ -1981,7 +1985,7 @@ def _clean_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> N
             (filter_removed / len_before_filter) * 100,
         )
         geosure_layers[code] = explode_to_polygons(geosure_layers[code])
-        geosure_layers[code] = geosure_layers[code].to_crs(data_cleaning.BNG_CRS)
+        geosure_layers[code] = geosure_layers[code].to_crs(BNG_CRS)
         write_to_file(
             geosure_layers[code],
             config.paths.model_input / file_paths.GEOSURE_MODEL_INPUT_PATH / f"{code}.gpkg",

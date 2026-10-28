@@ -194,9 +194,9 @@ class MainHazardRiskCols(RiskColumn):
 
         return weights_mapping[self]
 
-    def get_sub_hazards(self) -> list[str]:
+    def get_sub_hazards(self) -> list[RiskColumn]:
         """Return a list of sub-hazard columns for the main hazard."""
-        sub_hazard_mapping = {
+        sub_hazard_mapping: dict[MainHazardRiskCols, list[RiskColumn]] = {
             MainHazardRiskCols.EXTREME_WEATHER: list(ExtremeWeatherRiskCols),
             MainHazardRiskCols.FLOODING: list(FloodingRiskCols),
             MainHazardRiskCols.GROUND_STABILITY: list(GroundStabilityRiskCols),
@@ -314,7 +314,7 @@ class ImpactCols(RiskColumn):
         return "viridis"
 
     @classmethod
-    def get_noham_impact_cols(cls) -> list[str]:
+    def get_noham_impact_cols(cls) -> list[RiskColumn]:
         """Return a list of all NOHAM impact columns."""
         return [
             cls.UC1_IMPACT,

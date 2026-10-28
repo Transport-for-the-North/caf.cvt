@@ -15,12 +15,10 @@ from caf.cvt import model_config
 from caf.cvt.definitions import (
     CellStyle,
     ColourMaps,
-    ExtremeWeatherRiskCols,
-    FloodingRiskCols,
-    GroundStabilityRiskCols,
     HexColourCodes,
     MainHazardRiskCols,
     RiskCategories,
+    RiskColumn,
     Scenarios,
 )
 
@@ -85,6 +83,7 @@ _ROW_LENGTH_ADD = 2
 
 # GENERAL FUNCTIONS
 
+
 def _style_cell(
     cell: openpyxl.cell.Cell,
     *,
@@ -125,17 +124,16 @@ def _is_hazard_score_column(c_idx: int) -> bool:
 
 
 def _is_hazard_change_column(c_idx: int) -> bool:
-    return (c_idx - 3) % 3 not in [0, 1]
+    return (c_idx != _DESCRIPTIVE_RISK_AVERAGES_LENGTH_COL) and ((c_idx - 3) % 3 not in [0, 1])
 
 
 # GLOBAL FUNCTIONS
 
-# TODO (DJ): Test risk summary functionality in new structure.
 
 def create_risk_summary(
     config: model_config.Config,
     asset_risk: gpd.GeoDataFrame,
-    risk_cols: list[str],
+    risk_cols: list[RiskColumn],
     descriptive_cols: list[str],
     out_path: pathlib.Path,
     out_filename: str,
@@ -237,12 +235,11 @@ def create_risk_summary(
         risk_distribution, risk_averages, descriptive_risk_averages, out_path, out_filename
     )
 
-    return risk_distribution, risk_averages, descriptive_risk_averages
-
 
 # LOCAL FUNCTIONS
 
 ## PRODUCE DATA
+
 
 def _fill_risk_summary_column(
     config: model_config.Config,
@@ -261,6 +258,8 @@ def _fill_risk_summary_column(
         risk_column = f"{hazard}_{scenario}"
         out_risk_column = f"{scenario.capitalize()} {hazard.replace('_', ' ').title()}"
         risk_distribution[out_risk_column] = 0.0
+        percentages = []
+        categories = []
         for category, (lower, upper) in _RISK_CATEGORIES.items():
             if upper == config.constants.score_max:
                 mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] <= upper)
@@ -268,9 +267,19 @@ def _fill_risk_summary_column(
                 mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] < upper)
             risk_length = asset_risk.loc[mask, _LENGTH_M_COL].sum()
             pct_risk_in_category = (risk_length / total_length) * 100
+            percentages.append(pct_risk_in_category)
+            categories.append(category)
+
+        floored_pcts = [int(pct) for pct in percentages]
+        remainder = 100 - sum(floored_pcts)
+        decimal_parts = [pct - int(pct) for pct in percentages]
+        indices = np.argsort(decimal_parts)[::-1]
+        for idx in indices[:remainder]:
+            floored_pcts[idx] += 1
+        for category, pct in zip(categories, floored_pcts, strict=True):
             risk_distribution.loc[
                 risk_distribution["Risk Category"] == category, out_risk_column
-            ] = round(pct_risk_in_category, 1)
+            ] = pct
 
         length_weighted_avgs[scenario] = round(
             (asset_risk[risk_column] * asset_risk[_LENGTH_M_COL]).sum() / total_length, 1
@@ -353,10 +362,7 @@ def _fill_descriptive_risk_averages(
 
 def _hazard_distribution_plot(
     risk_distribution: pd.DataFrame,
-    hazard: MainHazardRiskCols
-    | ExtremeWeatherRiskCols
-    | FloodingRiskCols
-    | GroundStabilityRiskCols,
+    hazard: RiskColumn,
     out_path: pathlib.Path,
 ) -> None:
     """Generate distribution plots for the risk distribution summary."""
@@ -522,6 +528,7 @@ def _write_risk_summary(
 
 ### RISK DISTRIBUTION SHEET
 
+
 def _write_risk_distribution(
     workbook: openpyxl.Workbook,
     risk_distribution: pd.DataFrame,
@@ -561,21 +568,18 @@ def _write_risk_distribution(
             if isinstance(value, (int, float)) and value != 0:
                 _apply_risk_distribution_data_bar(ws=ws, cell=cell, category=row[0])
 
-
     _add_risk_distribution_images(
-        ws=ws,
-        risk_distribution=risk_distribution,
-        out_path=out_path
+        ws=ws, risk_distribution=risk_distribution, out_path=out_path
     )
 
     return workbook
 
 
 def _add_risk_distribution_images(
-        ws: openpyxl.worksheet.worksheet.Worksheet,
-        risk_distribution: pd.DataFrame,
-        out_path: pathlib.Path,
-    ) -> None:
+    ws: openpyxl.worksheet.worksheet.Worksheet,
+    risk_distribution: pd.DataFrame,
+    out_path: pathlib.Path,
+) -> None:
     hazards = list(
         dict.fromkeys(
             [
@@ -644,7 +648,7 @@ def _get_risk_distribution_style(
 def _apply_risk_distribution_data_bar(
     ws: openpyxl.worksheet.worksheet.Worksheet,
     cell: openpyxl.cell.Cell,
-    category: str,
+    category: RiskCategories,
 ) -> None:
     """Apply data bar formatting to a risk distribution cell."""
     cell.number_format = _PERCENT_NUMBER_FORMAT
@@ -662,6 +666,7 @@ def _apply_risk_distribution_data_bar(
 
 
 ### RISK AVERAGES SHEET
+
 
 def _write_risk_averages(
     workbook: openpyxl.Workbook,
@@ -698,20 +703,16 @@ def _write_risk_averages(
                 border=style.border,
             )
 
-    _add_risk_averages_image(
-        ws=ws,
-        risk_averages=risk_averages,
-        out_path=out_path
-    )
+    _add_risk_averages_image(ws=ws, risk_averages=risk_averages, out_path=out_path)
 
     return workbook
 
 
 def _add_risk_averages_image(
-        ws: openpyxl.worksheet.worksheet.Worksheet,
-        risk_averages: pd.DataFrame,
-        out_path: pathlib.Path,
-    ) -> None:
+    ws: openpyxl.worksheet.worksheet.Worksheet,
+    risk_averages: pd.DataFrame,
+    out_path: pathlib.Path,
+) -> None:
     """Add the risk averages image to the worksheet."""
     image_row = len(risk_averages) + _RISK_AVERAGES_IMAGE_ROW_SPACING
     image_column = _RISK_AVERAGES_IMAGE_COLUMN
@@ -804,7 +805,7 @@ def _write_descriptive_risk_averages(
                 cell_value = value
 
                 if _is_hazard_change_column(c_idx) and r_idx != _HEADER_ROW:
-                    cell_value = _format_hazard_change(float(value))
+                    cell_value = _format_hazard_change(int(value))
 
                 cell = ws.cell(row=current_row, column=c_idx, value=cell_value)
 
@@ -869,6 +870,8 @@ def _get_descriptive_risk_average_style(
         )
 
     if _is_hazard_score_column(c_idx):
+        if not isinstance(value, (int, float)):
+            raise ValueError(f"Expected numeric value for hazard score, got {value}")
         return CellStyle(
             fill_colour=mpl.colors.to_hex(
                 mpl.colormaps[ColourMaps.GREEN_YELLOW_RED](value / 100)
@@ -879,6 +882,8 @@ def _get_descriptive_risk_average_style(
         )
 
     if _is_hazard_change_column(c_idx):
+        if not isinstance(value, (int, float)):
+            raise ValueError(f"Expected numeric value for hazard change, got {value}")
         return CellStyle(
             fill_colour=HexColourCodes.WHITE,
             text_colour=_hazard_change_text_colour(float(value)),
@@ -894,15 +899,15 @@ def _get_descriptive_risk_average_style(
     )
 
 
-def _format_hazard_change(value: float) -> str:
+def _format_hazard_change(value: int) -> str:
     """Format hazard change value."""
     if value > 0:
-        return f"↑ {value:.1f}"
+        return f"↑ {value}"
 
     if value < 0:
-        return f"↓ {value:.1f}"
+        return f"↓ {value}"
 
-    return f"→ {value:.1f}"
+    return f"→ {value}"
 
 
 def _hazard_change_text_colour(value: float) -> str:

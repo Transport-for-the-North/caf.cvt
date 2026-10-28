@@ -83,7 +83,7 @@ def _infrastructure_flooding_risk_raster(
 
 def _infrastructure_risk_intersect(
     infrastructure_data: gpd.GeoDataFrame,
-    hazards_dict: dict[str, gpd.GeoDataFrame],
+    hazards_dict: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     config: model_config.Config,
 ) -> gpd.GeoDataFrame:
     """Intersect infrastructure with hazard risk layers.
@@ -326,7 +326,7 @@ def _get_main_hazard_modifiers(
 
 def _apply_asset_vulnerability(
     risk_data: gpd.GeoDataFrame,
-    structure_enum: OSRoadStructure | OSRailStructure,
+    structure_enum: type[OSRoadStructure] | type[OSRailStructure],
     structure_col: str,
     feature_range: tuple[int, int],
 ) -> gpd.GeoDataFrame:
@@ -577,7 +577,7 @@ def _os_open_road_risk(
 
 def _noham_road_risk(
     config: model_config.Config,
-    hazard_layers: dict[str, gpd.GeoDataFrame],
+    hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
     audit_path: pathlib.Path,
 ) -> None:
@@ -1513,11 +1513,7 @@ def _ncn_risk(
         config,
         ncn_risk,
         risk_cols,
-        [
-            col.value
-            for col in NationalCycleNetworkCols
-            if col != NationalCycleNetworkCols.ID_COL
-        ],
+        [col.value for col in NationalCycleNetworkCols if col != NationalCycleNetworkCols.ID],
         config.paths.audit_path / "Summary" / "Other" / "National Cycle Network",
         "National Cycle Network Risk Summary.xlsx",
     )
@@ -1608,7 +1604,7 @@ def _tram_network_risk(
     tram_risk = _prepare_model_output(
         risk_data=tram_risk,
         drop_cols=[],
-        rename_map={OSRailCols.rename_map()},
+        rename_map=OSRailCols.rename_map(),
         risk_cols_order=risk_cols,
     )
 

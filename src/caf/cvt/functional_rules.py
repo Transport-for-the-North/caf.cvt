@@ -68,7 +68,7 @@ _FLOODING_TILE_SIZE_M = 10000
 _NUM_TILES_DONE = 0
 _FLOODING_PIXEL_SIZE_M = 2
 _RASTER_UNAVAILABLE = -9999
-_FLOODING_RISK_SCORE_MAP = {
+_FLOODING_RISK_SCORE_MAP: dict[str | int, float] = {
     0: 0,  # No risk areas stay 0
     "Unavailable": np.nan,
     "Very low": 0,  # Less than 0.1% chance of flooding
@@ -389,7 +389,7 @@ def _calculate_risk_threshold(
 
 
 def _calculate_composite_score_scenarios(
-    risk_data: pd.DataFrame, weights: dict[str, float], output_col: RiskColumn
+    risk_data: pd.DataFrame, weights: dict[RiskColumn, float], output_col: RiskColumn
 ) -> pd.DataFrame:
     """Calculate composite score given a dataframe with variables and corresponding weights."""
     for scenario in Scenarios:
@@ -401,7 +401,7 @@ def _calculate_composite_score_scenarios(
 
 
 def _calculate_flooding_composite_raster(
-    flooding_raster_stack: np.ndarray, weights: dict[str, float]
+    flooding_raster_stack: np.ndarray, weights: dict[RiskColumn, float]
 ) -> np.ndarray:
     """Calculate composite score for each scenario in a raster stack."""
     flooding_raster_stack[4] = (
@@ -421,7 +421,7 @@ def _calculate_flooding_composite_raster(
 
 
 def _calculate_composite_score(
-    risk_data: pd.DataFrame, weights: dict[str, float], output_col: str
+    risk_data: pd.DataFrame, weights: dict[RiskColumn, float], output_col: str
 ) -> pd.DataFrame:
     """Calculate composite score given a dataframe with variables and corresponding weights."""
     risk_data[output_col] = sum(risk_data[col] * weight for col, weight in weights.items())
@@ -717,7 +717,7 @@ def _audit_raster_index(
 def _rasterize_flood_layer(
     flood_layer: gpd.GeoDataFrame,
     risk_column: str,
-    risk_score_map: dict[str, float],
+    risk_score_map: dict[str | int, float],
     transform: rasterio.transform.Affine,
     width: int,
     height: int,
@@ -746,7 +746,7 @@ def _write_raster(
     width: int,
     crs: str,
     transform: rasterio.transform.Affine,
-    output_path: str,
+    output_path: pathlib.Path,
     multiband: bool,
 ) -> None:
     """Write a raster array to a GeoTIFF file."""
@@ -1746,7 +1746,6 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
         ground_stability,
         [*GroundStabilityRiskCols, MainHazardRiskCols.GROUND_STABILITY],
         feature_range,
-        scenarios=False,
     )
 
     _audit_index(

@@ -6,7 +6,7 @@ import pathlib
 import caf.toolkit as ctk
 import pandas as pd
 
-import caf.cvt as cvt
+from caf import cvt
 
 _NAME = pathlib.Path(__file__).stem
 
