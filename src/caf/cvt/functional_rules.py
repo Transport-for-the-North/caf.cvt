@@ -697,6 +697,7 @@ def _write_raster(
         "crs": crs,
         "transform": transform,
     }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with rasterio.open(output_path, "w", **out_meta) as dst:
         if multiband:
             for band in range(raster.shape[0]):
@@ -1603,7 +1604,7 @@ def _process_flooding_overlay_tile(
 
     layer_subsets: list[gpd.GeoDataFrame] = []
 
-    for layer_path in layer_paths:
+    for _, layer_path in layer_paths.items():
         layer_sub = gpd.read_file(layer_path, bbox=tile_bbox)
         if layer_sub.empty:
             continue

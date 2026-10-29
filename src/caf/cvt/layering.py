@@ -342,7 +342,11 @@ def _apply_asset_vulnerability(
 
         main_hazard_modifiers = _get_main_hazard_modifiers(vulnerabilities)
         for main_hazard, modifier in main_hazard_modifiers.items():
-            risk_cols = [col for col in risk_data.columns if main_hazard in col]
+            risk_cols = [
+                f"{main_hazard}_{scenario}"
+                for scenario in Scenarios
+                if f"{main_hazard}_{scenario}" in risk_data.columns
+            ]
             for risk_col in risk_cols:
                 dtype = risk_data[risk_col].dtype
                 risk_data.loc[mask, risk_col] = (
@@ -1503,7 +1507,9 @@ def _ncn_risk(
         asset_risk=ncn_risk,
         risk_cols=risk_cols,
         descriptive_cols=[
-            col.value for col in NationalCycleNetworkCols if col != NationalCycleNetworkCols.ID
+            name
+            for name in NationalCycleNetworkCols.rename_map().values()
+            if name != ID_COL
         ],
         out_path=config.paths.audit_path / "Summary" / "Other" / "National Cycle Network",
         out_filename="National Cycle Network Risk Summary.xlsx",

@@ -356,7 +356,7 @@ def _clean_nexus_demand() -> None:
     len_before_filter = len(demand)
     demand = demand[
         (demand["Prod Station Name"] != "Murton Gap")
-        | (demand["Attr Station Name"] != "Murton Gap")
+        & (demand["Attr Station Name"] != "Murton Gap")
     ]
     LOG.debug(
         "Filtered out Murton Gap station: %d rows removed.", len_before_filter - len(demand)
