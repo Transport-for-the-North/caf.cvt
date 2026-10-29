@@ -319,7 +319,6 @@ class GeoSureEntry(ctk.BaseConfig):
     premium: PremiumGeoSureEntry
 
 
-
 class GroundStability(ctk.BaseConfig):
     """Configuration for ground stability data.
 

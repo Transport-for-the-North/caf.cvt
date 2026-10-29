@@ -176,10 +176,7 @@ def _create_ordered_risk_map(
         return {classes[0]: min_val}
 
     step = (max_val - min_val) / (len(classes) - 1)
-    return {
-        risk_class: min_val + i * step
-        for i, risk_class in enumerate(classes)
-    }
+    return {risk_class: min_val + i * step for i, risk_class in enumerate(classes)}
 
 
 def _spatial_infill_na_grids(
@@ -402,7 +399,6 @@ def _calculate_flooding_composite_raster(
     return flooding_raster_stack
 
 
-
 def _overlay_and_clean(
     *hazard_layers: gpd.GeoDataFrame,
     target_crs: str,
@@ -498,74 +494,42 @@ def plot_choropleth(
     -------
     None
     """
-    current_col = f"{column}_{Scenarios.CURRENT}"
-    forecast_col = f"{column}_{Scenarios.FORECAST}"
-
-    has_scenarios = current_col in risk_data.columns and forecast_col in risk_data.columns
-
     if basemap_source is not None:
         risk_data = risk_data.to_crs(epsg=3857)
 
     cmap = column.get_cmap()
 
-    if has_scenarios:
-        _fig, ax = plt.subplots(1, 2, figsize=(16, 8))
+    _fig, ax = plt.subplots(1, 2, figsize=(16, 8))
 
-        risk_data.plot(
-            column=f"{column}_{Scenarios.CURRENT}",
-            cmap=cmap,
-            linewidth=linewidth,
-            ax=ax[0],
-            edgecolor=edgecolor,
-            legend=True,
-            vmin=feature_range[0],
-            vmax=feature_range[1],
-            alpha=_PLOT_ALPHA_BASEMAP
-            if basemap_source is not None
-            else _PLOT_ALPHA_NO_BASEMAP,
-        )
-
-        risk_data.plot(
-            column=f"{column}_{Scenarios.FORECAST}",
-            cmap=cmap,
-            linewidth=linewidth,
-            ax=ax[1],
-            edgecolor=edgecolor,
-            legend=True,
-            vmin=feature_range[0],
-            vmax=feature_range[1],
-            alpha=_PLOT_ALPHA_BASEMAP
-            if basemap_source is not None
-            else _PLOT_ALPHA_NO_BASEMAP,
-        )
-
-        if basemap_source is not None:
-            ctx.add_basemap(ax[0], source=basemap_source)
-            ctx.add_basemap(ax[1], source=basemap_source)
-
-        ax[0].set_title(f"{title} - {Scenarios.CURRENT.title()}")
-        ax[1].set_title(f"{title} - {Scenarios.FORECAST.title()}")
-        ax[0].set_axis_off()
-        ax[1].set_axis_off()
-    else:
-        _fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-        risk_data.plot(
-            column=column,
-            cmap=cmap,
-            linewidth=linewidth,
-            ax=ax,
-            edgecolor=edgecolor,
-            legend=True,
-            vmin=feature_range[0],
-            vmax=feature_range[1],
-            alpha=_PLOT_ALPHA_BASEMAP
-            if basemap_source is not None
-            else _PLOT_ALPHA_NO_BASEMAP,
-        )
-        if basemap_source is not None:
-            ctx.add_basemap(ax, source=basemap_source)
-        ax.set_title(title)
-        ax.set_axis_off()
+    risk_data.plot(
+        column=f"{column}_{Scenarios.CURRENT}",
+        cmap=cmap,
+        linewidth=linewidth,
+        ax=ax[0],
+        edgecolor=edgecolor,
+        legend=True,
+        vmin=feature_range[0],
+        vmax=feature_range[1],
+        alpha=_PLOT_ALPHA_BASEMAP if basemap_source is not None else _PLOT_ALPHA_NO_BASEMAP,
+    )
+    risk_data.plot(
+        column=f"{column}_{Scenarios.FORECAST}",
+        cmap=cmap,
+        linewidth=linewidth,
+        ax=ax[1],
+        edgecolor=edgecolor,
+        legend=True,
+        vmin=feature_range[0],
+        vmax=feature_range[1],
+        alpha=_PLOT_ALPHA_BASEMAP if basemap_source is not None else _PLOT_ALPHA_NO_BASEMAP,
+    )
+    if basemap_source is not None:
+        ctx.add_basemap(ax[0], source=basemap_source)
+        ctx.add_basemap(ax[1], source=basemap_source)
+    ax[0].set_title(f"{title} - {Scenarios.CURRENT.title()}")
+    ax[1].set_title(f"{title} - {Scenarios.FORECAST.title()}")
+    ax[0].set_axis_off()
+    ax[1].set_axis_off()
 
     plt.tight_layout()
     plt.savefig(out_path)
@@ -1696,8 +1660,7 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
 
         # Convert risk columns from A-E to numeric scores
         risk_score_map = _create_ordered_risk_map(
-            classes=["A", "B", "C", "D", "E"],
-            feature_range=feature_range
+            classes=["A", "B", "C", "D", "E"], feature_range=feature_range
         )
         for col in GroundStabilityRiskCols:
             ground_stability[f"{col}_{Scenarios.CURRENT}"] = ground_stability[
@@ -1709,8 +1672,8 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
 
         ground_stability = _iterative_spatial_infilling(
             ground_stability,
-            [f"{col}_{Scenarios.CURRENT}" for col in GroundStabilityRiskCols] +
-            [f"{col}_{Scenarios.FORECAST}" for col in GroundStabilityRiskCols],
+            [f"{col}_{Scenarios.CURRENT}" for col in GroundStabilityRiskCols]
+            + [f"{col}_{Scenarios.FORECAST}" for col in GroundStabilityRiskCols],
             _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE,
         )
     else:
@@ -1719,8 +1682,7 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
         )
 
         risk_score_map = _create_ordered_risk_map(
-            classes=[1, 2, 3],
-            feature_range=feature_range
+            classes=[1, 2, 3], feature_range=feature_range
         )
         for col in GroundStabilityRiskCols:
             ground_stability[f"{col}_{Scenarios.CURRENT}"] = ground_stability[
@@ -1729,7 +1691,6 @@ def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Pat
             ground_stability[f"{col}_{Scenarios.FORECAST}"] = ground_stability[
                 f"{col}_{Scenarios.FORECAST}"
             ].map(risk_score_map)
-
 
     ground_stability = calculate_composite_score(
         ground_stability,

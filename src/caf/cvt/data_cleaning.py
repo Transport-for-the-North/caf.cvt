@@ -2108,7 +2108,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
         geosure[code] = matched[code]  # Add the matched CLASS column to the base dataframe
 
     geosure_risk_cols = [col for col in geosure.columns if "_risk" in col]
-    for col in geosure_risk_cols: # Duplicate risk cols for forecast scenario
+    for col in geosure_risk_cols:  # Duplicate risk cols for forecast scenario
         geosure[f"{col}_{Scenarios.FORECAST}"] = geosure[col]
         geosure = geosure.rename(columns={col: f"{col}_{Scenarios.CURRENT}"})
     geosure_risk_cols = [col for col in geosure.columns if "_risk" in col]
@@ -2117,6 +2117,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
         geosure,
         config.paths.model_input / file_paths.GEOSURE_OPEN_MODEL_INPUT_PATH,
     )
+
 
 ### COASTAL EROSION
 

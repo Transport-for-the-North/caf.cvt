@@ -38,6 +38,8 @@ _DEMAND_WEIGHT = 0.5
 
 _METRO_STATION_BUFFER_SIZE_M = 25
 
+_INFRASTRUCTURE_BUFFER_SIZE_M = 0.01
+
 # GENERAL FUNCTIONS
 
 
@@ -59,16 +61,22 @@ def _flooding_risk_statistic(values: np.ma.MaskedArray) -> float | None:
 
 def _infrastructure_flooding_risk_raster(
     infrastructure_with_risk: gpd.GeoDataFrame,
-    flooding_path: gpd.GeoDataFrame,
+    flooding_path: pathlib.Path,
 ) -> gpd.GeoDataFrame:
     """Calculate flooding risk for infrastructure using a rasterized flooding layer."""
+    bounds = infrastructure_with_risk.bounds
+    zero_width_height = (bounds["maxx"] == bounds["minx"]) | (bounds["maxy"] == bounds["miny"])
+    infrastructure_buffered = infrastructure_with_risk.copy()
+    infrastructure_buffered.loc[zero_width_height, GEOMETRY_COL] = infrastructure_buffered.loc[
+        zero_width_height, GEOMETRY_COL
+    ].buffer(_INFRASTRUCTURE_BUFFER_SIZE_M)
     for col, (current_band, forecast_band) in FLOODING_BAND_MAP.items():
         for scenario, band in {
             Scenarios.CURRENT: current_band,
             Scenarios.FORECAST: forecast_band,
         }.items():
             stats = zonal_stats(
-                infrastructure_with_risk,
+                infrastructure_buffered,
                 flooding_path,
                 band=band + 1,
                 add_stats={"flooding_risk": _flooding_risk_statistic},
@@ -144,19 +152,6 @@ def _infrastructure_risk_intersect(
     return infrastructure_with_risk
 
 
-def _duplicate_non_scenario_hazards(risk_data: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Duplicate non-scenario hazard columns for both scenarios."""
-    non_scenario_hazards = risk_data.columns[
-        risk_data.columns.str.contains("risk", case=False)
-        & ~risk_data.columns.str.endswith((f"_{Scenarios.CURRENT}", f"_{Scenarios.FORECAST}"))
-    ].tolist()
-    for hazard in non_scenario_hazards:
-        LOG.warning("Duplicating non-scenario hazard '%s' for both scenarios.", hazard)
-        risk_data[f"{hazard}_{Scenarios.CURRENT}"] = risk_data[hazard]
-        risk_data[f"{hazard}_{Scenarios.FORECAST}"] = risk_data[hazard]
-    return risk_data
-
-
 def _reshape_for_scenarios(
     risk_data: gpd.GeoDataFrame, id_col: str, risk_cols_order: list[RiskColumn]
 ) -> gpd.GeoDataFrame:
@@ -224,7 +219,6 @@ def _prepare_model_output(
     risk_data = risk_data.drop_duplicates(subset=[GEOMETRY_COL])
     risk_data = risk_data.rename(columns=rename_map)
     risk_data = risk_data.to_crs(data_cleaning.BNG_CRS)
-    risk_data = _duplicate_non_scenario_hazards(risk_data)
     len_before_reshape = len(risk_data)
     risk_data = _reshape_for_scenarios(risk_data, ID_COL, risk_cols_order)
     if len(risk_data) != (len_before_reshape * 2):
@@ -367,21 +361,14 @@ def _apply_asset_hazard_weighting(
     """Recalculate main hazard risk scores based on sub-hazard risk scores and weights."""
     for main_hazard in hazards:
         weights = asset_type.get_asset_hazard_weights(main_hazard)
-        if main_hazard == MainHazardRiskCols.GROUND_STABILITY:
-            asset_risk = functional_rules.calculate_composite_score(
-                asset_risk,
-                weights,
-                main_hazard,
-            )
-        elif main_hazard == MainHazardRiskCols.COASTAL_EROSION:
+        if main_hazard == MainHazardRiskCols.COASTAL_EROSION:
             # Special case since sub hazards not included for coastal erosion
             continue
-        else:
-            asset_risk = functional_rules.calculate_composite_score_scenarios(
-                asset_risk,
-                weights,
-                main_hazard,
-            )
+        asset_risk = functional_rules.calculate_composite_score(
+            asset_risk,
+            weights,
+            main_hazard,
+        )
     return asset_risk
 
 
