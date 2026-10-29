@@ -56,14 +56,6 @@ _STORM_NEAREST_JOIN_MAX_DISTANCE = 5000
 _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE = 10000
 
 _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE = 1000
-_GROUND_STABILITY_RISK_SCORE_MAP = {
-    "A": 1,
-    "B": 2,
-    "C": 3,
-    "D": 4,
-    "E": 5,
-}
-
 
 _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
 
@@ -173,16 +165,21 @@ def min_max_scaling_pair_raster(
     return stack
 
 
-def _min_max_scaling(
-    data: pd.DataFrame,
-    columns: list[str],
-    feature_range: tuple[int, int],
-) -> pd.DataFrame:
-    """Scale specified columns using Min-Max scaling."""
-    scaler = sklearn.preprocessing.MinMaxScaler(feature_range=feature_range)
-    for col in columns:
-        data[col] = scaler.fit_transform(data[[col]].values).clip(*feature_range)
-    return data
+def _create_ordered_risk_map(
+    classes: list[str | int],
+    feature_range: tuple[float, float],
+) -> dict[str | int, float]:
+    """Create an ordered risk map for the given classes and feature range."""
+    min_val, max_val = feature_range
+
+    if len(classes) == 1:
+        return {classes[0]: min_val}
+
+    step = (max_val - min_val) / (len(classes) - 1)
+    return {
+        risk_class: min_val + i * step
+        for i, risk_class in enumerate(classes)
+    }
 
 
 def _spatial_infill_na_grids(
@@ -373,7 +370,7 @@ def _calculate_risk_threshold(
     return risk_data
 
 
-def calculate_composite_score_scenarios(
+def calculate_composite_score(
     risk_data: pd.DataFrame, weights: dict[RiskColumn, float], output_col: RiskColumn
 ) -> pd.DataFrame:
     """Calculate composite score given a dataframe with variables and corresponding weights."""
@@ -404,14 +401,6 @@ def _calculate_flooding_composite_raster(
 
     return flooding_raster_stack
 
-
-def calculate_composite_score(
-    risk_data: pd.DataFrame, weights: dict[RiskColumn, float], output_col: str
-) -> pd.DataFrame:
-    """Calculate composite score given a dataframe with variables and corresponding weights."""
-    risk_data[output_col] = sum(risk_data[col] * weight for col, weight in weights.items())
-
-    return risk_data
 
 
 def _overlay_and_clean(
@@ -858,7 +847,7 @@ def _extreme_weather_index(config: model_config.Config, audit_path: pathlib.Path
         _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE,
     )
 
-    extreme_weather_risk = calculate_composite_score_scenarios(
+    extreme_weather_risk = calculate_composite_score(
         extreme_weather_risk,
         MainHazardRiskCols.EXTREME_WEATHER.get_weights(),
         MainHazardRiskCols.EXTREME_WEATHER,
@@ -935,7 +924,7 @@ def _extreme_heat_index(
         feature_range,
     )
 
-    extreme_heat = calculate_composite_score_scenarios(
+    extreme_heat = calculate_composite_score(
         extreme_heat,
         ExtremeHeatCols.get_weights(),
         ExtremeWeatherRiskCols.EXTREME_HEAT,
@@ -1013,7 +1002,7 @@ def _extreme_cold_index(
         feature_range,
     )
 
-    extreme_cold = calculate_composite_score_scenarios(
+    extreme_cold = calculate_composite_score(
         extreme_cold,
         ExtremeColdCols.get_weights(),
         ExtremeWeatherRiskCols.EXTREME_COLD,
@@ -1127,7 +1116,7 @@ def _drought_index(
         - drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}"]
     )
 
-    drought_risk = calculate_composite_score_scenarios(
+    drought_risk = calculate_composite_score(
         drought_risk,
         DroughtCols.get_weights(),
         ExtremeWeatherRiskCols.DROUGHT,
@@ -1274,7 +1263,7 @@ def _storm_index(
         f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}"
     ].clip(*feature_range)
 
-    storm_risk = calculate_composite_score_scenarios(
+    storm_risk = calculate_composite_score(
         storm_risk,
         StormCols.get_weights(),
         ExtremeWeatherRiskCols.STORM,
@@ -1554,7 +1543,7 @@ def _flooding_index_vector(
         feature_range,
     )
 
-    flooding_risk = calculate_composite_score_scenarios(
+    flooding_risk = calculate_composite_score(
         flooding_risk,
         MainHazardRiskCols.FLOODING.get_weights(),
         MainHazardRiskCols.FLOODING,
@@ -1685,38 +1674,62 @@ def _process_flooding_overlay_tile(
 def _ground_stability_index(config: model_config.Config, audit_path: pathlib.Path) -> None:
     """Combine GeoSure risk into a single index, using a spatial overlay."""
     LOG.info("Calculating ground stability risk index...")
-    geosure_layers = {}
-    for geosure_hazard in GroundStabilityRiskCols:
-        geosure_layers[geosure_hazard] = gpd.read_file(
-            config.paths.model_input
-            / file_paths.GEOSURE_MODEL_INPUT_PATH
-            / f"{geosure_hazard}.gpkg"
+    feature_range = (config.constants.score_min, config.constants.score_max)
+    if config.switches.ground_stability_premium:
+        geosure_layers = {}
+        for geosure_hazard in GroundStabilityRiskCols:
+            geosure_layers[geosure_hazard] = gpd.read_file(
+                config.paths.model_input
+                / file_paths.GEOSURE_MODEL_INPUT_PATH
+                / f"{geosure_hazard}.gpkg"
+            )
+
+        ground_stability = _overlay_and_clean(
+            geosure_layers[GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS],
+            geosure_layers[GroundStabilityRiskCols.COMPRESSIBLE_GROUND],
+            geosure_layers[GroundStabilityRiskCols.LANDSLIDES],
+            geosure_layers[GroundStabilityRiskCols.RUNNING_SAND],
+            geosure_layers[GroundStabilityRiskCols.SHRINK_SWELL],
+            geosure_layers[GroundStabilityRiskCols.SOLUBLE_ROCKS],
+            target_crs=data_cleaning.BNG_CRS,
         )
 
-    ground_stability = _overlay_and_clean(
-        geosure_layers[GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS],
-        geosure_layers[GroundStabilityRiskCols.COMPRESSIBLE_GROUND],
-        geosure_layers[GroundStabilityRiskCols.LANDSLIDES],
-        geosure_layers[GroundStabilityRiskCols.RUNNING_SAND],
-        geosure_layers[GroundStabilityRiskCols.SHRINK_SWELL],
-        geosure_layers[GroundStabilityRiskCols.SOLUBLE_ROCKS],
-        target_crs=data_cleaning.BNG_CRS,
-    )
+        # Convert risk columns from A-E to numeric scores
+        risk_score_map = _create_ordered_risk_map(
+            classes=["A", "B", "C", "D", "E"],
+            feature_range=feature_range
+        )
+        for col in GroundStabilityRiskCols:
+            ground_stability[f"{col}_{Scenarios.CURRENT}"] = ground_stability[
+                f"{col}_{Scenarios.CURRENT}"
+            ].map(risk_score_map)
+            ground_stability[f"{col}_{Scenarios.FORECAST}"] = ground_stability[
+                f"{col}_{Scenarios.FORECAST}"
+            ].map(risk_score_map)
 
-    # Convert risk columns from A-E to numeric scores
-    for col in GroundStabilityRiskCols:
-        ground_stability[col] = ground_stability[col].map(_GROUND_STABILITY_RISK_SCORE_MAP)
+        ground_stability = _iterative_spatial_infilling(
+            ground_stability,
+            [f"{col}_{Scenarios.CURRENT}" for col in GroundStabilityRiskCols] +
+            [f"{col}_{Scenarios.FORECAST}" for col in GroundStabilityRiskCols],
+            _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE,
+        )
+    else:
+        ground_stability = gpd.read_file(
+            config.paths.model_input / file_paths.GEOSURE_OPEN_MODEL_INPUT_PATH
+        )
 
-    ground_stability = _iterative_spatial_infilling(
-        ground_stability,
-        list(GroundStabilityRiskCols),
-        _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE,
-    )
+        risk_score_map = _create_ordered_risk_map(
+            classes=[1, 2, 3],
+            feature_range=feature_range
+        )
+        for col in GroundStabilityRiskCols:
+            ground_stability[f"{col}_{Scenarios.CURRENT}"] = ground_stability[
+                f"{col}_{Scenarios.CURRENT}"
+            ].map(risk_score_map)
+            ground_stability[f"{col}_{Scenarios.FORECAST}"] = ground_stability[
+                f"{col}_{Scenarios.FORECAST}"
+            ].map(risk_score_map)
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
-    ground_stability = _min_max_scaling(
-        ground_stability, list(GroundStabilityRiskCols), feature_range
-    )
 
     ground_stability = calculate_composite_score(
         ground_stability,

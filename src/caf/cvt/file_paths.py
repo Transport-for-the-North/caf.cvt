@@ -101,8 +101,8 @@ WIND_DRIVEN_RAIN_MODEL_INPUT_PATH = pathlib.Path(
 
 FLOODING_MODEL_INPUT_PATH = pathlib.Path("Hazards/Flooding")
 
-
 GEOSURE_MODEL_INPUT_PATH = pathlib.Path("Hazards/Ground Stability/GeoSure")
+GEOSURE_OPEN_MODEL_INPUT_PATH = GEOSURE_MODEL_INPUT_PATH / "geosure.gpkg"
 
 GROUND_INSTABILITY_ZONES_MODEL_INPUT_PATH = pathlib.Path(
     "Hazards/Coastal Erosion/NCERM/ncerm_giz.gpkg"

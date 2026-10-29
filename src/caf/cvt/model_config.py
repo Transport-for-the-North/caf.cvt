@@ -277,23 +277,23 @@ class ExtremeWeather(ctk.BaseConfig):
     precip_winter: pathlib.Path
 
 
-class GeoSureEntry(ctk.BaseConfig):
-    """Configuration for GeoSure data.
+class PremiumGeoSureEntry(ctk.BaseConfig):
+    """Configuration for the premium GeoSure data.
 
     Attributes
     ----------
     collapsible_deposits : pathlib.Path
-        Path to the collapsible deposits shapefile.
+        Configuration for collapsible deposits shapefile.
     compressible_ground : pathlib.Path
-        Path to the compressible ground shapefile.
+        Configuration for compressible ground shapefile.
     landslides : pathlib.Path
-        Path to the landslides shapefile.
+        Configuration for landslides shapefile.
     running_sands : pathlib.Path
-        Path to the running sands shapefile.
+        Configuration for running sands shapefile.
     shrink_swell : pathlib.Path
-        Path to the shrink swell shapefile.
+        Configuration for shrink swell shapefile.
     soluble_rocks : pathlib.Path
-        Path to the soluble rocks shapefile.
+        Configuration for soluble rocks shapefile.
     """
 
     collapsible_deposits: pathlib.Path
@@ -302,6 +302,22 @@ class GeoSureEntry(ctk.BaseConfig):
     running_sands: pathlib.Path
     shrink_swell: pathlib.Path
     soluble_rocks: pathlib.Path
+
+
+class GeoSureEntry(ctk.BaseConfig):
+    """Configuration for GeoSure data.
+
+    Attributes
+    ----------
+    open: ZipFileEntry
+       Configuration for the open GeoSure zip file entry.
+    premium: PremiumGeoSureEntry
+       Configuration for the premium GeoSure entry.
+    """
+
+    open: ZipFileEntry
+    premium: PremiumGeoSureEntry
+
 
 
 class GroundStability(ctk.BaseConfig):
@@ -494,6 +510,7 @@ class SwitchConfig(ctk.BaseConfig):
     compute_flooding_overlay: bool = False
     flooding_index_raster: bool = False
     noham_zip_extract: bool = False
+    ground_stability_premium: bool = False
 
     @pydantic.model_validator(mode="after")
     def _check(self) -> Self:
