@@ -1810,9 +1810,7 @@ def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) 
                 config=config,
                 flooding_type=flooding_type,
                 boundary=boundary,
-                out_path=file_paths.FLOODING_MODEL_INPUT_PATH
-                / flooding_type
-                / scenario
+                out_path=config.paths.model_input / file_paths.FLOODING_MODEL_INPUT_PATH
                 / f"{flooding_type}_{scenario}.gpkg",
                 rename_risk_col=f"{flooding_type}_flooding_risk_{scenario}",
                 climate_change=(scenario == Scenarios.FORECAST),
@@ -1836,9 +1834,7 @@ def _clean_groundwater(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     write_to_file(
         groundwater_flooding,
         output_path=config.paths.model_input
-        / file_paths.FLOODING_MODEL_INPUT_PATH
-        / FloodingTypes.GROUNDWATER
-        / f"{FloodingTypes.GROUNDWATER}.gpkg",
+        / file_paths.GROUNDWATER_FLOODING_MODEL_INPUT_PATH,
     )
 
 
@@ -1877,7 +1873,7 @@ def _clean_flooding_layer(
 
         write_to_file(
             flooding_data,
-            config.paths.model_input / out_path,
+            out_path,
             mode="w" if first_write else "a",
         )
 

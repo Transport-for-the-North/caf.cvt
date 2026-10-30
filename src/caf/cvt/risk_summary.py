@@ -149,6 +149,14 @@ def create_risk_summary(
         subset=[f"{col}_{Scenarios.CURRENT}" for col in risk_cols]
         + [f"{col}_{Scenarios.FORECAST}" for col in risk_cols]
     )
+    if asset_risk_summary.empty:
+        return
+
+    for descriptive_col in descriptive_cols: # Create unknown category for missing values
+        asset_risk_summary[descriptive_col] = (
+            asset_risk_summary[descriptive_col].fillna("Unknown")
+        )
+
     asset_risk_summary[_LENGTH_M_COL] = asset_risk_summary.geometry.length
     total_length = asset_risk_summary[_LENGTH_M_COL].sum()
 
@@ -178,7 +186,6 @@ def create_risk_summary(
             [
                 {descriptive_col: descriptive_feature, _LENGTH_M_COL: 0}
                 for descriptive_feature in asset_risk_summary[descriptive_col].unique()
-                if descriptive_feature is not None
             ]
         )
         for descriptive_col in descriptive_cols
@@ -772,9 +779,11 @@ def _get_risk_average_style(
             ).replace("#", "")
         elif c_idx == _CHANGE_IN_RISK_COL:
             if value > 0:
+                fill_colour = HexColourCodes.PALE_VIOLET_RED
+            elif value < 0:
                 fill_colour = HexColourCodes.LIGHT_GREEN
             else:
-                fill_colour = HexColourCodes.PALE_VIOLET_RED
+                fill_colour = HexColourCodes.GREY
         elif c_idx == _LENGTH_WEIGHTED_PCT_RISK_COL:
             fill_colour = mpl.colors.to_hex(
                 mpl.colormaps[ColourMaps.ORANGES](value / 100)

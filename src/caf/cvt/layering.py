@@ -198,6 +198,7 @@ def _reshape_for_scenarios(
         values="value",
         index=[id_col, scenario_col, *descriptive_cols],
         columns="variable",
+        dropna=False,
     ).reset_index()
 
     # Reorder risk columns based on original order

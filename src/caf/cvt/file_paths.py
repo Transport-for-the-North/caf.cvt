@@ -2,7 +2,7 @@
 
 import pathlib
 
-from caf.cvt.definitions import FLOODING_TILE_SIZE_M
+from caf.cvt.definitions import FLOODING_TILE_SIZE_M, FloodingTypes
 
 # Infrastructure Model Inputs Paths
 
@@ -100,6 +100,9 @@ WIND_DRIVEN_RAIN_MODEL_INPUT_PATH = pathlib.Path(
 )
 
 FLOODING_MODEL_INPUT_PATH = pathlib.Path("Hazards/Flooding")
+GROUNDWATER_FLOODING_MODEL_INPUT_PATH = (
+    FLOODING_MODEL_INPUT_PATH / FloodingTypes.GROUNDWATER / f"{FloodingTypes.GROUNDWATER}.gpkg"
+)
 
 GEOSURE_MODEL_INPUT_PATH = pathlib.Path("Hazards/Ground Stability/GeoSure")
 GEOSURE_OPEN_MODEL_INPUT_PATH = GEOSURE_MODEL_INPUT_PATH / "geosure.gpkg"
