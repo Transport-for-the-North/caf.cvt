@@ -34,6 +34,14 @@ warnings.filterwarnings(
     category=RuntimeWarning,
 )
 
+# This warning is raised by PIL when opening image files to write them to excel file using
+# openpyxl. Since the excel workbook is closed and the images are small, this is not a concern.
+warnings.filterwarnings(
+    "ignore",
+    message=r"unclosed file.*",
+    category=ResourceWarning,
+)
+
 
 def _main() -> None:
     """Run Climate Vulnerability Tool."""
