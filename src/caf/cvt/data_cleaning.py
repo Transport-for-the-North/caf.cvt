@@ -1810,7 +1810,8 @@ def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) 
                 config=config,
                 flooding_type=flooding_type,
                 boundary=boundary,
-                out_path=config.paths.model_input / file_paths.FLOODING_MODEL_INPUT_PATH
+                out_path=config.paths.model_input
+                / file_paths.FLOODING_MODEL_INPUT_PATH
                 / f"{flooding_type}_{scenario}.gpkg",
                 rename_risk_col=f"{flooding_type}_flooding_risk_{scenario}",
                 climate_change=(scenario == Scenarios.FORECAST),

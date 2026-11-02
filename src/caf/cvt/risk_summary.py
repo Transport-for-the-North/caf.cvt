@@ -152,9 +152,9 @@ def create_risk_summary(
     if asset_risk_summary.empty:
         return
 
-    for descriptive_col in descriptive_cols: # Create unknown category for missing values
-        asset_risk_summary[descriptive_col] = (
-            asset_risk_summary[descriptive_col].fillna("Unknown")
+    for descriptive_col in descriptive_cols:  # Create unknown category for missing values
+        asset_risk_summary[descriptive_col] = asset_risk_summary[descriptive_col].fillna(
+            "Unknown"
         )
 
     asset_risk_summary[_LENGTH_M_COL] = asset_risk_summary.geometry.length
@@ -764,6 +764,7 @@ def _get_risk_average_style(
         fill_colour = HexColourCodes.BLACK
         bold = True
         text_colour = HexColourCodes.WHITE
+        cell_border = openpyxl.styles.Border(right=border, top=border, bottom=border)
     elif c_idx == 1:
         if _is_row_even(r_idx):
             fill_colour = HexColourCodes.DARK_GREY
@@ -772,6 +773,20 @@ def _get_risk_average_style(
         bold = False
         text_colour = HexColourCodes.BLACK
 
+    fill_colour = _format_numeric_cells(fill_colour=fill_colour, value=value, c_idx=c_idx)
+
+    if not isinstance(value, (int, float)):
+        cell_border = openpyxl.styles.Border(right=border)
+
+    return CellStyle(
+        fill_colour=fill_colour,
+        text_colour=text_colour,
+        bold=bold,
+        border=cell_border,
+    )
+
+
+def _format_numeric_cells(fill_colour: str, value: float, c_idx: int) -> str:
     if isinstance(value, (int, float)):
         if c_idx in [_AVERAGE_CURRENT_RISK_COL, _AVERAGE_FORECAST_RISK_COL]:
             fill_colour = mpl.colors.to_hex(
@@ -788,17 +803,8 @@ def _get_risk_average_style(
             fill_colour = mpl.colors.to_hex(
                 mpl.colormaps[ColourMaps.ORANGES](value / 100)
             ).replace("#", "")
-    elif r_idx == _HEADER_ROW:
-        cell_border = openpyxl.styles.Border(right=border, top=border, bottom=border)
-    else:
-        cell_border = openpyxl.styles.Border(right=border)
 
-    return CellStyle(
-        fill_colour=fill_colour,
-        text_colour=text_colour,
-        bold=bold,
-        border=cell_border,
-    )
+    return fill_colour
 
 
 ### DESCRIPTIVE RISK AVERAGES SHEET

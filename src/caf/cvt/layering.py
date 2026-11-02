@@ -1508,9 +1508,7 @@ def _ncn_risk(
         asset_risk=ncn_risk,
         risk_cols=risk_cols,
         descriptive_cols=[
-            name
-            for name in NationalCycleNetworkCols.rename_map().values()
-            if name != ID_COL
+            name for name in NationalCycleNetworkCols.rename_map().values() if name != ID_COL
         ],
         out_path=config.paths.audit_path / "Summary" / "Other" / "National Cycle Network",
         out_filename="National Cycle Network Risk Summary.xlsx",
