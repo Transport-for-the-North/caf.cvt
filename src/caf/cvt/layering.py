@@ -193,13 +193,14 @@ def _reshape_for_scenarios(
     melted["variable"] = melted["variable"].str.replace(scenario_pattern, "", regex=True)
 
     # Pivot back so each risk variable becomes a column
-    reshaped = pd.pivot_table(
-        melted,
-        values="value",
-        index=[id_col, scenario_col, *descriptive_cols],
-        columns="variable",
-        dropna=False,
-    ).reset_index()
+    reshaped = (
+        melted  # noqa: PD010 ignore preference for pivot_table, need to keep NA rows
+        .set_index(
+            [id_col, scenario_col, *descriptive_cols, "variable"]
+        )["value"]
+        .unstack("variable")
+        .reset_index()
+    )
 
     # Reorder risk columns based on original order
     reshaped = reshaped[[id_col, scenario_col, *descriptive_cols, *risk_cols_order]]

@@ -152,8 +152,8 @@ def min_max_scaling_pair_raster(
         current = stack[current_band]
         forecast = stack[forecast_band]
 
-        combined_min = min(np.nanmin(current), np.nanmin(forecast))
-        combined_max = max(np.nanmax(current), np.nanmax(forecast))
+        combined_min = np.nanmin(np.nanmin(current), np.nanmin(forecast))
+        combined_max = np.nanmax(np.nanmax(current), np.nanmax(forecast))
 
         if combined_max == combined_min:
             current_scaled = np.full_like(current, out_min)
@@ -602,7 +602,7 @@ def _validate_index(
 
 
 def _validate_raster_index_tile(
-    index_tile: np.ndarray, feature_range: tuple[int, int]
+    index_tile: np.ndarray, feature_range: tuple[float, float]
 ) -> None:
     """Validate a given raster index."""
     valid_mask = np.isfinite(index_tile)
@@ -1355,6 +1355,8 @@ def _rasterize_and_stack_tiled(
         col_band_map[f"{col}_{Scenarios.FORECAST}"] = forecast_band
 
     raster_metadata = _get_raster_metadata(flooding_layers)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Create output raster
     with rasterio.open(
