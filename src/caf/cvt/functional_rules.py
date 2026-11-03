@@ -1401,7 +1401,7 @@ def _process_raster_flooding_tile(
     *,
     raster_metadata: dict[str, int | rasterio.Affine],
     flooding_layers: dict[str, gpd.GeoDataFrame],
-    scaling_params: dict[str, tuple[float, float]],
+    scaling_params: dict[FloodingRiskCols, tuple[float, float]],
     col_band_map: dict[str, int],
     feature_range: tuple[float, float],
     dst: rasterio.io.DatasetWriter,

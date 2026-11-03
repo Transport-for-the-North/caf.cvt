@@ -194,10 +194,7 @@ def _reshape_for_scenarios(
 
     # Pivot back so each risk variable becomes a column
     reshaped = (
-        melted  # noqa: PD010 ignore preference for pivot_table, need to keep NA rows
-        .set_index(
-            [id_col, scenario_col, *descriptive_cols, "variable"]
-        )["value"]
+        melted.set_index([id_col, scenario_col, *descriptive_cols, "variable"])["value"]  # noqa: PD010 ignore preference for pivot_table, need to keep NA rows
         .unstack("variable")
         .reset_index()
     )

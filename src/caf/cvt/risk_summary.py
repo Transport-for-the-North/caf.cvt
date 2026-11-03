@@ -786,7 +786,9 @@ def _get_risk_average_style(
     )
 
 
-def _format_numeric_cells(fill_colour: str, value: float, c_idx: int) -> str:
+def _format_numeric_cells(
+    fill_colour: HexColourCodes, value: str | int | float | None, c_idx: int
+) -> str:
     if isinstance(value, (int, float)):
         if c_idx in [_AVERAGE_CURRENT_RISK_COL, _AVERAGE_FORECAST_RISK_COL]:
             fill_colour = mpl.colors.to_hex(
