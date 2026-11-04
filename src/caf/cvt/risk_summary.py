@@ -148,7 +148,7 @@ def create_risk_summary(
     asset_risk_summary = asset_risk_summary.dropna(
         subset=[f"{col}_{Scenarios.CURRENT}" for col in risk_cols]
         + [f"{col}_{Scenarios.FORECAST}" for col in risk_cols]
-    )
+    ).copy()
     if asset_risk_summary.empty:
         return
 
