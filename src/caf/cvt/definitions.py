@@ -6,6 +6,8 @@ import enum
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 if TYPE_CHECKING:
     import openpyxl
 
@@ -126,6 +128,18 @@ class FloodingRiskCols(RiskColumn):
             FloodingRiskCols.RIVERS_SEA: 0.5,
             FloodingRiskCols.SURFACE_WATER: 0.5,
             # TODO (DJ): #41 Add groundwater flooding weighting
+        }
+
+    @classmethod
+    def get_risk_map(cls) -> dict[int | str, float]:
+        """Return mapping of flooding risk categories to numerical risk values."""
+        return {
+            0: 0,  # No risk areas stay 0
+            "Unavailable": np.nan,
+            "Very low": 0,  # Less than 0.1% chance of flooding
+            "Low": 0.1,  # 0.1% to 1% chance of flooding
+            "Medium": 1,  # 1% to 3.3% chance of flooding
+            "High": 3.3,  # Greater than 3.3% chance of flooding
         }
 
 
@@ -303,34 +317,6 @@ class DemandCols(RiskColumn):
         return ColourMaps.VIRIDIS
 
 
-class ImpactCols(RiskColumn):
-    """Column definitions for impact layers."""
-
-    UC1_IMPACT = "uc1_impact"
-    UC2_IMPACT = "uc2_impact"
-    UC3_IMPACT = "uc3_impact"
-    UC4_IMPACT = "uc4_impact"
-    UC5_IMPACT = "uc5_impact"
-    UC6_IMPACT = "uc6_impact"
-    UC7_IMPACT = "uc7_impact"
-    IMPACT = "impact"
-
-    def get_cmap(self) -> ColourMaps:
-        """Return the appropriate colormap for a given impact column."""
-        return ColourMaps.VIRIDIS
-
-    @classmethod
-    def get_noham_impact_cols(cls) -> list[RiskColumn]:
-        """Return a list of all NOHAM impact columns."""
-        return [
-            cls.UC1_IMPACT,
-            cls.UC2_IMPACT,
-            cls.UC3_IMPACT,
-            cls.UC4_IMPACT,
-            cls.UC5_IMPACT,
-            cls.IMPACT,
-        ]
-
 
 class Scenarios(enum.StrEnum):
     """Column definitions for scenarios."""
@@ -364,6 +350,35 @@ class UserClasses(enum.StrEnum):
             cls.USER_CLASS_3,
             cls.USER_CLASS_4,
             cls.USER_CLASS_5,
+        ]
+
+
+class ImpactCols(RiskColumn):
+    """Column definitions for impact layers."""
+
+    IMPACT = "impact"
+    UC1_IMPACT = f"{UserClasses.USER_CLASS_1}_{IMPACT}"
+    UC2_IMPACT = f"{UserClasses.USER_CLASS_2}_{IMPACT}"
+    UC3_IMPACT = f"{UserClasses.USER_CLASS_3}_{IMPACT}"
+    UC4_IMPACT = f"{UserClasses.USER_CLASS_4}_{IMPACT}"
+    UC5_IMPACT = f"{UserClasses.USER_CLASS_5}_{IMPACT}"
+    UC6_IMPACT = f"{UserClasses.USER_CLASS_6}_{IMPACT}"
+    UC7_IMPACT = f"{UserClasses.USER_CLASS_7}_{IMPACT}"
+
+    def get_cmap(self) -> ColourMaps:
+        """Return the appropriate colormap for a given impact column."""
+        return ColourMaps.VIRIDIS
+
+    @classmethod
+    def get_uc1_to_uc5_impact_cols(cls) -> list[RiskColumn]:
+        """Return a list of all UC1 to UC5 impact columns."""
+        return [
+            cls.UC1_IMPACT,
+            cls.UC2_IMPACT,
+            cls.UC3_IMPACT,
+            cls.UC4_IMPACT,
+            cls.UC5_IMPACT,
+            cls.IMPACT,
         ]
 
 
@@ -611,6 +626,17 @@ class NaPTANCols(enum.StrEnum):
             NaPTANCols.LOCALITY: "locality",
             NaPTANCols.PARENT_LOCALITY: "parent_locality",
         }
+
+    @classmethod
+    def get_missing_areas(cls) -> list[SubnationalTransportBodies | CombinedAuthorities]:
+        """Return list of areas missing from the NaPTAN data."""
+        return [
+            SubnationalTransportBodies.TRANSPORT_FOR_THE_NORTH,
+            SubnationalTransportBodies.TRANSPORT_SCOTLAND,
+            SubnationalTransportBodies.ENGLANDS_ECONOMIC_HEARTLAND,
+            SubnationalTransportBodies.TRANSPORT_EAST,
+            CombinedAuthorities.CAMBRIDGESHIRE_OR_PETERBOROUGH
+        ]
 
 
 class MasterMapSiteCols(enum.StrEnum):

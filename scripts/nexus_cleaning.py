@@ -1,5 +1,4 @@
 """Module to clean and prepare Nexus transport data."""
-# pylint: disable=duplicate-code
 
 import itertools
 import logging
@@ -465,7 +464,7 @@ def _map_demand_to_metro_links(demand: pd.DataFrame) -> gpd.GeoDataFrame:
 
 # RUN SCRIPT
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pylint: disable=duplicate-code
     with ctk.LogHelper(
         _NAME,
         ctk.ToolDetails(

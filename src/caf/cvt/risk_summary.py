@@ -2,6 +2,7 @@
 
 import logging
 import pathlib
+import warnings
 
 import geopandas as gpd
 import matplotlib as mpl
@@ -25,6 +26,17 @@ from caf.cvt.definitions import (
 # LOGGING
 
 LOG = logging.getLogger(__name__)
+
+
+# WARNING FILTERS
+
+# This warning is raised by PIL when opening image files to write them to excel file using
+# openpyxl. Since the excel workbook is closed and the images are small, this is not a concern.
+warnings.filterwarnings(
+    "ignore",
+    message=r"unclosed file.*",
+    category=ResourceWarning,
+)
 
 # MODULE CONSTANTS
 

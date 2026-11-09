@@ -1,5 +1,4 @@
 """Module to derive asset-specific hazard weights."""
-# pylint: disable=duplicate-code
 
 import logging
 import pathlib
@@ -32,26 +31,33 @@ INCIDENT_WEIGHTS = {"incident_share": 0.2, "minutes_share": 0.4, "cost_share": 0
 # MAIN FUNCTIONS
 
 
-def derive_rail_weights() -> None:
+def derive_rail_weights(
+    nwr_eastern_path: pathlib.Path,
+    nwr_northwest_path: pathlib.Path,
+    incident_weights: dict[str, float],
+    output_path: pathlib.Path,
+) -> None:
     """Derive asset-specific hazard weights for rail assets."""
-    rail_incidents = read_clean_nwr_data()
+    rail_incidents = read_clean_nwr_data(nwr_eastern_path, nwr_northwest_path)
 
-    incident_summary = calculate_incident_summary(rail_incidents)
+    incident_summary = calculate_incident_summary(rail_incidents, incident_weights)
 
     LOG.info("Writing incident summary to CSV...")
-    incident_summary.to_csv(OUTPUT_PATH / "rail_incident_summary.csv", index=False)
+    incident_summary.to_csv(output_path / "rail_incident_summary.csv", index=False)
 
     impact_weights = aggregate_impact_weights(incident_summary)
 
     LOG.info("Writing impact weights to CSV...")
-    impact_weights.to_csv(OUTPUT_PATH / "rail_impact_weights.csv", index=False)
+    impact_weights.to_csv(output_path / "rail_impact_weights.csv", index=False)
 
 
-def read_clean_nwr_data() -> pd.DataFrame:
+def read_clean_nwr_data(
+    nwr_eastern_path: pathlib.Path, nwr_northwest_path: pathlib.Path
+) -> pd.DataFrame:
     """Read and clean Network Rail weather data."""
     LOG.info("Reading and cleaning Network Rail weather data...")
-    nwr_eastern = pd.read_csv(NWR_EASTERN_PATH)
-    nwr_northwest = pd.read_csv(NWR_NORTHWEST_PATH)
+    nwr_eastern = pd.read_csv(nwr_eastern_path)
+    nwr_northwest = pd.read_csv(nwr_northwest_path)
     nwr_incidents = pd.concat([nwr_eastern, nwr_northwest], ignore_index=True)
     rail_incidents = nwr_incidents[
         nwr_incidents["Weather Category"].isin(["Wind", "Heat", "Snow", "Cold", "Subsidence"])
@@ -60,7 +66,9 @@ def read_clean_nwr_data() -> pd.DataFrame:
     return rail_incidents
 
 
-def calculate_incident_summary(rail_incidents: pd.DataFrame) -> pd.DataFrame:
+def calculate_incident_summary(
+    rail_incidents: pd.DataFrame, incident_weights: dict[str, float]
+) -> pd.DataFrame:
     """Calculate impact weights for rail data based on incident data."""
     LOG.info("Calculating incident summary for rail data...")
     incident_summary = (
@@ -85,9 +93,9 @@ def calculate_incident_summary(rail_incidents: pd.DataFrame) -> pd.DataFrame:
     )
 
     incident_summary["impact"] = round(
-        incident_summary["incident_share"] * INCIDENT_WEIGHTS["incident_share"]
-        + incident_summary["minutes_share"] * INCIDENT_WEIGHTS["minutes_share"]
-        + incident_summary["cost_share"] * INCIDENT_WEIGHTS["cost_share"],
+        incident_summary["incident_share"] * incident_weights["incident_share"]
+        + incident_summary["minutes_share"] * incident_weights["minutes_share"]
+        + incident_summary["cost_share"] * incident_weights["cost_share"],
         2,
     )
 
@@ -120,7 +128,7 @@ def aggregate_impact_weights(incident_summary: pd.DataFrame) -> pd.DataFrame:
 
 # RUN SCRIPT
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pylint: disable=duplicate-code
     with ctk.LogHelper(
         _NAME,
         ctk.ToolDetails(
@@ -129,4 +137,6 @@ if __name__ == "__main__":
         ),
         log_file=OUTPUT_PATH / "asset_risk_weighting.log",
     ) as log:
-        derive_rail_weights()
+        derive_rail_weights(
+            NWR_EASTERN_PATH, NWR_NORTHWEST_PATH, INCIDENT_WEIGHTS, OUTPUT_PATH
+        )

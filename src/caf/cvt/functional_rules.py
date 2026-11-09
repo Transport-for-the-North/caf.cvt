@@ -3,6 +3,7 @@
 ### LOAD LIBRARIES
 import logging
 import pathlib
+import warnings
 from functools import reduce
 
 import contextily as ctx
@@ -39,9 +40,25 @@ from caf.cvt.definitions import (
     StormCols,
 )
 
+plt.switch_backend("Agg")  # Use non-interactive backend for plotting
+
+# LOGGING
+
 LOG = logging.getLogger(__name__)
 
-plt.switch_backend("Agg")  # Use non-interactive backend for plotting
+# FILTER WARNINGS
+
+# This warning is raised in this model where geopandas overlays take place with large spatial
+# datasets. Since the model is designed to handle large datasets, and overlays are expected to
+# be complex and time-consuming, we can safely ignore this warning. If the processing time
+# becomes unreasonably long, it may be worth investigating an alternative approach.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*organizePolygons\(\) received a polygon with more than 100 parts.*",
+    category=RuntimeWarning,
+)
+
+# MODULE CONSTANTS
 
 _EXTREME_HEAT_RISK_THRESHOLD = 30
 
@@ -64,14 +81,6 @@ _COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenari
 _NUM_TILES_DONE = 0
 _FLOODING_PIXEL_SIZE_M = 2
 _FLOODING_TILE_SIZE_PIXELS = 2048
-_FLOODING_RISK_SCORE_MAP: dict[str | int, float] = {
-    0: 0,  # No risk areas stay 0
-    "Unavailable": np.nan,
-    "Very low": 0,  # Less than 0.1% chance of flooding
-    "Low": 0.1,  # 0.1% to 1% chance of flooding
-    "Medium": 1,  # 1% to 3.3% chance of flooding
-    "High": 3.3,  # Greater than 3.3% chance of flooding
-}
 
 _PLOT_ALPHA_BASEMAP = 0.7
 _PLOT_ALPHA_NO_BASEMAP = 1.0
@@ -389,25 +398,6 @@ def calculate_composite_score(
     return risk_data
 
 
-def _calculate_flooding_composite_raster(
-    flooding_raster_stack: np.ndarray, weights: dict[RiskColumn, float]
-) -> np.ndarray:
-    """Calculate composite score for each scenario in a raster stack."""
-    flooding_raster_stack[4] = (
-        flooding_raster_stack[FloodingBands.RIVERS_CURRENT.value]
-        * weights[FloodingRiskCols.RIVERS_SEA]
-        + flooding_raster_stack[FloodingBands.SURFACE_CURRENT.value]
-        * weights[FloodingRiskCols.SURFACE_WATER]
-    )
-    flooding_raster_stack[5] = (
-        flooding_raster_stack[FloodingBands.RIVERS_FORECAST.value]
-        * weights[FloodingRiskCols.RIVERS_SEA]
-        + flooding_raster_stack[FloodingBands.SURFACE_FORECAST.value]
-        * weights[FloodingRiskCols.SURFACE_WATER]
-    )
-
-    return flooding_raster_stack
-
 
 def _overlay_and_clean(
     *hazard_layers: gpd.GeoDataFrame,
@@ -511,35 +501,24 @@ def plot_choropleth(
 
     _fig, ax = plt.subplots(1, 2, figsize=(16, 8))
 
-    risk_data.plot(
-        column=f"{column}_{Scenarios.CURRENT}",
-        cmap=cmap,
-        linewidth=linewidth,
-        ax=ax[0],
-        edgecolor=edgecolor,
-        legend=True,
-        vmin=feature_range[0],
-        vmax=feature_range[1],
-        alpha=_PLOT_ALPHA_BASEMAP if basemap_source is not None else _PLOT_ALPHA_NO_BASEMAP,
-    )
-    risk_data.plot(
-        column=f"{column}_{Scenarios.FORECAST}",
-        cmap=cmap,
-        linewidth=linewidth,
-        ax=ax[1],
-        edgecolor=edgecolor,
-        legend=True,
-        vmin=feature_range[0],
-        vmax=feature_range[1],
-        alpha=_PLOT_ALPHA_BASEMAP if basemap_source is not None else _PLOT_ALPHA_NO_BASEMAP,
-    )
-    if basemap_source is not None:
-        ctx.add_basemap(ax[0], source=basemap_source)
-        ctx.add_basemap(ax[1], source=basemap_source)
-    ax[0].set_title(f"{title} - {Scenarios.CURRENT.title()}")
-    ax[1].set_title(f"{title} - {Scenarios.FORECAST.title()}")
-    ax[0].set_axis_off()
-    ax[1].set_axis_off()
+    for axis, scenario in zip(ax, [Scenarios.CURRENT, Scenarios.FORECAST], strict=False):
+        risk_data.plot(
+            column=f"{column}_{scenario}",
+            cmap=cmap,
+            linewidth=linewidth,
+            ax=axis,
+            edgecolor=edgecolor,
+            legend=True,
+            vmin=feature_range[0],
+            vmax=feature_range[1],
+            alpha=_PLOT_ALPHA_BASEMAP
+            if basemap_source is not None
+            else _PLOT_ALPHA_NO_BASEMAP,
+        )
+        if basemap_source is not None:
+            ctx.add_basemap(axis, source=basemap_source)
+        axis.set_title(f"{title} - {scenario.title()}")
+        axis.set_axis_off()
 
     plt.tight_layout()
     plt.savefig(out_path)
@@ -1345,7 +1324,7 @@ def _rasterize_and_stack_tiled(
         flooding_layers[flooding_layer_name] = gpd.read_file(flooding_path)
         flooding_layers[flooding_layer_name][flooding_layer_name] = flooding_layers[
             flooding_layer_name
-        ][flooding_layer_name].map(_FLOODING_RISK_SCORE_MAP)
+        ][flooding_layer_name].map(FloodingRiskCols.get_risk_map())
 
     scaling_params = _flooding_raster_min_max(flooding_layers)
 
@@ -1625,7 +1604,7 @@ def _flooding_index_vector(
     LOG.info("Applying functional rules to flooding overlay...")
 
     # Fill NA values with very low risk since no data means very low risk in the data
-    flooding_risk = flooding_risk.fillna(_FLOODING_RISK_SCORE_MAP["Very low"])
+    flooding_risk = flooding_risk.fillna(FloodingRiskCols.get_risk_map()["Very low"])
 
     # Map original risk categories to numeric scores
     for col in [
@@ -1634,7 +1613,9 @@ def _flooding_index_vector(
         f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}",
         f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}",
     ]:
-        flooding_risk[col] = flooding_risk[col].map(_FLOODING_RISK_SCORE_MAP).astype(float)
+        flooding_risk[col] = flooding_risk[col].map(
+            FloodingRiskCols.get_risk_map()
+        ).astype(float)
 
     feature_range = (config.constants.score_min, config.constants.score_max)
     flooding_risk = min_max_scaling_pair(

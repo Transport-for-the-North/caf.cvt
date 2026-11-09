@@ -3,7 +3,6 @@
 import argparse
 import logging
 import pathlib
-import warnings
 
 import caf.toolkit as ctk
 
@@ -14,33 +13,6 @@ from caf.cvt.layering import layering
 from caf.cvt.model_config import Config
 
 LOG = logging.getLogger(__name__)
-
-# This warning is raised in this model where geopandas overlays take place with large spatial
-# datasets. Since the model is designed to handle large datasets, and overlays are expected to
-# be complex and time-consuming, we can safely ignore this warning. If the processing time
-# becomes unreasonably long, it may be worth investigating an alternative approach.
-warnings.filterwarnings(
-    "ignore",
-    message=r".*organizePolygons\(\) received a polygon with more than 100 parts.*",
-    category=RuntimeWarning,
-)
-
-# This warning is raised by xarray when reading the .nc wind speed files. It does not change
-# the data at all, so we can safely ignore it. It is likely caused by a numpy version mismatch.
-# Eventually this warning should be addressed, but for now it is safe to ignore.
-warnings.filterwarnings(
-    "ignore",
-    message="numpy.ndarray size changed, may indicate binary incompatibility.*",
-    category=RuntimeWarning,
-)
-
-# This warning is raised by PIL when opening image files to write them to excel file using
-# openpyxl. Since the excel workbook is closed and the images are small, this is not a concern.
-warnings.filterwarnings(
-    "ignore",
-    message=r"unclosed file.*",
-    category=ResourceWarning,
-)
 
 
 def _main() -> None:

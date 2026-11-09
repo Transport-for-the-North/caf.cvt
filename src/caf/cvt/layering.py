@@ -596,7 +596,7 @@ def _noham_road_risk(
     feature_range = (config.constants.score_min, config.constants.score_max)
     noham_risk = _noham_impact_index(noham_risk, feature_range)
 
-    risk_impact_cols = [*risk_cols, *ImpactCols.get_noham_impact_cols()]
+    risk_impact_cols = [*risk_cols, *ImpactCols.get_uc1_to_uc5_impact_cols()]
 
     risk_summary.create_risk_summary(
         config,
