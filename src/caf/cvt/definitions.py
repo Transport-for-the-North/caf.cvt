@@ -91,6 +91,8 @@ class ExtremeWeatherRiskCols(RiskColumn):
         }
         return cmap_mapping[self]
 
+    # TODO (DJ): Separate weights and parameters into csv files that are read in rather than
+    # hardcoding here
     @classmethod
     def get_weights(cls) -> dict[RiskColumn, float]:
         """Return appropriate weights for Extreme Weather."""
@@ -141,17 +143,6 @@ class FloodingRiskCols(RiskColumn):
             "Medium": 1,  # 1% to 3.3% chance of flooding
             "High": 3.3,  # Greater than 3.3% chance of flooding
         }
-
-
-class FloodingBands(enum.Enum):
-    """Enumeration for different flood bands."""
-
-    RIVERS_CURRENT = 0
-    RIVERS_FORECAST = 1
-    SURFACE_CURRENT = 2
-    SURFACE_FORECAST = 3
-    FLOODING_CURRENT = 4
-    FLOODING_FORECAST = 5
 
 
 class GroundStabilityRiskCols(RiskColumn):
@@ -219,6 +210,35 @@ class MainHazardRiskCols(RiskColumn):
             MainHazardRiskCols.COASTAL_EROSION: [],
         }
         return sub_hazard_mapping[self]
+
+
+class FloodingBands(enum.Enum):
+    """Enumeration for different flood bands."""
+
+    RIVERS_CURRENT = 0
+    RIVERS_FORECAST = 1
+    SURFACE_CURRENT = 2
+    SURFACE_FORECAST = 3
+    FLOODING_CURRENT = 4
+    FLOODING_FORECAST = 5
+
+    @classmethod
+    def get_band_map(cls) -> dict[RiskColumn, tuple[int, int]]:
+        """Return mapping of flooding risk columns to their corresponding flooding bands."""
+        return {
+            FloodingRiskCols.RIVERS_SEA: (
+                FloodingBands.RIVERS_CURRENT.value,
+                FloodingBands.RIVERS_FORECAST.value,
+            ),
+            FloodingRiskCols.SURFACE_WATER: (
+                FloodingBands.SURFACE_CURRENT.value,
+                FloodingBands.SURFACE_FORECAST.value,
+            ),
+            MainHazardRiskCols.FLOODING: (
+                FloodingBands.FLOODING_CURRENT.value,
+                FloodingBands.FLOODING_FORECAST.value,
+            ),
+        }
 
 
 class ExtremeHeatCols(RiskColumn):
@@ -317,7 +337,6 @@ class DemandCols(RiskColumn):
         return ColourMaps.VIRIDIS
 
 
-
 class Scenarios(enum.StrEnum):
     """Column definitions for scenarios."""
 
@@ -330,6 +349,8 @@ class Scenarios(enum.StrEnum):
         return f"{cls.CURRENT}_or_{cls.FORECAST}"
 
 
+# TODO (DJ): Make user class dynamically defined based on user input in config, then create
+# column names dynamically from that
 class UserClasses(enum.StrEnum):
     """Definitions for user classes."""
 
@@ -635,7 +656,7 @@ class NaPTANCols(enum.StrEnum):
             SubnationalTransportBodies.TRANSPORT_SCOTLAND,
             SubnationalTransportBodies.ENGLANDS_ECONOMIC_HEARTLAND,
             SubnationalTransportBodies.TRANSPORT_EAST,
-            CombinedAuthorities.CAMBRIDGESHIRE_OR_PETERBOROUGH
+            CombinedAuthorities.CAMBRIDGESHIRE_OR_PETERBOROUGH,
         ]
 
 
@@ -694,6 +715,9 @@ class MasterMapFunction(enum.StrEnum):
     FERRY_TERMINAL = "Ferry Terminal"
     AIRPORT = "Airport"
 
+
+# TODO (DJ): Put these in an input csv, as it's something that may change over time,
+# particularly the rapid transport networks
 
 class MasterMapStakeholder(enum.StrEnum):
     """Stakeholder definitions for MasterMap sites."""
@@ -835,6 +859,28 @@ class RiskCategories(enum.StrEnum):
     LOW = "Low"
     VERY_LOW = "Very Low"
 
+    @classmethod
+    def get_risk_bands(cls) -> dict[RiskCategories, tuple[int, int]]:
+        """Return a dictionary of risk bands for each risk category."""
+        return {
+            RiskCategories.VERY_LOW: (0, 20),
+            RiskCategories.LOW: (20, 40),
+            RiskCategories.MEDIUM: (40, 60),
+            RiskCategories.HIGH: (60, 80),
+            RiskCategories.VERY_HIGH: (80, 100),
+        }
+
+    @classmethod
+    def get_risk_band_colours(cls) -> dict[RiskCategories, str]:
+        """Return a dictionary of colours for each risk category."""
+        return {
+            RiskCategories.VERY_LOW: HexColourCodes.DARK_BLUE,
+            RiskCategories.LOW: HexColourCodes.TEAL,
+            RiskCategories.MEDIUM: HexColourCodes.GOLD,
+            RiskCategories.HIGH: HexColourCodes.DARK_ORANGE,
+            RiskCategories.VERY_HIGH: HexColourCodes.DARK_RED,
+        }
+
 
 @dataclass
 class CellStyle:
@@ -844,21 +890,3 @@ class CellStyle:
     text_colour: str
     bold: bool
     border: openpyxl.styles.Border | None
-
-
-# CONSTANTS (That depend on class definitions)
-
-FLOODING_BAND_MAP: dict[RiskColumn, tuple[int, int]] = {
-    FloodingRiskCols.RIVERS_SEA: (
-        FloodingBands.RIVERS_CURRENT.value,
-        FloodingBands.RIVERS_FORECAST.value,
-    ),
-    FloodingRiskCols.SURFACE_WATER: (
-        FloodingBands.SURFACE_CURRENT.value,
-        FloodingBands.SURFACE_FORECAST.value,
-    ),
-    MainHazardRiskCols.FLOODING: (
-        FloodingBands.FLOODING_CURRENT.value,
-        FloodingBands.FLOODING_FORECAST.value,
-    ),
-}

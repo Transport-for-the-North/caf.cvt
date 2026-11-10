@@ -6,6 +6,13 @@ from typing import Self
 import caf.toolkit as ctk
 import pydantic
 
+from caf.cvt.definitions import (
+    FLOODING_TILE_SIZE_M,
+    FloodingTypes,
+    GroundStabilityRiskCols,
+    Scenarios,
+)
+
 ### CONFIG SET UP
 
 
@@ -83,19 +90,485 @@ class PathConfig(ctk.BaseConfig):
         return model_output
 
     @property
-    def log_path(self) -> pathlib.Path:
+    def log(self) -> pathlib.Path:
         """Create logging directory and return path."""
         log_path = self.root / "Logging"
         log_path.mkdir(parents=True, exist_ok=True)
         return log_path
 
     @property
-    def audit_path(self) -> pathlib.Path:
+    def audit(self) -> pathlib.Path:
         """Create model audit directory and return path."""
         audit_path = self.root / "audit"
         audit_path.mkdir(parents=True, exist_ok=True)
         return audit_path
 
+    @property
+    def infrastructure_model_input(self) -> pathlib.Path:
+        """Create infrastructure model input directory and return path."""
+        infrastructure_model_input = self.model_input / "Infrastructure"
+        infrastructure_model_input.mkdir(parents=True, exist_ok=True)
+        return infrastructure_model_input
+
+    @property
+    def hazards_model_input(self) -> pathlib.Path:
+        """Create hazards model input directory and return path."""
+        hazards_model_input = self.model_input / "Hazards"
+        hazards_model_input.mkdir(parents=True, exist_ok=True)
+        return hazards_model_input
+
+    @property
+    def demand_model_input(self) -> pathlib.Path:
+        """Create demand model input directory and return path."""
+        demand_model_input = self.model_input / "Demand"
+        demand_model_input.mkdir(parents=True, exist_ok=True)
+        return demand_model_input
+
+    @property
+    def road_model_input(self) -> pathlib.Path:
+        """Create road model input directory and return path."""
+        road_model_input = self.infrastructure_model_input / "Road"
+        road_model_input.mkdir(parents=True, exist_ok=True)
+        return road_model_input
+
+
+    @property
+    def rail_model_input(self) -> pathlib.Path:
+        """Create rail model input directory and return path."""
+        rail_model_input = self.infrastructure_model_input / "Rail"
+        rail_model_input.mkdir(parents=True, exist_ok=True)
+        return rail_model_input
+
+    @property
+    def other_model_input(self) -> pathlib.Path:
+        """Create other model input directory and return path."""
+        other_model_input = self.infrastructure_model_input / "Other"
+        other_model_input.mkdir(parents=True, exist_ok=True)
+        return other_model_input
+
+    @property
+    def bespoke_model_input(self) -> pathlib.Path:
+        """Create bespoke model input directory and return path."""
+        bespoke_model_input = self.model_input / "Bespoke"
+        bespoke_model_input.mkdir(parents=True, exist_ok=True)
+        return bespoke_model_input
+
+    @property
+    def os_road_model_input(self) -> pathlib.Path:
+        """Create OS road model input directory and return path."""
+        return self.road_model_input / "os_road.gpkg"
+
+    @property
+    def noham_road_model_input(self) -> pathlib.Path:
+        """Create NoHAM road model input directory and return path."""
+        return self.road_model_input / "noham_2023.gpkg"
+
+    @property
+    def model_road_model_input(self) -> pathlib.Path:
+        """Create model road input directory and return path."""
+        return self.road_model_input / "model_roads.gpkg"
+
+    @property
+    def passenger_rail_model_input(self) -> pathlib.Path:
+        """Create passenger rail model input directory and return path."""
+        return self.rail_model_input / "passenger_rail_links.gpkg"
+
+    @property
+    def freight_rail_model_input(self) -> pathlib.Path:
+        """Create freight rail model input directory and return path."""
+        return self.rail_model_input / "freight_rail_links.gpkg"
+
+    @property
+    def airports_model_input(self) -> pathlib.Path:
+        """Create airports model input directory and return path."""
+        return self.other_model_input / "airports.gpkg"
+
+    @property
+    def bus_stops_model_input(self) -> pathlib.Path:
+        """Create bus stops model input directory and return path."""
+        return self.other_model_input / "bus_stops.gpkg"
+
+    @property
+    def train_stations_model_input(self) -> pathlib.Path:
+        """Create train stations model input directory and return path."""
+        return self.other_model_input / "train_stations.gpkg"
+
+    @property
+    def tram_stations_model_input(self) -> pathlib.Path:
+        """Create tram stations model input directory and return path."""
+        return self.other_model_input / "tram_stations.gpkg"
+
+    @property
+    def rapid_transport_stations_model_input(self) -> pathlib.Path:
+        """Create rapid transport stations model input directory and return path."""
+        return self.other_model_input / "rapid_transport_stations.gpkg"
+
+    @property
+    def ferry_terminals_model_input(self) -> pathlib.Path:
+        """Create ferry terminals model input directory and return path."""
+        return self.other_model_input / "ferry_terminals.gpkg"
+
+    @property
+    def bus_coach_stations_model_input(self) -> pathlib.Path:
+        """Create bus coach stations model input directory and return path."""
+        return self.other_model_input / "bus_coach_stations.gpkg"
+
+    @property
+    def tram_network_model_input(self) -> pathlib.Path:
+        """Create tram network model input directory and return path."""
+        return self.other_model_input / "tram_network.gpkg"
+
+    @property
+    def rapid_transport_network_model_input(self) -> pathlib.Path:
+        """Create rapid transport network model input directory and return path."""
+        return self.other_model_input / "rapid_transport_network.gpkg"
+
+    @property
+    def national_cycle_network_model_input(self) -> pathlib.Path:
+        """Create national cycle network model input directory and return path."""
+        return self.other_model_input / "national_cycle_network.gpkg"
+
+    @property
+    def nexus_metro_stations_model_input(self) -> pathlib.Path:
+        """Create Nexus Metro stations model input directory and return path."""
+        return self.bespoke_model_input / "nexus_metro_stations.gpkg"
+
+    @property
+    def hazard_model_input(self) -> pathlib.Path:
+        """Create hazard model input directory and return path."""
+        hazard_model_input_path = self.model_input / "Hazards"
+        hazard_model_input_path.mkdir(parents=True, exist_ok=True)
+        return hazard_model_input_path
+
+    @property
+    def extreme_weather_model_input(self) -> pathlib.Path:
+        """Create extreme weather model input directory and return path."""
+        extreme_weather_model_input_path = self.hazard_model_input / "Extreme Weather"
+        extreme_weather_model_input_path.mkdir(parents=True, exist_ok=True)
+        return extreme_weather_model_input_path
+
+    @property
+    def flooding_model_input(self) -> pathlib.Path:
+        """Create flooding model input directory and return path."""
+        flooding_model_input_path = self.hazard_model_input / "Flooding"
+        flooding_model_input_path.mkdir(parents=True, exist_ok=True)
+        return flooding_model_input_path
+
+    @property
+    def ground_stability_model_input(self) -> pathlib.Path:
+        """Create ground stability model input directory and return path."""
+        ground_stability_model_input_path = self.hazard_model_input / "Ground Stability"
+        ground_stability_model_input_path.mkdir(parents=True, exist_ok=True)
+        return ground_stability_model_input_path
+
+    @property
+    def coastal_erosion_model_input(self) -> pathlib.Path:
+        """Create coastal erosion model input directory and return path."""
+        coastal_erosion_model_input_path = self.hazard_model_input / "Coastal Erosion"
+        coastal_erosion_model_input_path.mkdir(parents=True, exist_ok=True)
+        return coastal_erosion_model_input_path
+
+    @property
+    def hazard_grid_model_input(self) -> pathlib.Path:
+        """Return hazard grid path."""
+        return self.hazard_model_input / "hazard_grid.gpkg"
+
+    @property
+    def summer_max_temperature_model_input(self) -> pathlib.Path:
+        """Return max temperature model input path."""
+        return self.extreme_weather_model_input / "summer_max_temperature_change.csv"
+
+    @property
+    def winter_min_temperature_model_input(self) -> pathlib.Path:
+        """Return min temperature model input path."""
+        return self.extreme_weather_model_input / "winter_min_temperature_change.csv"
+
+    @property
+    def summer_precipitation_model_input(self) -> pathlib.Path:
+        """Return precipitation model input path."""
+        return self.extreme_weather_model_input / "summer_precipitation_change.csv"
+
+    @property
+    def winter_precipitation_model_input(self) -> pathlib.Path:
+        """Return winter precipitation model input path."""
+        return self.extreme_weather_model_input / "winter_precipitation_change.csv"
+
+    @property
+    def rain_days_model_input(self) -> pathlib.Path:
+        """Return rain days model input path."""
+        return self.extreme_weather_model_input / "10mm_rain_days.gpkg"
+
+    @property
+    def drought_severity_index_model_input(self) -> pathlib.Path:
+        """Return drought severity index model input path."""
+        return self.extreme_weather_model_input / "drought_severity_index.gpkg"
+
+    @property
+    def hot_summer_days_model_input(self) -> pathlib.Path:
+        """Return hot summer days model input path."""
+        return self.extreme_weather_model_input / "hot_summer_days.csv"
+
+    @property
+    def extreme_summer_days_model_input(self) -> pathlib.Path:
+        """Return extreme summer days model input path."""
+        return self.extreme_weather_model_input / "extreme_summer_days.csv"
+
+    @property
+    def frost_days_model_input(self) -> pathlib.Path:
+        """Return frost days model input path."""
+        return self.extreme_weather_model_input / "frost_days.csv"
+
+    @property
+    def icing_days_model_input(self) -> pathlib.Path:
+        """Return icing days model input path."""
+        return self.extreme_weather_model_input / "icing_days.csv"
+
+    @property
+    def wind_speed_model_input(self) -> pathlib.Path:
+        """Return wind speed model input path."""
+        return self.extreme_weather_model_input / "wind_speed.gpkg"
+
+    @property
+    def wind_driven_rain_model_input(self) -> pathlib.Path:
+        """Return wind driven rain model input path."""
+        return self.extreme_weather_model_input / "wind_driven_rain_index.gpkg"
+
+    def flooding_type_scenario_model_input(
+            self,
+            flooding_type: FloodingTypes,
+            scenario: Scenarios
+    ) -> pathlib.Path:
+        """Return flooding model input path based on flooding type and scenario."""
+        return self.flooding_model_input / f"{flooding_type}_{scenario}.gpkg"
+
+    @property
+    def groundwater_flooding_model_input(self) -> pathlib.Path:
+        """Return groundwater flooding model input path."""
+        return self.flooding_model_input / "groundwater.gpkg"
+
+    def geosure_model_input(self, geohazard: GroundStabilityRiskCols | None) -> pathlib.Path:
+        """Return GeoSure model input path based on the geohazard."""
+        if geohazard is not None:
+            return self.ground_stability_model_input / f"{geohazard}.gpkg"
+        return self.ground_stability_model_input / "geosure.gpkg"
+
+
+    def national_coastal_erosion_risk_mapping_model_input(
+        self,
+        year: str
+    ) -> pathlib.Path:
+        """Return national coastal erosion risk mapping model input path."""
+        return (
+            self.coastal_erosion_model_input /
+            f"national_coastal_erosion_risk_mapping_smp_{year}_70CC.gpkg"
+        )
+
+    @property
+    def freight_demand_model_input(self) -> pathlib.Path:
+        """Return freight demand model input path."""
+        return self.demand_model_input / "freight_network_demand.gpkg"
+
+    @property
+    def noham_demand_model_input(self) -> pathlib.Path:
+        """Return NoHAM demand model input path."""
+        return self.demand_model_input / "noham_network_demand.gpkg"
+
+    @property
+    def model_roads_demand_model_input(self) -> pathlib.Path:
+        """Return model roads demand model input path."""
+        return self.demand_model_input / "model_roads_demand.gpkg"
+
+    @property
+    def nexus_metro_demand_model_input(self) -> pathlib.Path:
+        """Return Nexus Metro demand model input path."""
+        return self.demand_model_input / "nexus_metro_demand.gpkg"
+
+    @property
+    def extreme_weather_risk_model_interim_output(self) -> pathlib.Path:
+        """Return extreme weather model interim output path."""
+        return self.model_interim_output / "extreme_weather_risk.gpkg"
+
+    @property
+    def flooding_tile_grid_model_interim_output(self) -> pathlib.Path:
+        """Return flooding tile grid model interim output path."""
+        return self.model_interim_output / f"flooding_tiles_{FLOODING_TILE_SIZE_M}m.gpkg"
+
+    @property
+    def flooding_risk_vector_overlay_model_interim_output(self) -> pathlib.Path:
+        """Return flooding risk vector overlay model interim output path."""
+        return self.model_interim_output / "flooding_risk_vector_overlay.gpkg"
+
+    @property
+    def flooding_risk_vector_model_interim_output(self) -> pathlib.Path:
+        """Return flooding risk vector model interim output path."""
+        return self.model_interim_output / "flooding_risk_vector.gpkg"
+
+    @property
+    def flooding_risk_raster_model_interim_output(self) -> pathlib.Path:
+        """Return flooding risk raster model interim output path."""
+        return self.model_interim_output / "flooding_risk_raster.tif"
+
+    @property
+    def ground_stability_risk_model_interim_output(self) -> pathlib.Path:
+        """Return ground stability risk model interim output path."""
+        return self.model_interim_output / "ground_stability_risk.gpkg"
+
+    @property
+    def coastal_erosion_risk_model_interim_output(self) -> pathlib.Path:
+        """Return coastal erosion risk model interim output path."""
+        return self.model_interim_output / "coastal_erosion_risk.gpkg"
+
+    @property
+    def road_model_output(self) -> pathlib.Path:
+        """Create road model output directory and return path."""
+        road_model_output_path = self.model_output / "Road"
+        road_model_output_path.mkdir(parents=True, exist_ok=True)
+        return road_model_output_path
+
+    @property
+    def rail_model_output(self) -> pathlib.Path:
+        """Create rail model output directory and return path."""
+        rail_model_output_path = self.model_output / "Rail"
+        rail_model_output_path.mkdir(parents=True, exist_ok=True)
+        return rail_model_output_path
+
+    @property
+    def other_model_output(self) -> pathlib.Path:
+        """Create other infrastructure model output directory and return path."""
+        other_model_output_path = self.model_output / "Other"
+        other_model_output_path.mkdir(parents=True, exist_ok=True)
+        return other_model_output_path
+
+    @property
+    def os_road_model_output(self) -> pathlib.Path:
+        """Create OS road model output directory and return path."""
+        os_road_model_output_path = self.road_model_output / "OS Road"
+        os_road_model_output_path.mkdir(parents=True, exist_ok=True)
+        return os_road_model_output_path
+
+    @property
+    def noham_model_output(self) -> pathlib.Path:
+        """Create NoHAM model output directory and return path."""
+        noham_model_output_path = self.road_model_output / "NoHAM"
+        noham_model_output_path.mkdir(parents=True, exist_ok=True)
+        return noham_model_output_path
+
+    @property
+    def model_roads_model_output(self) -> pathlib.Path:
+        """Create model roads output directory and return path."""
+        model_roads_model_output_path = self.road_model_output / "Model Roads"
+        model_roads_model_output_path.mkdir(parents=True, exist_ok=True)
+        return model_roads_model_output_path
+
+    @property
+    def passenger_rail_model_output(self) -> pathlib.Path:
+        """Create passenger rail model output directory and return path."""
+        passenger_rail_model_output_path = self.rail_model_output / "Passenger Rail"
+        passenger_rail_model_output_path.mkdir(parents=True, exist_ok=True)
+        return passenger_rail_model_output_path
+
+    @property
+    def freight_rail_model_output(self) -> pathlib.Path:
+        """Create freight rail model output directory and return path."""
+        freight_rail_model_output_path = self.rail_model_output / "Freight Rail"
+        freight_rail_model_output_path.mkdir(parents=True, exist_ok=True)
+        return freight_rail_model_output_path
+
+    @property
+    def train_stations_model_output(self) -> pathlib.Path:
+        """Create train stations model output directory and return path."""
+        train_stations_model_output_path = self.other_model_output / "Train Stations"
+        train_stations_model_output_path.mkdir(parents=True, exist_ok=True)
+        return train_stations_model_output_path
+
+    @property
+    def airports_model_output(self) -> pathlib.Path:
+        """Create airports model output directory and return path."""
+        airports_model_output_path = self.other_model_output / "Airports"
+        airports_model_output_path.mkdir(parents=True, exist_ok=True)
+        return airports_model_output_path
+
+    @property
+    def bus_coach_stations_model_output(self) -> pathlib.Path:
+        """Create bus and coach stations model output directory and return path."""
+        bus_coach_stations_model_output_path = (
+            self.other_model_output / "Bus and Coach Stations"
+        )
+        bus_coach_stations_model_output_path.mkdir(parents=True, exist_ok=True)
+        return bus_coach_stations_model_output_path
+
+    @property
+    def bus_stops_model_output(self) -> pathlib.Path:
+        """Create bus stops model output directory and return path."""
+        bus_stops_model_output_path = self.other_model_output / "Bus Stops"
+        bus_stops_model_output_path.mkdir(parents=True, exist_ok=True)
+        return bus_stops_model_output_path
+
+    @property
+    def tram_stations_model_output(self) -> pathlib.Path:
+        """Create tram stations model output directory and return path."""
+        tram_stations_model_output_path = self.other_model_output / "Tram Stations"
+        tram_stations_model_output_path.mkdir(parents=True, exist_ok=True)
+        return tram_stations_model_output_path
+
+    @property
+    def rapid_transport_stations_model_output(self) -> pathlib.Path:
+        """Create rapid transport stations model output directory and return path."""
+        rapid_transport_stations_model_output_path = (
+            self.other_model_output / "Rapid Transport Stations"
+        )
+        rapid_transport_stations_model_output_path.mkdir(parents=True, exist_ok=True)
+        return rapid_transport_stations_model_output_path
+
+    @property
+    def ferry_terminals_model_output(self) -> pathlib.Path:
+        """Create ferry terminals model output directory and return path."""
+        ferry_terminals_model_output_path = self.other_model_output / "Ferry Terminals"
+        ferry_terminals_model_output_path.mkdir(parents=True, exist_ok=True)
+        return ferry_terminals_model_output_path
+
+    @property
+    def national_cycle_network_model_output(self) -> pathlib.Path:
+        """Create national cycle network model output directory and return path."""
+        national_cycle_network_model_output_path = (
+            self.other_model_output / "National Cycle Network"
+        )
+        national_cycle_network_model_output_path.mkdir(parents=True, exist_ok=True)
+        return national_cycle_network_model_output_path
+
+    @property
+    def tram_network_model_output(self) -> pathlib.Path:
+        """Create tram network model output directory and return path."""
+        tram_network_model_output_path = self.other_model_output / "Tram Network"
+        tram_network_model_output_path.mkdir(parents=True, exist_ok=True)
+        return tram_network_model_output_path
+
+    @property
+    def rapid_transport_network_model_output(self) -> pathlib.Path:
+        """Create rapid transport network model output directory and return path."""
+        rapid_transport_network_model_output_path = (
+            self.other_model_output / "Rapid Transport Network"
+        )
+        rapid_transport_network_model_output_path.mkdir(parents=True, exist_ok=True)
+        return rapid_transport_network_model_output_path
+
+    @property
+    def nexus_metro_links_model_output(self) -> pathlib.Path:
+        """Create Nexus Metro links model output directory and return path."""
+        nexus_metro_links_model_output_path = self.other_model_output / "Nexus Metro Links"
+        nexus_metro_links_model_output_path.mkdir(parents=True, exist_ok=True)
+        return nexus_metro_links_model_output_path
+
+    @property
+    def nexus_metro_stations_model_output(self) -> pathlib.Path:
+        """Create Nexus Metro stations model output directory and return path."""
+        nexus_metro_stations_model_output_path = (
+            self.other_model_output / "Nexus Metro Stations"
+        )
+        nexus_metro_stations_model_output_path.mkdir(parents=True, exist_ok=True)
+        return nexus_metro_stations_model_output_path
+
+# TODO (DJ): Add audit paths to the config
 
 class OtherInput(ctk.BaseConfig):
     """Configuration for other raw input data.
@@ -124,20 +597,6 @@ class OtherInput(ctk.BaseConfig):
             return None
         return v
 
-
-class NoHAMEntry(ctk.BaseConfig):
-    """Configuration for NoHAM road network data.
-
-    Attributes
-    ----------
-    year: int
-        Year of the NoHAM network.
-    file_path: pathlib.Path
-        Path to the NoHAM network file.
-    """
-
-    year: int
-    file_path: pathlib.Path
 
 
 class ModelRoadsEntry(ctk.BaseConfig):
@@ -178,7 +637,7 @@ class Road(ctk.BaseConfig):
     os_road: ZipFileEntry
     os_road_lookup: NestedZipFileEntry
     mm_highways: ZipFileEntry
-    noham: NoHAMEntry
+    noham: pathlib.Path
     model_roads: ModelRoadsEntry
 
 
@@ -396,8 +855,8 @@ class ModelRoadFlowsEntry(ctk.BaseConfig):
     annualisation_factors: pathlib.Path
 
 
-class ImpactConfig(ctk.BaseConfig):
-    """Configuration for impact data.
+class DemandConfig(ctk.BaseConfig):
+    """Configuration for demand data.
 
     Attributes
     ----------
@@ -618,8 +1077,8 @@ class Config(ctk.BaseConfig):
         Configuration for infrastructure data.
     hazards : HazardsConfig
         Configuration for hazards data.
-    impact : ImpactConfig
-        Configuration for impact data.
+    demand : DemandConfig
+        Configuration for demand data.
     constants: ConstantConfig
         Configuration for model constants.
     """
@@ -630,5 +1089,5 @@ class Config(ctk.BaseConfig):
     other_input: OtherInput
     infrastructure: InfrastructureConfig
     hazards: HazardsConfig
-    impact: ImpactConfig
+    demand: DemandConfig
     constants: ConstantConfig

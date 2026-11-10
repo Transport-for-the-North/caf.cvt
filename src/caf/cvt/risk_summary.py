@@ -40,22 +40,6 @@ warnings.filterwarnings(
 
 # MODULE CONSTANTS
 
-_RISK_CATEGORIES = {
-    RiskCategories.VERY_LOW: (0, 20),
-    RiskCategories.LOW: (20, 40),
-    RiskCategories.MEDIUM: (40, 60),
-    RiskCategories.HIGH: (60, 80),
-    RiskCategories.VERY_HIGH: (80, 100),
-}
-
-_RISK_CATEGORY_COLOURS = {
-    RiskCategories.VERY_LOW: HexColourCodes.DARK_BLUE,  # dark blue
-    RiskCategories.LOW: HexColourCodes.TEAL,  # teal
-    RiskCategories.MEDIUM: HexColourCodes.GOLD,  # gold
-    RiskCategories.HIGH: HexColourCodes.DARK_ORANGE,  # dark orange
-    RiskCategories.VERY_HIGH: HexColourCodes.DARK_RED,  # dark red
-}
-
 _LENGTH_M_COL = "Length (m)"
 _RISK_CATEGORY_COL = "Risk Category"
 
@@ -178,7 +162,7 @@ def create_risk_summary(
                 "Risk Category": category,
                 "Score": f"{lower}-{upper}",
             }
-            for category, (lower, upper) in _RISK_CATEGORIES.items()
+            for category, (lower, upper) in RiskCategories.get_risk_bands().items()
         ]
     )
 
@@ -320,7 +304,7 @@ def _calculate_risk_distribution_percentages(
 ) -> dict[RiskCategories, int]:
     percentages = []
     categories = []
-    for category, (lower, upper) in _RISK_CATEGORIES.items():
+    for category, (lower, upper) in RiskCategories.get_risk_bands().items():
         if upper == config.constants.score_max:
             mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] <= upper)
         else:
@@ -406,69 +390,37 @@ def _hazard_distribution_plot(
 
     x_labels = [Scenarios.CURRENT.capitalize(), Scenarios.FORECAST.capitalize()]
 
-    very_high = (
-        risk_distribution[risk_distribution[_RISK_CATEGORY_COL] == RiskCategories.VERY_HIGH][x]
-        .iloc[0]
-        .to_numpy()
-    )
-    high = (
-        risk_distribution[risk_distribution[_RISK_CATEGORY_COL] == RiskCategories.HIGH][x]
-        .iloc[0]
-        .to_numpy()
-    )
-    medium = (
-        risk_distribution[risk_distribution[_RISK_CATEGORY_COL] == RiskCategories.MEDIUM][x]
-        .iloc[0]
-        .to_numpy()
-    )
-    low = (
-        risk_distribution[risk_distribution[_RISK_CATEGORY_COL] == RiskCategories.LOW][x]
-        .iloc[0]
-        .to_numpy()
-    )
-    very_low = (
-        risk_distribution[risk_distribution[_RISK_CATEGORY_COL] == RiskCategories.VERY_LOW][x]
-        .iloc[0]
-        .to_numpy()
-    )
+    risk_category_order = [
+        RiskCategories.VERY_LOW,
+        RiskCategories.LOW,
+        RiskCategories.MEDIUM,
+        RiskCategories.HIGH,
+        RiskCategories.VERY_HIGH,
+    ]
+    category_arrays = {}
+
+    for risk_category in risk_category_order:
+        category_arrays[risk_category] = (
+            risk_distribution[risk_distribution[_RISK_CATEGORY_COL] == risk_category][x]
+            .iloc[0]
+            .to_numpy()
+        )
 
     cmap = hazard.get_cmap()
     cmap = plt.get_cmap(cmap)
 
-    ax.bar(
-        x_labels,
-        very_low,
-        color=cmap(_RISK_CATEGORIES[RiskCategories.VERY_LOW][1]),
-        label=RiskCategories.VERY_LOW,
-    )
-    ax.bar(
-        x_labels,
-        low,
-        bottom=very_low,
-        color=cmap(_RISK_CATEGORIES[RiskCategories.LOW][1]),
-        label=RiskCategories.LOW,
-    )
-    ax.bar(
-        x_labels,
-        medium,
-        bottom=very_low + low,
-        color=cmap(_RISK_CATEGORIES[RiskCategories.MEDIUM][1]),
-        label=RiskCategories.MEDIUM,
-    )
-    ax.bar(
-        x_labels,
-        high,
-        bottom=very_low + low + medium,
-        color=cmap(_RISK_CATEGORIES[RiskCategories.HIGH][1]),
-        label=RiskCategories.HIGH,
-    )
-    ax.bar(
-        x_labels,
-        very_high,
-        bottom=very_low + low + medium + high,
-        color=cmap(_RISK_CATEGORIES[RiskCategories.VERY_HIGH][1]),
-        label=RiskCategories.VERY_HIGH,
-    )
+    for i, risk_category in enumerate(risk_category_order):
+        if i == 0:
+            bottom = None
+        else:
+            bottom = sum(category_arrays[risk_category_order[j]] for j in range(i))
+        ax.bar(
+            x_labels,
+            category_arrays[risk_category],
+            bottom=bottom,
+            color=cmap(RiskCategories.get_risk_bands()[risk_category][1]),
+            label=risk_category,
+        )
 
     ax.set_xlabel("Scenario")
     ax.set_ylabel("Percent at Risk")
@@ -687,7 +639,7 @@ def _apply_risk_distribution_data_bar(
         start_value=0,
         end_type="num",
         end_value=1,
-        color=_RISK_CATEGORY_COLOURS[category],
+        color=RiskCategories.get_risk_band_colours()[category],
         showValue=True,
         minLength=None,
         maxLength=None,

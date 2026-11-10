@@ -183,6 +183,7 @@ def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
     gpd.GeoDataFrame
         The boundary GeoDataFrame to use for clipping and filtering datasets.
     """
+    # TODO (DJ): Remove STB and CA enum's and just validate config input against what's in the file
     if config.other_input.boundary_path is not None and config.other_input.boundary_path != "":
         LOG.info("Using specific boundary file: %s", config.other_input.boundary_path)
         return gpd.read_file(config.paths.raw_input / config.other_input.boundary_path)
@@ -323,8 +324,7 @@ def get_bng_codes(boundary: gpd.GeoDataFrame) -> list[str]:
         A list of 100km BNG codes that intersect with the boundary.
     """
     bng_100km = gpd.GeoDataFrame.from_features(
-        osbng.grids.bng_grid_100km,
-        crs=definitions.BNG_CRS
+        osbng.grids.bng_grid_100km, crs=definitions.BNG_CRS
     )
     boundary_bng = clip_to_boundary(bng_100km, boundary)
     return list(boundary_bng["bng_ref"])
@@ -393,9 +393,7 @@ def nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.Geo
 
     # Merge back with original gdf1 to restore original geometry
     return gdf1.merge(
-        nearest.drop(columns=definitions.GEOMETRY_COL),
-        left_index=True,
-        right_index=True
+        nearest.drop(columns=definitions.GEOMETRY_COL), left_index=True, right_index=True
     )
 
 

@@ -8,13 +8,14 @@ import zipfile
 import geopandas as gpd
 import pandas as pd
 
-from caf.cvt import data_cleaning, definitions, file_paths, model_config
+from caf.cvt import data_cleaning, definitions, model_config
 
 # LOGGING
 
 LOG = logging.getLogger(__name__)
 
 # MAIN FUNCTIONS
+
 
 def clean_infrastructure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all infrastructure datasets ready for analysis.
@@ -126,7 +127,7 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     )
     data_cleaning.write_to_file(
         os_road,
-        config.paths.model_input / file_paths.OS_ROAD_MODEL_INPUT_PATH,
+        config.paths.os_road_model_input,
     )
 
 
@@ -158,10 +159,9 @@ def _populate_os_road_structure(
             != definitions.OSRoadStructure.TUNNEL
         )
     ]
-    mm_highways.loc[
-        :,
-        definitions.MasterMapHighwaysCols.ROAD_STRUCTURE
-    ] = definitions.OSRoadStructure.BRIDGE
+    mm_highways.loc[:, definitions.MasterMapHighwaysCols.ROAD_STRUCTURE] = (
+        definitions.OSRoadStructure.BRIDGE
+    )
 
     with (
         zipfile.ZipFile(
@@ -177,7 +177,7 @@ def _populate_os_road_structure(
             csv_file,
             usecols=[
                 definitions.OSRoadLookupCols.MASTERMAP_ID,
-                definitions.OSRoadLookupCols.OS_OPEN_ROADS_ID
+                definitions.OSRoadLookupCols.OS_OPEN_ROADS_ID,
             ],
         )
 
@@ -201,7 +201,7 @@ def _populate_os_road_structure(
         mm_highways[
             [
                 definitions.MasterMapHighwaysCols.ID,
-                definitions.MasterMapHighwaysCols.ROAD_STRUCTURE
+                definitions.MasterMapHighwaysCols.ROAD_STRUCTURE,
             ]
         ]
         .merge(
@@ -211,10 +211,12 @@ def _populate_os_road_structure(
             how="right",
             validate="one_to_many",
         )
-        .drop(columns=[
-            definitions.OSRoadLookupCols.MASTERMAP_ID,
-            definitions.MasterMapHighwaysCols.ID
-        ])
+        .drop(
+            columns=[
+                definitions.OSRoadLookupCols.MASTERMAP_ID,
+                definitions.MasterMapHighwaysCols.ID,
+            ]
+        )
         .drop_duplicates(subset=[definitions.OSRoadLookupCols.OS_OPEN_ROADS_ID])
     )
 
@@ -246,7 +248,6 @@ def _populate_os_road_structure(
 
 def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean NoHAM network dataset, then write to file."""
-    year = config.infrastructure.road.noham.year
     noham_network = gpd.read_file(
         config.paths.raw_input / config.infrastructure.road.noham.file_path,
         mask=boundary,
@@ -257,9 +258,9 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         subset=[definitions.NoHAMRoadCols.LINK_ID, definitions.GEOMETRY_COL]
     )
     noham_network_clean[["a", "b"]] = (
-        noham_network_clean[
-            definitions.NoHAMRoadCols.LINK_ID
-        ].str.split("_", expand=True).astype(int)
+        noham_network_clean[definitions.NoHAMRoadCols.LINK_ID]
+        .str.split("_", expand=True)
+        .astype(int)
     )
     # Filter out links with a or b less than 10,000 (zone connectors)
     noham_network_clean = noham_network_clean[
@@ -282,9 +283,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     )
     data_cleaning.write_to_file(
         noham_network_clipped,
-        config.paths.model_input
-        / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-        / f"noham_{year}.gpkg",
+        config.paths.noham_road_model_input,
     )
 
 
@@ -346,7 +345,7 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     model_roads = gpd.GeoDataFrame(
         model_roads.drop(columns=coord_cols),
         geometry=definitions.GEOMETRY_COL,
-        crs=definitions.BNG_CRS
+        crs=definitions.BNG_CRS,
     )
 
     len_before_filter = len(model_roads)
@@ -360,7 +359,7 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
 
     data_cleaning.write_to_file(
         model_roads,
-        config.paths.model_input / file_paths.MODEL_ROADS_MODEL_INPUT_PATH,
+        config.infrastructure.road.model_roads,
     )
 
 
@@ -444,7 +443,7 @@ def _clean_passenger_rail(config: model_config.Config, rail_links: gpd.GeoDataFr
         rail_links[definitions.OSRailCols.RAILWAY_USE].isin(
             [
                 definitions.OSRailRailwayUse.FREIGHT_AND_PASSENGER,
-                definitions.OSRailRailwayUse.PASSENGER
+                definitions.OSRailRailwayUse.PASSENGER,
             ]
         )
     ]
@@ -466,7 +465,7 @@ def _clean_passenger_rail(config: model_config.Config, rail_links: gpd.GeoDataFr
     )
     data_cleaning.write_to_file(
         passenger_rail,
-        config.paths.model_input / file_paths.PASSENGER_RAIL_MODEL_INPUT_PATH,
+        config.paths.passenger_rail_model_input,
     )
 
 
@@ -477,7 +476,7 @@ def _clean_freight_rail(config: model_config.Config, rail_links: gpd.GeoDataFram
         rail_links[definitions.OSRailCols.RAILWAY_USE].isin(
             [
                 definitions.OSRailRailwayUse.FREIGHT_AND_PASSENGER,
-                definitions.OSRailRailwayUse.FREIGHT
+                definitions.OSRailRailwayUse.FREIGHT,
             ]
         )
     ]
@@ -490,7 +489,7 @@ def _clean_freight_rail(config: model_config.Config, rail_links: gpd.GeoDataFram
     )
     data_cleaning.write_to_file(
         freight_rail,
-        config.paths.model_input / file_paths.FREIGHT_RAIL_MODEL_INPUT_PATH,
+        config.paths.freight_rail_model_input,
     )
 
 
@@ -567,9 +566,8 @@ def _clean_mastermap_sites(
     )
     len_before_filter = len(mm_sites)
     mm_sites = mm_sites[
-        mm_sites[
-            definitions.MasterMapSiteCols.FUNCTION_STATUS]
-            == definitions.MasterMapFunctionStatus.OPERATIONAL
+        mm_sites[definitions.MasterMapSiteCols.FUNCTION_STATUS]
+        == definitions.MasterMapFunctionStatus.OPERATIONAL
     ]
     mm_sites = mm_sites.drop(columns=[definitions.MasterMapSiteCols.FUNCTION_STATUS])
     transport_sites = mm_sites[
@@ -610,9 +608,8 @@ def _clean_airports(config: model_config.Config, transport_sites: gpd.GeoDataFra
         == definitions.MasterMapFunctionTheme.AIR_TRANSPORT
     ]
     airports = air_transport[
-        air_transport[
-            definitions.MasterMapSiteCols.FUNCTION]
-            == definitions.MasterMapFunction.AIRPORT
+        air_transport[definitions.MasterMapSiteCols.FUNCTION]
+        == definitions.MasterMapFunction.AIRPORT
     ]
     airports = airports.drop(
         columns=[
@@ -633,8 +630,7 @@ def _clean_airports(config: model_config.Config, transport_sites: gpd.GeoDataFra
         (filter_removed / len_before_filter) * 100,
     )
     data_cleaning.write_to_file(
-        airports,
-        config.paths.model_input / file_paths.AIRPORTS_MODEL_INPUT_PATH
+        airports, config.paths.airports_model_input
     )
 
 
@@ -660,7 +656,7 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         bus_stops.copy(),
         geometry=gpd.points_from_xy(
             bus_stops[definitions.NaPTANCols.LONGITUDE],
-            bus_stops[definitions.NaPTANCols.LATITUDE]
+            bus_stops[definitions.NaPTANCols.LATITUDE],
         ),
         crs="EPSG:4326",
     )
@@ -683,8 +679,7 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         (filter_removed / len_before_filter) * 100,
     )
     data_cleaning.write_to_file(
-        bus_stops,
-        config.paths.model_input / file_paths.BUS_STOPS_MODEL_INPUT_PATH
+        bus_stops, config.paths.bus_stops_model_input
     )
 
 
@@ -708,7 +703,7 @@ def _clean_train_stations(
     train_stations = train_stations[
         (
             train_stations[definitions.MasterMapSiteCols.STAKEHOLDER_1].str.contains(
-                    definitions.MasterMapStakeholder.NETWORK_RAIL
+                definitions.MasterMapStakeholder.NETWORK_RAIL
             )
         )
     ]
@@ -729,7 +724,7 @@ def _clean_train_stations(
     )
     data_cleaning.write_to_file(
         train_stations,
-        config.paths.model_input / file_paths.TRAIN_STATIONS_MODEL_INPUT_PATH,
+        config.paths.train_stations_model_input,
     )
 
 
@@ -743,7 +738,9 @@ def _clean_tram_stations(
         == definitions.MasterMapFunctionTheme.RAIL_TRANSPORT
     ]
     tram_stations = rail_transport[
-        rail_transport[definitions.MasterMapSiteCols.FUNCTION].str.contains(definitions.MasterMapFunction.TRAM_STATION)
+        rail_transport[definitions.MasterMapSiteCols.FUNCTION].str.contains(
+            definitions.MasterMapFunction.TRAM_STATION
+        )
     ]
     tram_stations = tram_stations.drop(
         columns=[
@@ -762,7 +759,7 @@ def _clean_tram_stations(
     )
     data_cleaning.write_to_file(
         tram_stations,
-        config.paths.model_input / file_paths.TRAM_STATIONS_MODEL_INPUT_PATH,
+        config.paths.tram_stations_model_input,
     )
 
 
@@ -775,6 +772,8 @@ def _clean_rapid_transport_stations(
         transport_sites[definitions.MasterMapSiteCols.FUNCTION_THEME]
         == definitions.MasterMapFunctionTheme.RAIL_TRANSPORT
     ]
+    # TODO (DJ): Make this an input file so that it can be expanded if necessary, rather than
+    # hardcoding, validate input file.
     rapid_transport_stations = rail_transport[
         rail_transport[definitions.MasterMapSiteCols.STAKEHOLDER_1].str.contains(
             "|".join(
@@ -804,7 +803,7 @@ def _clean_rapid_transport_stations(
     )
     data_cleaning.write_to_file(
         rapid_transport_stations,
-        config.paths.model_input / file_paths.RAPID_TRANSPORT_STATIONS_MODEL_INPUT_PATH,
+        config.paths.rapid_transport_stations_model_input,
     )
 
 
@@ -839,7 +838,7 @@ def _clean_ferry_terminals(
     )
     data_cleaning.write_to_file(
         ferry_terminals,
-        config.paths.model_input / file_paths.FERRY_TERMINALS_MODEL_INPUT_PATH,
+        config.paths.ferry_terminals_model_input,
     )
 
 
@@ -879,7 +878,7 @@ def _clean_bus_coach_stations(
     )
     data_cleaning.write_to_file(
         bus_coach_stations,
-        config.paths.model_input / file_paths.BUS_COACH_STATIONS_MODEL_INPUT_PATH,
+        config.paths.bus_coach_stations_model_input,
     )
 
 
@@ -890,7 +889,7 @@ def _clean_tram_network(config: model_config.Config, rail_links: gpd.GeoDataFram
         rail_links[definitions.OSRailCols.RAILWAY_USE].isin(
             [
                 definitions.OSRailRailwayUse.FREIGHT_AND_PASSENGER,
-                definitions.OSRailRailwayUse.PASSENGER
+                definitions.OSRailRailwayUse.PASSENGER,
             ]
         )
     ]
@@ -898,7 +897,7 @@ def _clean_tram_network(config: model_config.Config, rail_links: gpd.GeoDataFram
         tram_links[definitions.OSRailCols.DESCRIPTION].isin(
             [
                 definitions.OSRailDescription.TRAM,
-                definitions.OSRailDescription.MAIN_LINE_AND_TRAM
+                definitions.OSRailDescription.MAIN_LINE_AND_TRAM,
             ]
         )
     ]
@@ -910,7 +909,7 @@ def _clean_tram_network(config: model_config.Config, rail_links: gpd.GeoDataFram
         (filter_removed / len_before_filter) * 100,
     )
     data_cleaning.write_to_file(
-        tram_links, config.paths.model_input / file_paths.TRAM_NETWORK_MODEL_INPUT_PATH
+        tram_links, config.paths.tram_network_model_input
     )
 
 
@@ -923,7 +922,7 @@ def _clean_rapid_transport_network(
         rail_links[definitions.OSRailCols.RAILWAY_USE].isin(
             [
                 definitions.OSRailRailwayUse.FREIGHT_AND_PASSENGER,
-                definitions.OSRailRailwayUse.PASSENGER
+                definitions.OSRailRailwayUse.PASSENGER,
             ]
         )
     ]
@@ -945,7 +944,7 @@ def _clean_rapid_transport_network(
     )
     data_cleaning.write_to_file(
         rapid_transport_links,
-        config.paths.model_input / file_paths.RAPID_TRANSPORT_NETWORK_MODEL_INPUT_PATH,
+        config.paths.rapid_transport_network_model_input,
     )
 
 
@@ -963,7 +962,8 @@ def _clean_national_cycle_network(
         subset=[definitions.NationalCycleNetworkCols.ID, definitions.GEOMETRY_COL]
     )
     ncn_cols_replace = [
-        col.value for col in definitions.NationalCycleNetworkCols
+        col.value
+        for col in definitions.NationalCycleNetworkCols
         if col != definitions.NationalCycleNetworkCols.ID
     ]
     ncn[ncn_cols_replace] = ncn[ncn_cols_replace].replace(0, definitions.NA_COL)
@@ -979,5 +979,5 @@ def _clean_national_cycle_network(
     )
     data_cleaning.write_to_file(
         ncn,
-        config.paths.model_input / file_paths.NATIONAL_CYCLE_NETWORK_MODEL_INPUT_PATH,
+        config.paths.national_cycle_network_model_input,
     )

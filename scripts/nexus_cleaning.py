@@ -464,7 +464,8 @@ def _map_demand_to_metro_links(demand: pd.DataFrame) -> gpd.GeoDataFrame:
 
 # RUN SCRIPT
 
-if __name__ == "__main__":  # pylint: disable=duplicate-code
+# pylint: disable=duplicate-code
+if __name__ == "__main__":
     with ctk.LogHelper(
         _NAME,
         ctk.ToolDetails(

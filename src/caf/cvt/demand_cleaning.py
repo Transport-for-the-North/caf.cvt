@@ -9,7 +9,7 @@ import geopandas as gpd
 import pandas as pd
 import py7zr
 
-from caf.cvt import data_cleaning, definitions, file_paths, model_config
+from caf.cvt import data_cleaning, definitions, model_config
 
 # LOGGING
 
@@ -20,6 +20,7 @@ LOG = logging.getLogger(__name__)
 _FREIGHT_DEMAND_NETWORK_MAP_MAX_DISTANCE = 500
 
 ## DEMAND
+
 
 def clean_demand(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """
@@ -61,12 +62,12 @@ def _clean_freight_demand(config: model_config.Config, boundary: gpd.GeoDataFram
 
     os_freight_network_demand = _map_freight_networks(
         freight_network_demand,
-        config.paths.model_input / file_paths.FREIGHT_RAIL_MODEL_INPUT_PATH,
+        config.paths.freight_rail_model_input,
     )
 
     data_cleaning.write_to_file(
         os_freight_network_demand,
-        config.paths.model_input / file_paths.FREIGHT_DEMAND_MODEL_INPUT_PATH,
+        config.paths.freight_demand_model_input,
     )
 
 
@@ -129,11 +130,7 @@ def _map_freight_networks(
 def _clean_noham_flows(config: model_config.Config) -> None:
     """Clean NoHAM flows data, aggregate link flows, merge with network, then write to file."""
     LOG.info("Cleaning NoHAM demand data...")
-    noham_network = gpd.read_file(
-        config.paths.model_input
-        / file_paths.NOHAM_NETWORK_MODEL_INPUT_PATH
-        / f"noham_{config.infrastructure.road.noham.year}.gpkg"
-    )
+    noham_network = gpd.read_file(config.paths.noham_road_model_input)
     network_link_ids = set(noham_network[definitions.ID_COL])
 
     scenario_flows = {}
@@ -150,9 +147,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
 
         flows = flows.rename(
             columns={
-                col: f"{col}_{scenario}"
-                for col in flows.columns
-                if col != definitions.ID_COL
+                col: f"{col}_{scenario}" for col in flows.columns if col != definitions.ID_COL
             }
         )
 
@@ -187,7 +182,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
 
     data_cleaning.write_to_file(
         noham_net_flows,
-        config.paths.model_input / file_paths.NOHAM_FLOWS_MODEL_INPUT_PATH
+        config.paths.noham_demand_model_input
     )
 
 
@@ -259,14 +254,14 @@ def _process_single_noham_layer(
     link_ids: set[str],
 ) -> pd.DataFrame:
     LOG.debug("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
-
+    # TODO (DJ): Process NoHAM data without extracting zip files
     noham_ods, noham_routes, noham_links = _read_noham_h5(
         route_links_store=route_links_store,
         year=year,
         time_period=time_period,
         user_class=user_class,
         noham_path=config.paths.raw_input / config.impact.noham_demand,
-        output_path=config.paths.raw_input / file_paths.NOHAM_ZIP_EXTRACT_OUTPUT_PATH,
+        output_path=config.paths.raw_input / pathlib.Path("Impact/NoHAM Link Flows/h5 files"),
         extract=config.switches.noham_zip_extract,
     )
     noham_links["noham_link_id"] = (
@@ -368,7 +363,7 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
     annualisation_factors = pd.read_csv(config.impact.model_road_flows.annualisation_factors)
 
     model_road_links = gpd.read_file(
-        config.paths.model_input / file_paths.MODEL_ROADS_MODEL_INPUT_PATH
+        config.paths.model_road_model_input
     )
 
     uc_link_flows = uc_link_flows.drop(columns=["id"])
@@ -444,25 +439,25 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
 
     model_road_uc_link_flows = current_flows.join(forecast_flows, how="left")
 
-    model_road_uc_link_flows[
-        f"demand_{definitions.Scenarios.CURRENT}"
-    ] = model_road_uc_link_flows[
-        [
-            c
-            for c in model_road_uc_link_flows.columns
-            if c.endswith(f"_{definitions.Scenarios.CURRENT}")
-        ]
-    ].sum(axis=1)
+    model_road_uc_link_flows[f"demand_{definitions.Scenarios.CURRENT}"] = (
+        model_road_uc_link_flows[
+            [
+                c
+                for c in model_road_uc_link_flows.columns
+                if c.endswith(f"_{definitions.Scenarios.CURRENT}")
+            ]
+        ].sum(axis=1)
+    )
 
-    model_road_uc_link_flows[
-        f"demand_{definitions.Scenarios.FORECAST}"
-    ] = model_road_uc_link_flows[
-        [
-            c
-            for c in model_road_uc_link_flows.columns
-            if c.endswith(f"_{definitions.Scenarios.FORECAST}")
-        ]
-    ].sum(axis=1)
+    model_road_uc_link_flows[f"demand_{definitions.Scenarios.FORECAST}"] = (
+        model_road_uc_link_flows[
+            [
+                c
+                for c in model_road_uc_link_flows.columns
+                if c.endswith(f"_{definitions.Scenarios.FORECAST}")
+            ]
+        ].sum(axis=1)
+    )
 
     model_road_uc_link_flows = model_road_uc_link_flows.merge(
         model_road_links[["link_id", definitions.GEOMETRY_COL]],
@@ -476,5 +471,5 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
 
     data_cleaning.write_to_file(
         model_road_uc_link_flows,
-        config.paths.model_input / file_paths.MODEL_ROAD_FLOWS_MODEL_INPUT_PATH,
+        config.paths.model_roads_demand_model_input,
     )

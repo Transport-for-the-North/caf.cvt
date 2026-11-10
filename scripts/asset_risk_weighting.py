@@ -1,5 +1,5 @@
 """Module to derive asset-specific hazard weights."""
-
+# TODO (DJ): Add sub-command for this module
 import logging
 import pathlib
 
@@ -128,7 +128,8 @@ def aggregate_impact_weights(incident_summary: pd.DataFrame) -> pd.DataFrame:
 
 # RUN SCRIPT
 
-if __name__ == "__main__":  # pylint: disable=duplicate-code
+# pylint: disable=duplicate-code
+if __name__ == "__main__":
     with ctk.LogHelper(
         _NAME,
         ctk.ToolDetails(
