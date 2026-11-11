@@ -112,9 +112,7 @@ def _infrastructure_risk_intersect(
         ):
             infrastructure_with_risk = _infrastructure_flooding_risk_raster(
                 infrastructure_with_risk,
-                flooding_path=(
-                    config.paths.flooding_risk_raster_model_interim_output
-                ),
+                flooding_path=(config.paths.flooding_risk_raster_model_interim_output),
             )
             continue
         # Spatial join to find intersections with hazards
@@ -244,12 +242,8 @@ def _split_csv_shapefile(
     spatial_gdf = spatial_gdf.drop_duplicates()
 
     # Save to file
-    data_cleaning.write_to_file(
-        spatial_gdf, out_path_no_suffix.with_suffix(".shp")
-    )
-    data_cleaning.write_to_file(
-        attribute_df, out_path_no_suffix.with_suffix(".csv")
-    )
+    data_cleaning.write_to_file(spatial_gdf, out_path_no_suffix.with_suffix(".shp"))
+    data_cleaning.write_to_file(attribute_df, out_path_no_suffix.with_suffix(".csv"))
 
 
 def _audit_infrastructure_risk(
@@ -262,8 +256,6 @@ def _audit_infrastructure_risk(
     linewidth: float = 0.5,
 ) -> None:
     """Plot choropleth maps for infrastructure risk."""
-    audit_path.mkdir(parents=True, exist_ok=True)
-
     for risk_col in cols:
         functional_rules.plot_choropleth(
             risk_data=infrastructure_risk,
@@ -405,9 +397,7 @@ def layering(config: model_config.Config) -> None:
     if config.switches.coastal_erosion:
         risk_cols.extend([MainHazardRiskCols.COASTAL_EROSION])
 
-    audit_path = config.paths.audit / "Layering"
-
-    _infrastructure_layering(config, hazard_layers, risk_cols, audit_path)
+    _infrastructure_layering(config, hazard_layers, risk_cols)
 
 
 ## HAZARD LAYERS
@@ -452,13 +442,12 @@ def _infrastructure_layering(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Layer roads, rail, and other infrastructure with hazards."""
-    _get_road_risk(config, hazard_layers, risk_cols, audit_path)
-    _get_rail_risk(config, hazard_layers, risk_cols, audit_path)
-    _get_other_risk(config, hazard_layers, risk_cols, audit_path)
-    _get_bespoke_risk(config, hazard_layers, risk_cols, audit_path)
+    _get_road_risk(config, hazard_layers, risk_cols)
+    _get_rail_risk(config, hazard_layers, risk_cols)
+    _get_other_risk(config, hazard_layers, risk_cols)
+    _get_bespoke_risk(config, hazard_layers, risk_cols)
 
 
 ### ROAD
@@ -468,7 +457,6 @@ def _get_road_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Layer OS Open Roads, NoHAM, and Transport Model roads with hazards to assign risk."""
     road_risk_enabled = any(
@@ -477,11 +465,11 @@ def _get_road_risk(
     if road_risk_enabled:
         LOG.info("Calculating road risk...")
         if config.switches.all_roads:
-            _os_open_road_risk(config, hazard_layers, risk_cols, audit_path)
+            _os_open_road_risk(config, hazard_layers, risk_cols)
         if config.switches.noham_roads:
-            _noham_road_risk(config, hazard_layers, risk_cols, audit_path)
+            _noham_road_risk(config, hazard_layers, risk_cols)
         if config.switches.model_roads:
-            _model_road_risk(config, hazard_layers, risk_cols, audit_path)
+            _model_road_risk(config, hazard_layers, risk_cols)
         LOG.info("Road risk calculation complete.")
 
 
@@ -492,7 +480,6 @@ def _os_open_road_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Intersect OS Road infrastructure with hazards, clean output, and write to file."""
     LOG.info("Layering OS Open Roads with hazard risk...")
@@ -528,7 +515,7 @@ def _os_open_road_risk(
             OSRoadCols.PRIMARY_ROUTE,
             OSRoadCols.TRUNK_ROAD,
         ],
-        out_path=audit_path / "Summary" / "Road" / "OS Roads",
+        out_path=config.paths.os_road_summary_audit,
         out_filename="OS Roads Risk Summary.xlsx",
     )
 
@@ -536,7 +523,7 @@ def _os_open_road_risk(
         os_road_risk,
         "All Roads",
         risk_cols,
-        audit_path / "Road" / "OS Roads",
+        config.paths.os_road_layering_audit,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
@@ -567,7 +554,6 @@ def _noham_road_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get NoHAM road risk and write to file.
 
@@ -597,7 +583,7 @@ def _noham_road_risk(
         asset_risk=noham_risk,
         risk_cols=risk_impact_cols,
         descriptive_cols=[],
-        out_path=audit_path / "Summary" / "Road" / "NoHAM",
+        out_path=config.paths.noham_summary_audit,
         out_filename="NoHAM Roads Risk Summary.xlsx",
     )
 
@@ -605,7 +591,7 @@ def _noham_road_risk(
         noham_risk,
         "NoHAM Roads",
         risk_impact_cols,
-        audit_path / "Road" / "NoHAM",
+        config.paths.noham_layering_audit,
         feature_range=feature_range,
     )
 
@@ -623,9 +609,7 @@ def _noham_road_risk(
         risk_cols_order=risk_impact_cols,
     )
 
-    _split_csv_shapefile(
-        noham_risk, ID_COL, config.paths.noham_model_output / output_filename
-    )
+    _split_csv_shapefile(noham_risk, ID_COL, config.paths.noham_model_output / output_filename)
 
     LOG.info("Finished layering NoHAM with hazard risk and calculating impact index.")
 
@@ -704,7 +688,6 @@ def _model_road_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get transport model road risk and write to file.
 
@@ -736,7 +719,7 @@ def _model_road_risk(
         asset_risk=model_road_risk,
         risk_cols=risk_impact_cols,
         descriptive_cols=[],
-        out_path=audit_path / "Summary" / "Road" / "Model Roads",
+        out_path=config.paths.model_road_summary_audit,
         out_filename="Model Roads Risk Summary.xlsx",
     )
 
@@ -744,7 +727,7 @@ def _model_road_risk(
         model_road_risk,
         "Model Roads",
         risk_impact_cols,
-        audit_path / "Road" / "Model Roads",
+        config.paths.model_roads_layering_audit,
         feature_range=feature_range,
     )
 
@@ -828,16 +811,15 @@ def _get_rail_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Layer passenger rail and freight rail network with hazard to assign risk."""
     rail_risk_enabled = any([config.switches.passenger_rail, config.switches.freight_rail])
     if rail_risk_enabled:
         LOG.info("Calculating rail risk...")
         if config.switches.passenger_rail:
-            _passenger_rail_risk(config, hazard_layers, risk_cols, audit_path)
+            _passenger_rail_risk(config, hazard_layers, risk_cols)
         if config.switches.freight_rail:
-            _freight_rail_risk(config, hazard_layers, risk_cols, audit_path)
+            _freight_rail_risk(config, hazard_layers, risk_cols)
         LOG.info("Rail risk calculation complete.")
 
 
@@ -848,13 +830,10 @@ def _passenger_rail_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Intersect passenger rail network with hazard to assign risk, clean and write to file."""
     LOG.info("Layering passenger rail network with hazard risk...")
-    passenger_rail_network = gpd.read_file(
-        config.paths.passenger_rail_model_input
-    )
+    passenger_rail_network = gpd.read_file(config.paths.passenger_rail_model_input)
 
     if passenger_rail_network.empty:
         LOG.warning("Passenger rail network layer is empty. Skipping.")
@@ -880,7 +859,7 @@ def _passenger_rail_risk(
         asset_risk=passenger_rail_network_risk,
         risk_cols=risk_cols,
         descriptive_cols=OSRailCols.get_descriptive_cols(),
-        out_path=config.paths.audit / "Summary" / "Rail" / "Passenger Rail",
+        out_path=config.paths.passenger_rail_summary_audit,
         out_filename="Passenger Rail Risk Summary.xlsx",
     )
 
@@ -888,7 +867,7 @@ def _passenger_rail_risk(
         passenger_rail_network_risk,
         "Passenger Rail",
         risk_cols,
-        audit_path / "Rail" / "Passenger Rail",
+        config.paths.passenger_rail_layering_audit,
         linewidth=1.0,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
@@ -923,7 +902,6 @@ def _freight_rail_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Calculate freight rail risk and write to file.
 
@@ -957,16 +935,14 @@ def _freight_rail_risk(
     freight_rail_network_risk = _freight_impact_index(freight_rail_network_risk, feature_range)
 
     # Set the correct CRS
-    freight_rail_network_risk = freight_rail_network_risk.set_crs(
-        BNG_CRS, allow_override=True
-    )
+    freight_rail_network_risk = freight_rail_network_risk.set_crs(BNG_CRS, allow_override=True)
 
     risk_summary.create_risk_summary(
         config,
         asset_risk=freight_rail_network_risk,
         risk_cols=risk_cols,
         descriptive_cols=OSRailCols.get_descriptive_cols(),
-        out_path=config.paths.audit / "Summary" / "Rail" / "Freight Rail",
+        out_path=config.paths.freight_rail_summary_audit,
         out_filename="Freight Rail Risk Summary.xlsx",
     )
 
@@ -974,7 +950,7 @@ def _freight_rail_risk(
         freight_rail_network_risk,
         "Freight Rail",
         [*risk_cols, ImpactCols.IMPACT],
-        audit_path / "Rail" / "Freight Rail",
+        config.paths.freight_rail_layering_audit,
         linewidth=1.0,
         feature_range=feature_range,
     )
@@ -1053,7 +1029,6 @@ def _get_other_risk(  # noqa: C901
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Layer other infrastructure with hazards to assign risk."""
     other_risk_enabled = any(
@@ -1073,25 +1048,25 @@ def _get_other_risk(  # noqa: C901
     if other_risk_enabled:
         LOG.info("Calculating risk for other infrastructure...")
         if config.switches.train_stations:
-            _train_stations_risk(config, hazard_layers, risk_cols, audit_path)
+            _train_stations_risk(config, hazard_layers, risk_cols)
         if config.switches.airports:
-            _airports_risk(config, hazard_layers, risk_cols, audit_path)
+            _airports_risk(config, hazard_layers, risk_cols)
         if config.switches.bus_coach_stations:
-            _bus_coach_stations_risk(config, hazard_layers, risk_cols, audit_path)
+            _bus_coach_stations_risk(config, hazard_layers, risk_cols)
         if config.switches.bus_stops:
-            _bus_stops_risk(config, hazard_layers, risk_cols, audit_path)
+            _bus_stops_risk(config, hazard_layers, risk_cols)
         if config.switches.tram_stations:
-            _tram_stations_risk(config, hazard_layers, risk_cols, audit_path)
+            _tram_stations_risk(config, hazard_layers, risk_cols)
         if config.switches.rapid_transport_stations:
-            _rapid_transport_stations_risk(config, hazard_layers, risk_cols, audit_path)
+            _rapid_transport_stations_risk(config, hazard_layers, risk_cols)
         if config.switches.ferry_terminals:
-            _ferry_terminals_risk(config, hazard_layers, risk_cols, audit_path)
+            _ferry_terminals_risk(config, hazard_layers, risk_cols)
         if config.switches.national_cycle_network:
-            _ncn_risk(config, hazard_layers, risk_cols, audit_path)
+            _national_cycle_network_risk(config, hazard_layers, risk_cols)
         if config.switches.tram_network:
-            _tram_network_risk(config, hazard_layers, risk_cols, audit_path)
+            _tram_network_risk(config, hazard_layers, risk_cols)
         if config.switches.rapid_transport_network:
-            _rapid_transport_network_risk(config, hazard_layers, risk_cols, audit_path)
+            _rapid_transport_network_risk(config, hazard_layers, risk_cols)
         LOG.info("Risk calculation for other infrastructure complete.")
 
 
@@ -1109,16 +1084,13 @@ def _train_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get train station risk and write to file.
 
     Buffer train stations, then intersect with hazard risk, clean output, and write to file.
     """
     LOG.info("Layering train stations with hazard risk...")
-    train_stations = gpd.read_file(
-        config.paths.train_stations_model_input
-    )
+    train_stations = gpd.read_file(config.paths.train_stations_model_input)
 
     if train_stations.empty:
         LOG.warning("Train stations layer is empty. Skipping.")
@@ -1130,7 +1102,7 @@ def _train_stations_risk(
         train_stations_risk,
         "Train Stations",
         risk_cols,
-        audit_path / "Other" / "Train Stations",
+        config.paths.train_stations_layering_audit,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
@@ -1163,7 +1135,6 @@ def _airports_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get airport risk and write to file.
 
@@ -1182,7 +1153,7 @@ def _airports_risk(
         airports_risk,
         "Airports",
         risk_cols,
-        audit_path / "Other" / "Airports",
+        config.paths.airports_layering_audit,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
@@ -1215,13 +1186,10 @@ def _bus_coach_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get bus and coach station risk and write to file."""
     LOG.info("Layering bus and coach stations with hazard risk...")
-    bus_coach_stations = gpd.read_file(
-        config.paths.bus_coach_stations_model_input
-    )
+    bus_coach_stations = gpd.read_file(config.paths.bus_coach_stations_model_input)
 
     if bus_coach_stations.empty:
         LOG.warning("Bus and coach stations layer is empty. Skipping.")
@@ -1235,7 +1203,7 @@ def _bus_coach_stations_risk(
         bus_coach_stations_risk,
         "Bus and Coach Stations",
         risk_cols,
-        audit_path / "Other" / "Bus and Coach Stations",
+        config.paths.bus_coach_stations_layering_audit,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
@@ -1268,7 +1236,6 @@ def _bus_stops_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Intersect bus stops with hazard risk, clean output, and write to file."""
     LOG.info("Layering bus stops with hazard risk...")
@@ -1284,7 +1251,7 @@ def _bus_stops_risk(
         bus_stops_risk,
         "Bus Stops",
         risk_cols,
-        audit_path / "Other" / "Bus Stops",
+        config.paths.bus_stops_layering_audit,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
@@ -1317,16 +1284,13 @@ def _tram_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get tram station risk and write to file.
 
     Buffer tram stations, then intersect with hazard risk, clean output, and write to file.
     """
     LOG.info("Layering tram stations with hazard risk...")
-    tram_stations = gpd.read_file(
-        config.paths.tram_stations_model_input
-    )
+    tram_stations = gpd.read_file(config.paths.tram_stations_model_input)
 
     if tram_stations.empty:
         LOG.warning("Tram stations layer is empty. Skipping.")
@@ -1338,7 +1302,7 @@ def _tram_stations_risk(
         tram_stations_risk,
         "Tram Stations",
         risk_cols,
-        audit_path / "Other" / "Tram Stations",
+        config.paths.tram_stations_layering_audit,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
@@ -1371,7 +1335,6 @@ def _rapid_transport_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get rapid transport station risk and write to file.
 
@@ -1379,9 +1342,7 @@ def _rapid_transport_stations_risk(
     to file.
     """
     LOG.info("Layering rapid transport stations with hazard risk...")
-    rapid_transport_stations = gpd.read_file(
-        config.paths.rapid_transport_stations_model_input
-    )
+    rapid_transport_stations = gpd.read_file(config.paths.rapid_transport_stations_model_input)
 
     if rapid_transport_stations.empty:
         LOG.warning("Rapid transport stations layer is empty. Skipping.")
@@ -1395,7 +1356,7 @@ def _rapid_transport_stations_risk(
         rapid_transport_stations_risk,
         "Rapid Transport Stations",
         risk_cols,
-        audit_path / "Other" / "Rapid Transport Stations",
+        config.paths.rapid_transport_stations_layering_audit,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
@@ -1428,13 +1389,10 @@ def _ferry_terminals_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get ferry terminal risk and write to file."""
     LOG.info("Layering ferry terminals with hazard risk...")
-    ferry_terminals = gpd.read_file(
-        config.paths.ferry_terminals_model_input
-    )
+    ferry_terminals = gpd.read_file(config.paths.ferry_terminals_model_input)
 
     if ferry_terminals.empty:
         LOG.warning("Ferry terminals layer is empty. Skipping.")
@@ -1448,7 +1406,7 @@ def _ferry_terminals_risk(
         ferry_terminals_risk,
         "Ferry Terminals",
         risk_cols,
-        audit_path / "Other" / "Ferry Terminals",
+        config.paths.ferry_terminals_layering_audit,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
@@ -1477,17 +1435,14 @@ def _ferry_terminals_risk(
 #### National Cycle Network
 
 
-def _ncn_risk(
+def _national_cycle_network_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
-    """Get NCN risk and write to file."""
+    """Get National Cycle Network (NCN) risk and write to file."""
     LOG.info("Layering national cycle network with hazard risk...")
-    ncn = gpd.read_file(
-        config.paths.national_cycle_network_model_input
-    )
+    ncn = gpd.read_file(config.paths.national_cycle_network_model_input)
 
     if ncn.empty:
         LOG.warning("National Cycle Network layer is empty. Skipping.")
@@ -1502,7 +1457,7 @@ def _ncn_risk(
         descriptive_cols=[
             name for name in NationalCycleNetworkCols.rename_map().values() if name != ID_COL
         ],
-        out_path=config.paths.audit / "Summary" / "Other" / "National Cycle Network",
+        out_path=config.paths.national_cycle_network_summary_audit,
         out_filename="National Cycle Network Risk Summary.xlsx",
     )
 
@@ -1510,7 +1465,7 @@ def _ncn_risk(
         ncn_risk,
         "National Cycle Network",
         risk_cols,
-        audit_path / "Other" / "National Cycle Network",
+        config.paths.national_cycle_network_layering_audit,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
 
@@ -1543,16 +1498,13 @@ def _tram_network_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get tram network risk and write to file.
 
     Intersect tram network with hazard risk, clean output, then write to file.
     """
     LOG.info("Layering tram network with hazard risk...")
-    tram_network = gpd.read_file(
-        config.paths.tram_network_model_input
-    )
+    tram_network = gpd.read_file(config.paths.tram_network_model_input)
 
     if tram_network.empty:
         LOG.warning("Tram network layer is empty. Skipping.")
@@ -1572,7 +1524,7 @@ def _tram_network_risk(
         asset_risk=tram_risk,
         risk_cols=risk_cols,
         descriptive_cols=OSRailCols.get_descriptive_cols(),
-        out_path=config.paths.audit / "Summary" / "Other" / "Tram Network Risk",
+        out_path=config.paths.tram_network_summary_audit,
         out_filename="Tram Network Risk Summary.xlsx",
     )
 
@@ -1580,7 +1532,7 @@ def _tram_network_risk(
         tram_risk,
         "Tram Network",
         risk_cols,
-        audit_path / "Other" / "Tram Network",
+        config.paths.tram_network_layering_audit,
         linewidth=1.0,
         feature_range=(config.constants.score_min, config.constants.score_max),
     )
@@ -1614,16 +1566,13 @@ def _rapid_transport_network_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get rapid transport network risk and write to file.
 
     Intersect rapid transport network with hazard risk, clean output, then write to file.
     """
     LOG.info("Layering rapid transport network with hazard risk...")
-    rapid_transport = gpd.read_file(
-        config.paths.rapid_transport_network_model_input
-    )
+    rapid_transport = gpd.read_file(config.paths.rapid_transport_network_model_input)
 
     if rapid_transport.empty:
         LOG.warning("Rapid transport network layer is empty. Skipping.")
@@ -1647,7 +1596,7 @@ def _rapid_transport_network_risk(
         asset_risk=rapid_transport_risk,
         risk_cols=risk_cols,
         descriptive_cols=OSRailCols.get_descriptive_cols(),
-        out_path=config.paths.audit / "Summary" / "Other" / "Rapid Transport Network",
+        out_path=config.paths.rapid_transport_network_summary_audit,
         out_filename="Rapid Transport Network Risk Summary.xlsx",
     )
 
@@ -1655,7 +1604,7 @@ def _rapid_transport_network_risk(
         rapid_transport_risk,
         "Rapid Transport Network",
         risk_cols,
-        audit_path / "Other" / "Rapid Transport Network",
+        config.paths.rapid_transport_network_layering_audit,
         feature_range=feature_range,
     )
 
@@ -1688,7 +1637,6 @@ def _get_bespoke_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Get bespoke infrastructure risk and write to file."""
     any_bespoke = any(
@@ -1698,8 +1646,8 @@ def _get_bespoke_risk(
     )
     if any_bespoke:
         LOG.info("Calculating bespoke infrastructure risk...")
-        _nexus_metro_links_risk(config, hazard_layers, risk_cols, audit_path)
-        _nexus_metro_stations_risk(config, hazard_layers, risk_cols, audit_path)
+        _nexus_metro_links_risk(config, hazard_layers, risk_cols)
+        _nexus_metro_stations_risk(config, hazard_layers, risk_cols)
         LOG.info("Risk calculation for bespoke infrastructure completed.")
 
 
@@ -1707,7 +1655,6 @@ def _nexus_metro_links_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Calculate Nexus Metro bespoke infrastructure risk and write to file."""
     LOG.info("Calculating Nexus Metro bespoke infrastructure risk...")
@@ -1732,7 +1679,7 @@ def _nexus_metro_links_risk(
         asset_risk=metro_links_risk,
         risk_cols=risk_cols,
         descriptive_cols=["Ownership", "extension"],
-        out_path=config.paths.audit / "Summary" / "Bespoke" / "Nexus Metro Network",
+        out_path=config.paths.nexus_metro_links_summary_audit,
         out_filename="Nexus Metro Network Risk Summary.xlsx",
     )
 
@@ -1740,7 +1687,7 @@ def _nexus_metro_links_risk(
         metro_links_risk,
         "Nexus Metro Links",
         risk_cols,
-        audit_path / "Other" / "Nexus Metro Links",
+        config.paths.nexus_metro_links_layering_audit,
         feature_range=feature_range,
     )
 
@@ -1807,7 +1754,6 @@ def _nexus_metro_stations_risk(
     config: model_config.Config,
     hazard_layers: dict[MainHazardRiskCols, gpd.GeoDataFrame],
     risk_cols: list[RiskColumn],
-    audit_path: pathlib.Path,
 ) -> None:
     """Calculate Nexus Metro stations bespoke infrastructure risk and write to file."""
     LOG.info("Calculating Nexus Metro stations bespoke infrastructure risk...")
@@ -1827,7 +1773,7 @@ def _nexus_metro_stations_risk(
         metro_stations_risk,
         "Nexus Metro Stations",
         risk_cols,
-        audit_path / "Other" / "Nexus Metro Stations",
+        config.paths.nexus_metro_stations_layering_audit,
         feature_range=feature_range,
     )
 

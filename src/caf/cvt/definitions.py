@@ -719,6 +719,7 @@ class MasterMapFunction(enum.StrEnum):
 # TODO (DJ): Put these in an input csv, as it's something that may change over time,
 # particularly the rapid transport networks
 
+
 class MasterMapStakeholder(enum.StrEnum):
     """Stakeholder definitions for MasterMap sites."""
 

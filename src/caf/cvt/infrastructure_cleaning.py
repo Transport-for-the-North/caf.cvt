@@ -249,7 +249,7 @@ def _populate_os_road_structure(
 def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean NoHAM network dataset, then write to file."""
     noham_network = gpd.read_file(
-        config.paths.raw_input / config.infrastructure.road.noham.file_path,
+        config.paths.raw_input / config.infrastructure.road.noham,
         mask=boundary,
         columns=[definitions.NoHAMRoadCols.LINK_ID],
     )
@@ -359,7 +359,7 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
 
     data_cleaning.write_to_file(
         model_roads,
-        config.infrastructure.road.model_roads,
+        config.paths.model_roads_model_input,
     )
 
 
@@ -629,9 +629,7 @@ def _clean_airports(config: model_config.Config, transport_sites: gpd.GeoDataFra
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
-        airports, config.paths.airports_model_input
-    )
+    data_cleaning.write_to_file(airports, config.paths.airports_model_input)
 
 
 def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -678,9 +676,7 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
-        bus_stops, config.paths.bus_stops_model_input
-    )
+    data_cleaning.write_to_file(bus_stops, config.paths.bus_stops_model_input)
 
 
 def _clean_train_stations(
@@ -908,9 +904,7 @@ def _clean_tram_network(config: model_config.Config, rail_links: gpd.GeoDataFram
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
-        tram_links, config.paths.tram_network_model_input
-    )
+    data_cleaning.write_to_file(tram_links, config.paths.tram_network_model_input)
 
 
 def _clean_rapid_transport_network(

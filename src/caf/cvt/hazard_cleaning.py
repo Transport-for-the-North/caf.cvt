@@ -154,10 +154,7 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
-        temp_max,
-        config.paths.summer_max_temperature_model_input
-    )
+    data_cleaning.write_to_file(temp_max, config.paths.summer_max_temperature_model_input)
 
 
 def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -249,10 +246,7 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
-        precip_sum,
-        config.paths.summer_precipitation_model_input
-    )
+    data_cleaning.write_to_file(precip_sum, config.paths.summer_precipitation_model_input)
 
 
 def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -300,10 +294,7 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
-        precip_win,
-        config.paths.winter_precipitation_model_input
-    )
+    data_cleaning.write_to_file(precip_win, config.paths.winter_precipitation_model_input)
 
 
 def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -328,10 +319,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         (filter_removed / len_before_filter) * 100,
     )
     rain_days = data_cleaning.explode_to_polygons(rain_days)
-    data_cleaning.write_to_file(
-        rain_days,
-        config.paths.rain_days_model_input
-    )
+    data_cleaning.write_to_file(rain_days, config.paths.rain_days_model_input)
 
 
 def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -361,10 +349,7 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
         (filter_removed / len_before_filter) * 100,
     )
     drought_index = data_cleaning.explode_to_polygons(drought_index)
-    data_cleaning.write_to_file(
-        drought_index,
-        config.paths.drought_severity_index_model_input
-    )
+    data_cleaning.write_to_file(drought_index, config.paths.drought_severity_index_model_input)
 
 
 def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -394,10 +379,7 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
-        hot_days,
-        config.paths.hot_summer_days_model_input
-    )
+    data_cleaning.write_to_file(hot_days, config.paths.hot_summer_days_model_input)
 
 
 def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -460,10 +442,7 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
-        frost_days,
-        config.paths.frost_days_model_input
-    )
+    data_cleaning.write_to_file(frost_days, config.paths.frost_days_model_input)
 
 
 def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -493,10 +472,7 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
-        ice_days,
-        config.paths.icing_days_model_input
-    )
+    data_cleaning.write_to_file(ice_days, config.paths.icing_days_model_input)
 
 
 def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -546,10 +522,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
         (filter_removed / len_before_filter) * 100,
     )
     windspd_combined = data_cleaning.explode_to_polygons(windspd_combined)
-    data_cleaning.write_to_file(
-        windspd_combined,
-        config.paths.wind_speed_model_input
-    )
+    data_cleaning.write_to_file(windspd_combined, config.paths.wind_speed_model_input)
 
 
 def _read_wind_speed_reduce(xr_path: pathlib.Path, scenario: str) -> tuple[pd.DataFrame, int]:
@@ -681,7 +654,7 @@ def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) 
                 flooding_type=flooding_type,
                 boundary=boundary,
                 out_path=(
-                    config.paths.flooding_type_scenario_model_input(flooding_type, scenario),
+                    config.paths.flooding_type_scenario_model_input(flooding_type, scenario)
                 ),
                 rename_risk_col=f"{flooding_type}_flooding_risk_{scenario}",
                 climate_change=(scenario == definitions.Scenarios.FORECAST),
@@ -869,13 +842,10 @@ def _clean_premium_geosure(config: model_config.Config, boundary: gpd.GeoDataFra
             columns={"CLASS": f"{geohazard}_{definitions.Scenarios.CURRENT}"}
         )
         geosure_data_clean[f"{geohazard}_{definitions.Scenarios.FORECAST}"] = (
-            geosure_data_clean[
-                f"{geohazard}_{definitions.Scenarios.CURRENT}"
-            ]
+            geosure_data_clean[f"{geohazard}_{definitions.Scenarios.CURRENT}"]
         )
         geosure_layers[geohazard] = data_cleaning.clip_to_boundary(
-            geosure_data_clean,
-            boundary
+            geosure_data_clean, boundary
         )
         filter_removed = len_before_filter - len(geosure_layers[geohazard])
         LOG.debug(

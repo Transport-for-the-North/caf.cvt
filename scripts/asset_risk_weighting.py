@@ -1,4 +1,5 @@
 """Module to derive asset-specific hazard weights."""
+
 # TODO (DJ): Add sub-command for this module
 import logging
 import pathlib

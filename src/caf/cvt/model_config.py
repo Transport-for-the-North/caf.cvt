@@ -131,7 +131,6 @@ class PathConfig(ctk.BaseConfig):
         road_model_input.mkdir(parents=True, exist_ok=True)
         return road_model_input
 
-
     @property
     def rail_model_input(self) -> pathlib.Path:
         """Create rail model input directory and return path."""
@@ -164,7 +163,7 @@ class PathConfig(ctk.BaseConfig):
         return self.road_model_input / "noham_2023.gpkg"
 
     @property
-    def model_road_model_input(self) -> pathlib.Path:
+    def model_roads_model_input(self) -> pathlib.Path:
         """Create model road input directory and return path."""
         return self.road_model_input / "model_roads.gpkg"
 
@@ -334,9 +333,7 @@ class PathConfig(ctk.BaseConfig):
         return self.extreme_weather_model_input / "wind_driven_rain_index.gpkg"
 
     def flooding_type_scenario_model_input(
-            self,
-            flooding_type: FloodingTypes,
-            scenario: Scenarios
+        self, flooding_type: FloodingTypes, scenario: Scenarios
     ) -> pathlib.Path:
         """Return flooding model input path based on flooding type and scenario."""
         return self.flooding_model_input / f"{flooding_type}_{scenario}.gpkg"
@@ -352,15 +349,11 @@ class PathConfig(ctk.BaseConfig):
             return self.ground_stability_model_input / f"{geohazard}.gpkg"
         return self.ground_stability_model_input / "geosure.gpkg"
 
-
-    def national_coastal_erosion_risk_mapping_model_input(
-        self,
-        year: str
-    ) -> pathlib.Path:
+    def national_coastal_erosion_risk_mapping_model_input(self, year: str) -> pathlib.Path:
         """Return national coastal erosion risk mapping model input path."""
         return (
-            self.coastal_erosion_model_input /
-            f"national_coastal_erosion_risk_mapping_smp_{year}_70CC.gpkg"
+            self.coastal_erosion_model_input
+            / f"national_coastal_erosion_risk_mapping_smp_{year}_70CC.gpkg"
         )
 
     @property
@@ -568,7 +561,346 @@ class PathConfig(ctk.BaseConfig):
         nexus_metro_stations_model_output_path.mkdir(parents=True, exist_ok=True)
         return nexus_metro_stations_model_output_path
 
-# TODO (DJ): Add audit paths to the config
+    @property
+    def functional_rules_audit(self) -> pathlib.Path:
+        """Create functional rules audit model output directory and return path."""
+        functional_rules_audit_path = self.audit / "Functional Rules"
+        functional_rules_audit_path.mkdir(parents=True, exist_ok=True)
+        return functional_rules_audit_path
+
+    @property
+    def layering_audit(self) -> pathlib.Path:
+        """Create layering audit model output directory and return path."""
+        layering_audit_path = self.audit / "Layering"
+        layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return layering_audit_path
+
+    @property
+    def summary_audit(self) -> pathlib.Path:
+        """Create summary audit model output directory and return path."""
+        summary_audit_path = self.audit / "Summary"
+        summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return summary_audit_path
+
+    @property
+    def extreme_weather_audit(self) -> pathlib.Path:
+        """Create extreme weather audit model output directory and return path."""
+        extreme_weather_audit_path = self.functional_rules_audit / "Extreme Weather"
+        extreme_weather_audit_path.mkdir(parents=True, exist_ok=True)
+        return extreme_weather_audit_path
+
+    @property
+    def flooding_audit(self) -> pathlib.Path:
+        """Create flooding audit model output directory and return path."""
+        flooding_audit_path = self.functional_rules_audit / "Flooding"
+        flooding_audit_path.mkdir(parents=True, exist_ok=True)
+        return flooding_audit_path
+
+    @property
+    def ground_stability_audit(self) -> pathlib.Path:
+        """Create ground stability audit model output directory and return path."""
+        ground_stability_audit_path = self.functional_rules_audit / "Ground Stability"
+        ground_stability_audit_path.mkdir(parents=True, exist_ok=True)
+        return ground_stability_audit_path
+
+    @property
+    def coastal_erosion_audit(self) -> pathlib.Path:
+        """Create coastal erosion audit model output directory and return path."""
+        coastal_erosion_audit_path = self.functional_rules_audit / "Coastal Erosion"
+        coastal_erosion_audit_path.mkdir(parents=True, exist_ok=True)
+        return coastal_erosion_audit_path
+
+    @property
+    def extreme_heat_audit(self) -> pathlib.Path:
+        """Create extreme heat audit model output directory and return path."""
+        extreme_heat_audit_path = self.extreme_weather_audit / "Extreme Heat Risk Index"
+        extreme_heat_audit_path.mkdir(parents=True, exist_ok=True)
+        return extreme_heat_audit_path
+
+    @property
+    def extreme_cold_audit(self) -> pathlib.Path:
+        """Create extreme cold audit model output directory and return path."""
+        extreme_cold_audit_path = self.extreme_weather_audit / "Extreme Cold Risk Index"
+        extreme_cold_audit_path.mkdir(parents=True, exist_ok=True)
+        return extreme_cold_audit_path
+
+    @property
+    def storm_audit(self) -> pathlib.Path:
+        """Create storm audit model output directory and return path."""
+        storm_audit_path = self.extreme_weather_audit / "Storm Risk Index"
+        storm_audit_path.mkdir(parents=True, exist_ok=True)
+        return storm_audit_path
+
+    @property
+    def drought_audit(self) -> pathlib.Path:
+        """Create drought audit model output directory and return path."""
+        drought_audit_path = self.extreme_weather_audit / "Drought Risk Index"
+        drought_audit_path.mkdir(parents=True, exist_ok=True)
+        return drought_audit_path
+
+    @property
+    def extreme_weather_index_audit(self) -> pathlib.Path:
+        """Create extreme weather index audit model output directory and return path."""
+        extreme_weather_index_audit_path = (
+            self.extreme_weather_audit / "Extreme Weather Risk Index"
+        )
+        extreme_weather_index_audit_path.mkdir(parents=True, exist_ok=True)
+        return extreme_weather_index_audit_path
+
+    @property
+    def road_layering_audit(self) -> pathlib.Path:
+        """Create road layering audit model output directory and return path."""
+        road_layering_audit_path = self.layering_audit / "Road"
+        road_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return road_layering_audit_path
+
+    @property
+    def rail_layering_audit(self) -> pathlib.Path:
+        """Create rail layering audit model output directory and return path."""
+        rail_layering_audit_path = self.layering_audit / "Rail"
+        rail_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return rail_layering_audit_path
+
+    @property
+    def other_layering_audit(self) -> pathlib.Path:
+        """Create other layering audit model output directory and return path."""
+        other_layering_audit_path = self.layering_audit / "Other"
+        other_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return other_layering_audit_path
+
+    @property
+    def bespoke_layering_audit(self) -> pathlib.Path:
+        """Create bespoke layering audit model output directory and return path."""
+        bespoke_layering_audit_path = self.layering_audit / "Bespoke"
+        bespoke_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return bespoke_layering_audit_path
+
+    @property
+    def os_road_layering_audit(self) -> pathlib.Path:
+        """Create OS road layering audit model output directory and return path."""
+        os_road_layering_audit_path = self.road_layering_audit / "OS Roads"
+        os_road_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return os_road_layering_audit_path
+
+    @property
+    def noham_layering_audit(self) -> pathlib.Path:
+        """Create NOHAM layering audit model output directory and return path."""
+        noham_layering_audit_path = self.road_layering_audit / "NoHAM"
+        noham_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return noham_layering_audit_path
+
+    @property
+    def model_roads_layering_audit(self) -> pathlib.Path:
+        """Create model roads layering audit model output directory and return path."""
+        model_roads_layering_audit_path = self.road_layering_audit / "Model Roads"
+        model_roads_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return model_roads_layering_audit_path
+
+    @property
+    def passenger_rail_layering_audit(self) -> pathlib.Path:
+        """Create passenger rail layering audit model output directory and return path."""
+        passenger_rail_layering_audit_path = self.rail_layering_audit / "Passenger Rail"
+        passenger_rail_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return passenger_rail_layering_audit_path
+
+    @property
+    def freight_rail_layering_audit(self) -> pathlib.Path:
+        """Create freight rail layering audit model output directory and return path."""
+        freight_rail_layering_audit_path = self.rail_layering_audit / "Freight Rail"
+        freight_rail_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return freight_rail_layering_audit_path
+
+    @property
+    def train_stations_layering_audit(self) -> pathlib.Path:
+        """Create train stations layering audit model output directory and return path."""
+        train_stations_layering_audit_path = self.other_layering_audit / "Train Stations"
+        train_stations_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return train_stations_layering_audit_path
+
+    @property
+    def airports_layering_audit(self) -> pathlib.Path:
+        """Create airports layering audit model output directory and return path."""
+        airports_layering_audit_path = self.other_layering_audit / "Airports"
+        airports_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return airports_layering_audit_path
+
+    @property
+    def bus_coach_stations_layering_audit(self) -> pathlib.Path:
+        """Create bus & coach stations layering audit model output directory and path."""
+        bus_coach_stations_layering_audit_path = (
+            self.other_layering_audit / "Bus and Coach Stations"
+        )
+        bus_coach_stations_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return bus_coach_stations_layering_audit_path
+
+    @property
+    def bus_stops_layering_audit(self) -> pathlib.Path:
+        """Create bus stops layering audit model output directory and return path."""
+        bus_stops_layering_audit_path = self.other_layering_audit / "Bus Stops"
+        bus_stops_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return bus_stops_layering_audit_path
+
+    @property
+    def tram_stations_layering_audit(self) -> pathlib.Path:
+        """Create tram stations layering audit model output directory and return path."""
+        tram_stations_layering_audit_path = self.other_layering_audit / "Tram Stations"
+        tram_stations_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return tram_stations_layering_audit_path
+
+    @property
+    def rapid_transport_stations_layering_audit(self) -> pathlib.Path:
+        """Create rapid transport stations layering audit model output directory and path."""
+        rapid_transport_stations_layering_audit_path = (
+            self.other_layering_audit / "Rapid Transport Stations"
+        )
+        rapid_transport_stations_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return rapid_transport_stations_layering_audit_path
+
+    @property
+    def ferry_terminals_layering_audit(self) -> pathlib.Path:
+        """Create ferry terminals layering audit model output directory and return path."""
+        ferry_terminals_layering_audit_path = self.other_layering_audit / "Ferry Terminals"
+        ferry_terminals_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return ferry_terminals_layering_audit_path
+
+    @property
+    def national_cycle_network_layering_audit(self) -> pathlib.Path:
+        """Create national cycle network layering audit model output directory and path."""
+        national_cycle_network_layering_audit_path = (
+            self.other_layering_audit / "National Cycle Network"
+        )
+        national_cycle_network_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return national_cycle_network_layering_audit_path
+
+    @property
+    def tram_network_layering_audit(self) -> pathlib.Path:
+        """Create tram network layering audit model output directory and return path."""
+        tram_network_layering_audit_path = self.other_layering_audit / "Tram Network"
+        tram_network_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return tram_network_layering_audit_path
+
+    @property
+    def rapid_transport_network_layering_audit(self) -> pathlib.Path:
+        """Create rapid transport network layering audit model output directory and path."""
+        rapid_transport_network_layering_audit_path = (
+            self.other_layering_audit / "Rapid Transport Network"
+        )
+        rapid_transport_network_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return rapid_transport_network_layering_audit_path
+
+    @property
+    def nexus_metro_links_layering_audit(self) -> pathlib.Path:
+        """Create Nexus Metro links layering audit model output directory and path."""
+        nexus_metro_links_layering_audit_path = (
+            self.bespoke_layering_audit / "Nexus Metro Links"
+        )
+        nexus_metro_links_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return nexus_metro_links_layering_audit_path
+
+    @property
+    def nexus_metro_stations_layering_audit(self) -> pathlib.Path:
+        """Create Nexus Metro stations layering audit model output directory and path."""
+        nexus_metro_stations_layering_audit_path = (
+            self.bespoke_layering_audit / "Nexus Metro Stations"
+        )
+        nexus_metro_stations_layering_audit_path.mkdir(parents=True, exist_ok=True)
+        return nexus_metro_stations_layering_audit_path
+
+    @property
+    def road_summary_audit(self) -> pathlib.Path:
+        """Create road summary audit model output directory and return path."""
+        road_summary_audit_path = self.summary_audit / "Road"
+        road_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return road_summary_audit_path
+
+    @property
+    def rail_summary_audit(self) -> pathlib.Path:
+        """Create rail summary audit model output directory and return path."""
+        rail_summary_audit_path = self.summary_audit / "Rail"
+        rail_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return rail_summary_audit_path
+
+    @property
+    def other_summary_audit(self) -> pathlib.Path:
+        """Create other summary audit model output directory and return path."""
+        other_summary_audit_path = self.summary_audit / "Other"
+        other_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return other_summary_audit_path
+
+    @property
+    def bespoke_summary_audit(self) -> pathlib.Path:
+        """Create bespoke summary audit model output directory and return path."""
+        bespoke_summary_audit_path = self.summary_audit / "Bespoke"
+        bespoke_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return bespoke_summary_audit_path
+
+    @property
+    def os_road_summary_audit(self) -> pathlib.Path:
+        """Create OS road summary audit model output directory and return path."""
+        os_road_summary_audit_path = self.road_summary_audit / "OS Roads"
+        os_road_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return os_road_summary_audit_path
+
+    @property
+    def noham_summary_audit(self) -> pathlib.Path:
+        """Create NoHAM summary audit model output directory and return path."""
+        noham_summary_audit_path = self.road_summary_audit / "NoHAM"
+        noham_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return noham_summary_audit_path
+
+    @property
+    def model_road_summary_audit(self) -> pathlib.Path:
+        """Create model road summary audit model output directory and return path."""
+        model_road_summary_audit_path = self.road_summary_audit / "Model Roads"
+        model_road_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return model_road_summary_audit_path
+
+    @property
+    def passenger_rail_summary_audit(self) -> pathlib.Path:
+        """Create passenger rail summary audit model output directory and return path."""
+        passenger_rail_summary_audit_path = self.rail_summary_audit / "Passenger Rail"
+        passenger_rail_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return passenger_rail_summary_audit_path
+
+    @property
+    def freight_rail_summary_audit(self) -> pathlib.Path:
+        """Create freight rail summary audit model output directory and return path."""
+        freight_rail_summary_audit_path = self.rail_summary_audit / "Freight Rail"
+        freight_rail_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return freight_rail_summary_audit_path
+
+    @property
+    def national_cycle_network_summary_audit(self) -> pathlib.Path:
+        """Create national cycle network summary audit model output directory and path."""
+        national_cycle_network_summary_audit_path = (
+            self.other_summary_audit / "National Cycle Network"
+        )
+        national_cycle_network_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return national_cycle_network_summary_audit_path
+
+    @property
+    def tram_network_summary_audit(self) -> pathlib.Path:
+        """Create tram network summary audit model output directory and return path."""
+        tram_network_summary_audit_path = self.other_summary_audit / "Tram Network"
+        tram_network_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return tram_network_summary_audit_path
+
+    @property
+    def rapid_transport_network_summary_audit(self) -> pathlib.Path:
+        """Create rapid transport network summary audit model output directory and path."""
+        rapid_transport_network_summary_audit_path = (
+            self.other_summary_audit / "Rapid Transport Network"
+        )
+        rapid_transport_network_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return rapid_transport_network_summary_audit_path
+
+    @property
+    def nexus_metro_links_summary_audit(self) -> pathlib.Path:
+        """Create Nexus Metro links summary audit model output directory and return path."""
+        nexus_metro_links_summary_audit_path = self.bespoke_summary_audit / "Nexus Metro Links"
+        nexus_metro_links_summary_audit_path.mkdir(parents=True, exist_ok=True)
+        return nexus_metro_links_summary_audit_path
+
 
 class OtherInput(ctk.BaseConfig):
     """Configuration for other raw input data.
@@ -596,7 +928,6 @@ class OtherInput(ctk.BaseConfig):
         if v == "":
             return None
         return v
-
 
 
 class ModelRoadsEntry(ctk.BaseConfig):

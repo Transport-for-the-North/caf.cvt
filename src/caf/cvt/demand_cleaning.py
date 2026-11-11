@@ -57,7 +57,7 @@ def _clean_freight_demand(config: model_config.Config, boundary: gpd.GeoDataFram
     """Clean freight demand data ready for analysis."""
     LOG.info("Cleaning freight demand data...")
     freight_network_demand = _read_freight_demand(
-        config.paths.raw_input / config.impact.freight_demand, boundary
+        config.paths.raw_input / config.demand.freight_demand, boundary
     )
 
     os_freight_network_demand = _map_freight_networks(
@@ -134,7 +134,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
     network_link_ids = set(noham_network[definitions.ID_COL])
 
     scenario_flows = {}
-    for year_label, year in config.impact.noham_years.items():
+    for year_label, year in config.demand.noham_years.items():
         if year_label == "baseline":
             scenario = definitions.Scenarios.CURRENT
         elif year_label == "future":
@@ -180,10 +180,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         noham_net_flows, geometry=definitions.GEOMETRY_COL, crs=noham_network.crs
     )
 
-    data_cleaning.write_to_file(
-        noham_net_flows,
-        config.paths.noham_demand_model_input
-    )
+    data_cleaning.write_to_file(noham_net_flows, config.paths.noham_demand_model_input)
 
 
 def _read_noham_h5(
@@ -260,7 +257,7 @@ def _process_single_noham_layer(
         year=year,
         time_period=time_period,
         user_class=user_class,
-        noham_path=config.paths.raw_input / config.impact.noham_demand,
+        noham_path=config.paths.raw_input / config.demand.noham_demand,
         output_path=config.paths.raw_input / pathlib.Path("Impact/NoHAM Link Flows/h5 files"),
         extract=config.switches.noham_zip_extract,
     )
@@ -358,13 +355,11 @@ def _aggregate_link_flows_year(
 def _clean_model_road_flows(config: model_config.Config) -> None:
     """Clean model flows data, aggregate link flows, merge with network, then write to file."""
     LOG.info("Cleaning model road flows data...")
-    uc_link_flows = pd.read_csv(config.impact.model_road_flows.link_flows)
-    ufs = pd.read_csv(config.impact.model_road_flows.ufs)
-    annualisation_factors = pd.read_csv(config.impact.model_road_flows.annualisation_factors)
+    uc_link_flows = pd.read_csv(config.demand.model_road_flows.link_flows)
+    ufs = pd.read_csv(config.demand.model_road_flows.ufs)
+    annualisation_factors = pd.read_csv(config.demand.model_road_flows.annualisation_factors)
 
-    model_road_links = gpd.read_file(
-        config.paths.model_road_model_input
-    )
+    model_road_links = gpd.read_file(config.paths.model_roads_model_input)
 
     uc_link_flows = uc_link_flows.drop(columns=["id"])
     model_road_uc_link_flows = uc_link_flows.loc[
