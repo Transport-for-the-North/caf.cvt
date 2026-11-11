@@ -1,6 +1,5 @@
-"""Module to derive asset-specific hazard weights."""
+"""Asset-specific hazard weighting workflows."""
 
-# TODO (DJ): Add sub-command for this module
 import logging
 import pathlib
 
@@ -8,34 +7,15 @@ import caf.toolkit as ctk
 import pandas as pd
 
 from caf import cvt
+from caf.cvt.model_config import IncidentWeightConfig
 
-_NAME = pathlib.Path(__file__).stem
-
-# LOGGING
-
-LOG = logging.getLogger(_NAME)
-
-# PATHS
-
-DATA_PATH = pathlib.Path("F:/4. Climate/Phase 2/Localisation/v2/Asset Risk Weighting/Data")
-INPUT_PATH = DATA_PATH / "Input"
-OUTPUT_PATH = DATA_PATH / "Output"
-
-
-NWR_EASTERN_PATH = INPUT_PATH / "weather data eastern.csv"
-NWR_NORTHWEST_PATH = INPUT_PATH / "weather data nwc.csv"
-
-# CONSTANTS
-
-INCIDENT_WEIGHTS = {"incident_share": 0.2, "minutes_share": 0.4, "cost_share": 0.4}
-
-# MAIN FUNCTIONS
+LOG = logging.getLogger(__name__)
 
 
 def derive_rail_weights(
     nwr_eastern_path: pathlib.Path,
     nwr_northwest_path: pathlib.Path,
-    incident_weights: dict[str, float],
+    incident_weights: IncidentWeightConfig,
     output_path: pathlib.Path,
 ) -> None:
     """Derive asset-specific hazard weights for rail assets."""
@@ -68,7 +48,7 @@ def read_clean_nwr_data(
 
 
 def calculate_incident_summary(
-    rail_incidents: pd.DataFrame, incident_weights: dict[str, float]
+    rail_incidents: pd.DataFrame, incident_weights: IncidentWeightConfig
 ) -> pd.DataFrame:
     """Calculate impact weights for rail data based on incident data."""
     LOG.info("Calculating incident summary for rail data...")
@@ -94,9 +74,9 @@ def calculate_incident_summary(
     )
 
     incident_summary["impact"] = round(
-        incident_summary["incident_share"] * incident_weights["incident_share"]
-        + incident_summary["minutes_share"] * incident_weights["minutes_share"]
-        + incident_summary["cost_share"] * incident_weights["cost_share"],
+        incident_summary["incident_share"] * incident_weights.incident_share
+        + incident_summary["minutes_share"] * incident_weights.minutes_share
+        + incident_summary["cost_share"] * incident_weights.cost_share,
         2,
     )
 
@@ -127,18 +107,26 @@ def aggregate_impact_weights(incident_summary: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-# RUN SCRIPT
+def run_asset_risk_weighting(
+    nwr_eastern_path: pathlib.Path,
+    nwr_northwest_path: pathlib.Path,
+    output_path: pathlib.Path,
+    incident_weights: IncidentWeightConfig,
+) -> None:
+    """Run asset risk weighting workflow."""
+    log_file = output_path / "asset_risk_weighting.log"
 
-# pylint: disable=duplicate-code
-if __name__ == "__main__":
     with ctk.LogHelper(
-        _NAME,
+        pathlib.Path(__file__).stem,
         ctk.ToolDetails(
             cvt.__package__,
             cvt.__version__,
         ),
-        log_file=OUTPUT_PATH / "asset_risk_weighting.log",
-    ) as log:
+        log_file=log_file,
+    ):
         derive_rail_weights(
-            NWR_EASTERN_PATH, NWR_NORTHWEST_PATH, INCIDENT_WEIGHTS, OUTPUT_PATH
+            nwr_eastern_path,
+            nwr_northwest_path,
+            incident_weights,
+            output_path,
         )

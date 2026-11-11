@@ -1210,6 +1210,45 @@ class DemandConfig(ctk.BaseConfig):
     nexus: dict[str, pathlib.Path]
 
 
+class IncidentWeightConfig(ctk.BaseConfig):
+    """Configuration for asset risk weighting incident weights.
+
+    Attributes
+    ----------
+    incident_share : float
+        Weight applied to incident share.
+    minutes_share : float
+        Weight applied to minutes share.
+    cost_share : float
+        Weight applied to cost share.
+    """
+
+    incident_share: float
+    minutes_share: float
+    cost_share: float
+
+
+class AssetRiskWeightingConfig(ctk.BaseConfig):
+    """Configuration for asset risk weighting workflow.
+
+    Attributes
+    ----------
+    nwr_eastern_path : pathlib.Path
+        Path to Network Rail Eastern weather data CSV.
+    nwr_northwest_path : pathlib.Path
+        Path to Network Rail North West weather data CSV.
+    output_path : pathlib.Path
+        Output directory for asset risk weighting results.
+    incident_weights : IncidentWeightConfig
+        Weights used to calculate rail hazard impacts.
+    """
+
+    nwr_eastern_path: pathlib.Path
+    nwr_northwest_path: pathlib.Path
+    output_path: pathlib.Path
+    incident_weights: IncidentWeightConfig
+
+
 class SwitchConfig(ctk.BaseConfig):
     """Configuration for model switches.
 
@@ -1410,6 +1449,8 @@ class Config(ctk.BaseConfig):
         Configuration for hazards data.
     demand : DemandConfig
         Configuration for demand data.
+    asset_risk_weighting : AssetRiskWeightingConfig | None
+        Configuration for asset risk weighting workflow.
     constants: ConstantConfig
         Configuration for model constants.
     """
@@ -1421,4 +1462,5 @@ class Config(ctk.BaseConfig):
     infrastructure: InfrastructureConfig
     hazards: HazardsConfig
     demand: DemandConfig
+    asset_risk_weighting: AssetRiskWeightingConfig | None = None
     constants: ConstantConfig

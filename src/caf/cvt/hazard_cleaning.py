@@ -307,8 +307,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     rain_days = data_cleaning.clip_to_boundary(rain_days, boundary)
     rain_days = rain_days.rename(
         columns={
-            "Rain10mmDays":
-            f"{definitions.StormCols.RAIN_DAYS}_{definitions.Scenarios.CURRENT}"
+            "Rain10mmDays": f"{definitions.StormCols.RAIN_DAYS}_{definitions.Scenarios.CURRENT}"
         }
     )
     filter_removed = len_before_filter - len(rain_days)
@@ -596,10 +595,8 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
     wind_driven_rain = wind_driven_rain.drop(columns=["x_coord", "y_coord"])
     wind_driven_rain = wind_driven_rain.rename(
         columns={
-            "WDR_baseline_Median":
-            f"{definitions.StormCols.WIND_DRIVEN_RAIN_INDEX}_{definitions.Scenarios.CURRENT}",
-            "WDR_40_Median":
-            f"{definitions.StormCols.WIND_DRIVEN_RAIN_INDEX}_{definitions.Scenarios.FORECAST}",
+            "WDR_baseline_Median": f"{definitions.StormCols.WIND_DRIVEN_RAIN_INDEX}_{definitions.Scenarios.CURRENT}",
+            "WDR_40_Median": f"{definitions.StormCols.WIND_DRIVEN_RAIN_INDEX}_{definitions.Scenarios.FORECAST}",
         }
     )
     wind_driven_rain = gpd.GeoDataFrame(
