@@ -1676,7 +1676,9 @@ def _create_flooding_tiles(
     tiles = tiles[tiles.geometry.intersects(boundary.geometry.iloc[0])].copy()
     tiles = tiles.reset_index(drop=True)
     tiles["tile_id"] = range(len(tiles))
-    data_cleaning.write_to_file(tiles, config.paths.flooding_tile_grid_model_interim_output)
+    data_cleaning.write_to_file(
+        tiles, config.paths.flooding_tile_grid_model_interim_output(tile_size_m)
+    )
     return tiles
 
 

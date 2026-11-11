@@ -307,7 +307,9 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     rain_days = data_cleaning.clip_to_boundary(rain_days, boundary)
     rain_days = rain_days.rename(
         columns={
-            "Rain10mmDays": f"{definitions.StormCols.RAIN_DAYS}_{definitions.Scenarios.CURRENT}"
+            "Rain10mmDays": (
+                f"{definitions.StormCols.RAIN_DAYS}_{definitions.Scenarios.CURRENT}"
+            )
         }
     )
     filter_removed = len_before_filter - len(rain_days)
@@ -595,8 +597,12 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
     wind_driven_rain = wind_driven_rain.drop(columns=["x_coord", "y_coord"])
     wind_driven_rain = wind_driven_rain.rename(
         columns={
-            "WDR_baseline_Median": f"{definitions.StormCols.WIND_DRIVEN_RAIN_INDEX}_{definitions.Scenarios.CURRENT}",
-            "WDR_40_Median": f"{definitions.StormCols.WIND_DRIVEN_RAIN_INDEX}_{definitions.Scenarios.FORECAST}",
+            "WDR_baseline_Median": (
+                f"{definitions.StormCols.WIND_DRIVEN_RAIN_INDEX}_{definitions.Scenarios.CURRENT}"
+            ),
+            "WDR_40_Median": (
+                f"{definitions.StormCols.WIND_DRIVEN_RAIN_INDEX}_{definitions.Scenarios.FORECAST}"
+            ),
         }
     )
     wind_driven_rain = gpd.GeoDataFrame(
@@ -636,17 +642,15 @@ def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     Risk of Flooding from Rivers and Sea (RoFRS) and
     Risk of Flooding from Surface Water (RoFSW) data.
     """
-    # TODO (DJ): Remove hardcoding of Scotland and check data is empty
-    if config.parameters.stb == definitions.SubnationalTransportBodies.TRANSPORT_SCOTLAND:
-        LOG.warning("Flooding data is unavailable for Scotland.")
     bng_codes = data_cleaning.get_bng_codes(boundary)
+    all_empty = True
     for flooding_type in [
         definitions.FloodingTypes.RIVERS_SEA,
         definitions.FloodingTypes.SURFACE_WATER,
     ]:
         for scenario in definitions.Scenarios:
             LOG.info("Cleaning %s flooding data for %s scenario...", flooding_type, scenario)
-            _clean_flooding_layer(
+            all_empty = _clean_flooding_layer(
                 config=config,
                 flooding_type=flooding_type,
                 boundary=boundary,
@@ -656,7 +660,18 @@ def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) 
                 rename_risk_col=f"{flooding_type}_flooding_risk_{scenario}",
                 climate_change=(scenario == definitions.Scenarios.FORECAST),
                 bng_codes=bng_codes,
+                all_empty=all_empty,
             )
+
+    if all_empty:
+        LOG.warning(
+            "Flooding data unavailable for %s",
+            config.parameters.stb
+            if config.parameters.stb is not None
+            else config.parameters.ca
+            if config.parameters.ca is not None
+            else "model area.",
+        )
 
 
 def _clean_groundwater(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -687,7 +702,8 @@ def _clean_flooding_layer(
     rename_risk_col: str,
     climate_change: bool,
     bng_codes: list[str],
-) -> None:
+    all_empty: bool,
+) -> bool:
     """Clean flooding data and write to file."""
     zip_files = _get_flooding_zip_files(config, flooding_type)
     first_write = True
@@ -707,6 +723,8 @@ def _clean_flooding_layer(
             LOG.debug("%s layer empty. Continuing.", metadata["tile"])
             continue
 
+        all_empty = False
+
         flooding_data = data_cleaning.extract_poly_from_geomcollection(flooding_data)
 
         flooding_data = flooding_data.rename(columns={"Risk_band": rename_risk_col})
@@ -721,6 +739,8 @@ def _clean_flooding_layer(
 
         del flooding_data
         gc.collect()
+
+    return all_empty
 
 
 def _get_flooding_zip_files(

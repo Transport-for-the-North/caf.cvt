@@ -4,6 +4,7 @@
 
 import logging
 import pathlib
+import tempfile
 
 import geopandas as gpd
 import pandas as pd
@@ -132,26 +133,38 @@ def _clean_noham_flows(config: model_config.Config) -> None:
     LOG.info("Cleaning NoHAM demand data...")
     noham_network = gpd.read_file(config.paths.noham_road_model_input)
     network_link_ids = set(noham_network[definitions.ID_COL])
+    noham_archive_path = config.paths.raw_input / config.demand.noham_demand
 
     scenario_flows = {}
-    for year_label, year in config.demand.noham_years.items():
-        if year_label == "baseline":
-            scenario = definitions.Scenarios.CURRENT
-        elif year_label == "future":
-            scenario = definitions.Scenarios.FORECAST
-        else:
-            raise ValueError(
-                f"Unexpected year label: {year_label}, expects 'baseline' or 'future'."
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        extraction_dir = pathlib.Path(tmp_dir)
+        extracted_h5_paths: dict[tuple[int, str, str], pathlib.Path] = {}
+        for year_label, year in config.demand.noham_years.items():
+            if year_label == "baseline":
+                scenario = definitions.Scenarios.CURRENT
+            elif year_label == "future":
+                scenario = definitions.Scenarios.FORECAST
+            else:
+                raise ValueError(
+                    f"Unexpected year label: {year_label}, expects 'baseline' or 'future'."
+                )
+            flows = _aggregate_link_flows_year(
+                year=year,
+                network_link_ids=network_link_ids,
+                noham_archive_path=noham_archive_path,
+                extraction_dir=extraction_dir,
+                extracted_h5_paths=extracted_h5_paths,
             )
-        flows = _aggregate_link_flows_year(config, year, network_link_ids)
 
-        flows = flows.rename(
-            columns={
-                col: f"{col}_{scenario}" for col in flows.columns if col != definitions.ID_COL
-            }
-        )
+            flows = flows.rename(
+                columns={
+                    col: f"{col}_{scenario}"
+                    for col in flows.columns
+                    if col != definitions.ID_COL
+                }
+            )
 
-        scenario_flows[scenario] = flows
+            scenario_flows[scenario] = flows
 
     current_ids = set(scenario_flows[definitions.Scenarios.CURRENT][definitions.ID_COL])
     forecast_ids = set(scenario_flows[definitions.Scenarios.FORECAST][definitions.ID_COL])
@@ -186,33 +199,35 @@ def _clean_noham_flows(config: model_config.Config) -> None:
 def _read_noham_h5(
     *,
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
+    noham_archive_path: pathlib.Path,
+    extraction_dir: pathlib.Path,
+    extracted_h5_paths: dict[tuple[int, str, str], pathlib.Path],
     year: int,
     time_period: str,
     user_class: str,
-    noham_path: pathlib.Path,
-    output_path: pathlib.Path,
-    extract: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Read and clean NoHAM h5 files and extract the link, routes, and od's DataFrames."""
-    if extract:
-        with py7zr.SevenZipFile(noham_path, mode="r") as archive:
+    """Read and clean NoHAM h5 files from the 7z archive."""
+    h5_key = (year, time_period, user_class)
+    if h5_key not in extracted_h5_paths:
+        internal_h5_path = (
+            f"input h5s/"
+            f"{year}/"
+            f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
+        )
+        with py7zr.SevenZipFile(noham_archive_path, mode="r") as archive:
             archive.extract(
-                path=output_path,
-                targets=[
-                    (
-                        f"input h5s/"
-                        f"{year}/"
-                        f"NoHAM_Decarb_DM_Core_{year}_{time_period}_v107_SatPig_{user_class}.h5"
-                    )
-                ],
+                path=extraction_dir,
+                targets=[internal_h5_path],
             )
 
-    noham_demand_path = (
-        output_path
-        / "input h5s"
-        / str(year)
-        / f"NoHAM_Decarb_DM_Core_{year!s}_{time_period}_v107_SatPig_{user_class}.h5"
-    )
+        extracted_h5_path = extraction_dir / internal_h5_path
+        if not extracted_h5_path.exists():
+            raise FileNotFoundError(
+                f"Expected extracted NoHAM file not found: {extracted_h5_path}"
+            )
+        extracted_h5_paths[h5_key] = extracted_h5_path
+
+    noham_demand_path = extracted_h5_paths[h5_key]
 
     if (str(year), time_period) not in route_links_store:
         noham_routes = pd.read_hdf(noham_demand_path, key="/data/Route")
@@ -242,8 +257,10 @@ def _aggregate_link_flows(
 
 
 def _process_single_noham_layer(
-    config: model_config.Config,
     *,
+    noham_archive_path: pathlib.Path,
+    extraction_dir: pathlib.Path,
+    extracted_h5_paths: dict[tuple[int, str, str], pathlib.Path],
     year: int,
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
     time_period: str,
@@ -251,15 +268,14 @@ def _process_single_noham_layer(
     link_ids: set[str],
 ) -> pd.DataFrame:
     LOG.debug("Processing NoHAM demand: %s %s %s", year, time_period, user_class)
-    # TODO (DJ): Process NoHAM data without extracting zip files
     noham_ods, noham_routes, noham_links = _read_noham_h5(
         route_links_store=route_links_store,
+        noham_archive_path=noham_archive_path,
+        extraction_dir=extraction_dir,
+        extracted_h5_paths=extracted_h5_paths,
         year=year,
         time_period=time_period,
         user_class=user_class,
-        noham_path=config.paths.raw_input / config.demand.noham_demand,
-        output_path=config.paths.raw_input / pathlib.Path("Impact/NoHAM Link Flows/h5 files"),
-        extract=config.switches.noham_zip_extract,
     )
     noham_links["noham_link_id"] = (
         noham_links["a"].astype(str) + "_" + noham_links["b"].astype(str)
@@ -292,7 +308,12 @@ def _process_single_noham_layer(
 
 
 def _aggregate_link_flows_year(
-    config: model_config.Config, year: int, network_link_ids: set[str]
+    year: int,
+    network_link_ids: set[str],
+    *,
+    noham_archive_path: pathlib.Path,
+    extraction_dir: pathlib.Path,
+    extracted_h5_paths: dict[tuple[int, str, str], pathlib.Path],
 ) -> pd.DataFrame:
     """Aggregate link flows for each year, time period, and user class."""
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}
@@ -304,7 +325,9 @@ def _aggregate_link_flows_year(
         for user_class in noham_ucs:
             uc_dfs.append(
                 _process_single_noham_layer(
-                    config,
+                    noham_archive_path=noham_archive_path,
+                    extraction_dir=extraction_dir,
+                    extracted_h5_paths=extracted_h5_paths,
                     year=year,
                     route_links_store=route_links_store,
                     time_period=time_period,

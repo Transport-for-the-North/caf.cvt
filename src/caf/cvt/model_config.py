@@ -1,13 +1,12 @@
 """Module for setting up the model configuration."""
 
 import pathlib
-from typing import Self
+from typing import ClassVar, Self
 
 import caf.toolkit as ctk
 import pydantic
 
 from caf.cvt.definitions import (
-    FLOODING_TILE_SIZE_M,
     FloodingTypes,
     GroundStabilityRiskCols,
     Scenarios,
@@ -55,282 +54,319 @@ class NestedZipFileEntry(ctk.BaseConfig):
 
 
 class PathConfig(ctk.BaseConfig):
-    """Configuration for the base module paths.
+    """Configuration for model paths.
 
-    Attributes
-    ----------
-    root : pydantic.DirectoryPath
-        Root directory for the project.
-    raw_input : pydantic.DirectoryPath
-        Directory for raw input data.
+    Paths are declared in one registry to avoid a very large number of individual
+    properties while keeping the existing public attribute names.
     """
 
     root: pydantic.DirectoryPath
     raw_input: pydantic.DirectoryPath
 
-    @property
-    def model_input(self) -> pathlib.Path:
-        """Create model input directory and return path."""
-        model_input = self.root / "model input"
-        model_input.mkdir(parents=True, exist_ok=True)
-        return model_input
+    _resolved_paths: dict[str, pathlib.Path] = pydantic.PrivateAttr(default_factory=dict)
+    # Keys of PATH SPECS are the attribute names used to access the resolved paths.
+    # The tuple values in PATH SPECS are of the form (parent_attr, sub_path, is_dir)
+    _PATH_SPECS: ClassVar[dict[str, tuple[str, str, bool]]] = {
+        "model_input": ("root", "model input", True),
+        "model_interim_output": ("root", "model interim outputs", True),
+        "model_output": ("root", "model outputs", True),
+        "log": ("root", "logging", True),
+        "audit": ("root", "audit", True),
+        "infrastructure_model_input": ("model_input", "Infrastructure", True),
+        "hazards_model_input": ("model_input", "Hazards", True),
+        "demand_model_input": ("model_input", "Demand", True),
+        "road_model_input": ("infrastructure_model_input", "Road", True),
+        "rail_model_input": ("infrastructure_model_input", "Rail", True),
+        "other_model_input": ("infrastructure_model_input", "Other", True),
+        "bespoke_model_input": ("model_input", "Bespoke", True),
+        "os_road_model_input": ("road_model_input", "os_road.gpkg", False),
+        "noham_road_model_input": ("road_model_input", "noham_2023.gpkg", False),
+        "model_roads_model_input": ("road_model_input", "model_roads.gpkg", False),
+        "passenger_rail_model_input": ("rail_model_input", "passenger_rail_links.gpkg", False),
+        "freight_rail_model_input": ("rail_model_input", "freight_rail_links.gpkg", False),
+        "airports_model_input": ("other_model_input", "airports.gpkg", False),
+        "bus_stops_model_input": ("other_model_input", "bus_stops.gpkg", False),
+        "train_stations_model_input": ("other_model_input", "train_stations.gpkg", False),
+        "tram_stations_model_input": ("other_model_input", "tram_stations.gpkg", False),
+        "rapid_transport_stations_model_input": (
+            "other_model_input",
+            "rapid_transport_stations.gpkg",
+            False,
+        ),
+        "ferry_terminals_model_input": ("other_model_input", "ferry_terminals.gpkg", False),
+        "bus_coach_stations_model_input": (
+            "other_model_input",
+            "bus_coach_stations.gpkg",
+            False,
+        ),
+        "tram_network_model_input": ("other_model_input", "tram_network.gpkg", False),
+        "rapid_transport_network_model_input": (
+            "other_model_input",
+            "rapid_transport_network.gpkg",
+            False,
+        ),
+        "national_cycle_network_model_input": (
+            "other_model_input",
+            "national_cycle_network.gpkg",
+            False,
+        ),
+        "nexus_metro_stations_model_input": (
+            "bespoke_model_input",
+            "nexus_metro_stations.gpkg",
+            False,
+        ),
+        "hazard_model_input": ("model_input", "Hazards", True),
+        "extreme_weather_model_input": ("hazard_model_input", "Extreme Weather", True),
+        "flooding_model_input": ("hazard_model_input", "Flooding", True),
+        "ground_stability_model_input": ("hazard_model_input", "Ground Stability", True),
+        "coastal_erosion_model_input": ("hazard_model_input", "Coastal Erosion", True),
+        "hazard_grid_model_input": ("hazard_model_input", "hazard_grid.gpkg", False),
+        "summer_max_temperature_model_input": (
+            "extreme_weather_model_input",
+            "summer_max_temperature_change.csv",
+            False,
+        ),
+        "winter_min_temperature_model_input": (
+            "extreme_weather_model_input",
+            "winter_min_temperature_change.csv",
+            False,
+        ),
+        "summer_precipitation_model_input": (
+            "extreme_weather_model_input",
+            "summer_precipitation_change.csv",
+            False,
+        ),
+        "winter_precipitation_model_input": (
+            "extreme_weather_model_input",
+            "winter_precipitation_change.csv",
+            False,
+        ),
+        "rain_days_model_input": ("extreme_weather_model_input", "10mm_rain_days.gpkg", False),
+        "drought_severity_index_model_input": (
+            "extreme_weather_model_input",
+            "drought_severity_index.gpkg",
+            False,
+        ),
+        "hot_summer_days_model_input": (
+            "extreme_weather_model_input",
+            "hot_summer_days.csv",
+            False,
+        ),
+        "extreme_summer_days_model_input": (
+            "extreme_weather_model_input",
+            "extreme_summer_days.csv",
+            False,
+        ),
+        "frost_days_model_input": ("extreme_weather_model_input", "frost_days.csv", False),
+        "icing_days_model_input": ("extreme_weather_model_input", "icing_days.csv", False),
+        "wind_speed_model_input": ("extreme_weather_model_input", "wind_speed.gpkg", False),
+        "wind_driven_rain_model_input": (
+            "extreme_weather_model_input",
+            "wind_driven_rain_index.gpkg",
+            False,
+        ),
+        "groundwater_flooding_model_input": (
+            "flooding_model_input",
+            "groundwater.gpkg",
+            False,
+        ),
+        "freight_demand_model_input": (
+            "demand_model_input",
+            "freight_network_demand.gpkg",
+            False,
+        ),
+        "noham_demand_model_input": ("demand_model_input", "noham_network_demand.gpkg", False),
+        "model_roads_demand_model_input": (
+            "demand_model_input",
+            "model_roads_demand.gpkg",
+            False,
+        ),
+        "nexus_metro_demand_model_input": (
+            "demand_model_input",
+            "nexus_metro_demand.gpkg",
+            False,
+        ),
+        "extreme_weather_risk_model_interim_output": (
+            "model_interim_output",
+            "extreme_weather_risk.gpkg",
+            False,
+        ),
+        "flooding_risk_vector_overlay_model_interim_output": (
+            "model_interim_output",
+            "flooding_risk_vector_overlay.gpkg",
+            False,
+        ),
+        "flooding_risk_vector_model_interim_output": (
+            "model_interim_output",
+            "flooding_risk_vector.gpkg",
+            False,
+        ),
+        "flooding_risk_raster_model_interim_output": (
+            "model_interim_output",
+            "flooding_risk_raster.tif",
+            False,
+        ),
+        "ground_stability_risk_model_interim_output": (
+            "model_interim_output",
+            "ground_stability_risk.gpkg",
+            False,
+        ),
+        "coastal_erosion_risk_model_interim_output": (
+            "model_interim_output",
+            "coastal_erosion_risk.gpkg",
+            False,
+        ),
+        "road_model_output": ("model_output", "Road", True),
+        "rail_model_output": ("model_output", "Rail", True),
+        "other_model_output": ("model_output", "Other", True),
+        "os_road_model_output": ("road_model_output", "OS Road", True),
+        "noham_model_output": ("road_model_output", "NoHAM", True),
+        "model_roads_model_output": ("road_model_output", "Model Roads", True),
+        "passenger_rail_model_output": ("rail_model_output", "Passenger Rail", True),
+        "freight_rail_model_output": ("rail_model_output", "Freight Rail", True),
+        "train_stations_model_output": ("other_model_output", "Train Stations", True),
+        "airports_model_output": ("other_model_output", "Airports", True),
+        "bus_coach_stations_model_output": (
+            "other_model_output",
+            "Bus and Coach Stations",
+            True,
+        ),
+        "bus_stops_model_output": ("other_model_output", "Bus Stops", True),
+        "tram_stations_model_output": ("other_model_output", "Tram Stations", True),
+        "rapid_transport_stations_model_output": (
+            "other_model_output",
+            "Rapid Transport Stations",
+            True,
+        ),
+        "ferry_terminals_model_output": ("other_model_output", "Ferry Terminals", True),
+        "national_cycle_network_model_output": (
+            "other_model_output",
+            "National Cycle Network",
+            True,
+        ),
+        "tram_network_model_output": ("other_model_output", "Tram Network", True),
+        "rapid_transport_network_model_output": (
+            "other_model_output",
+            "Rapid Transport Network",
+            True,
+        ),
+        "nexus_metro_links_model_output": ("other_model_output", "Nexus Metro Links", True),
+        "nexus_metro_stations_model_output": (
+            "other_model_output",
+            "Nexus Metro Stations",
+            True,
+        ),
+        "functional_rules_audit": ("audit", "Functional Rules", True),
+        "layering_audit": ("audit", "Layering", True),
+        "summary_audit": ("audit", "Summary", True),
+        "extreme_weather_audit": ("functional_rules_audit", "Extreme Weather", True),
+        "flooding_audit": ("functional_rules_audit", "Flooding", True),
+        "ground_stability_audit": ("functional_rules_audit", "Ground Stability", True),
+        "coastal_erosion_audit": ("functional_rules_audit", "Coastal Erosion", True),
+        "extreme_heat_audit": ("extreme_weather_audit", "Extreme Heat Risk Index", True),
+        "extreme_cold_audit": ("extreme_weather_audit", "Extreme Cold Risk Index", True),
+        "storm_audit": ("extreme_weather_audit", "Storm Risk Index", True),
+        "drought_audit": ("extreme_weather_audit", "Drought Risk Index", True),
+        "extreme_weather_index_audit": (
+            "extreme_weather_audit",
+            "Extreme Weather Risk Index",
+            True,
+        ),
+        "road_layering_audit": ("layering_audit", "Road", True),
+        "rail_layering_audit": ("layering_audit", "Rail", True),
+        "other_layering_audit": ("layering_audit", "Other", True),
+        "bespoke_layering_audit": ("layering_audit", "Bespoke", True),
+        "os_road_layering_audit": ("road_layering_audit", "OS Roads", True),
+        "noham_layering_audit": ("road_layering_audit", "NoHAM", True),
+        "model_roads_layering_audit": ("road_layering_audit", "Model Roads", True),
+        "passenger_rail_layering_audit": ("rail_layering_audit", "Passenger Rail", True),
+        "freight_rail_layering_audit": ("rail_layering_audit", "Freight Rail", True),
+        "train_stations_layering_audit": ("other_layering_audit", "Train Stations", True),
+        "airports_layering_audit": ("other_layering_audit", "Airports", True),
+        "bus_coach_stations_layering_audit": (
+            "other_layering_audit",
+            "Bus and Coach Stations",
+            True,
+        ),
+        "bus_stops_layering_audit": ("other_layering_audit", "Bus Stops", True),
+        "tram_stations_layering_audit": ("other_layering_audit", "Tram Stations", True),
+        "rapid_transport_stations_layering_audit": (
+            "other_layering_audit",
+            "Rapid Transport Stations",
+            True,
+        ),
+        "ferry_terminals_layering_audit": ("other_layering_audit", "Ferry Terminals", True),
+        "national_cycle_network_layering_audit": (
+            "other_layering_audit",
+            "National Cycle Network",
+            True,
+        ),
+        "tram_network_layering_audit": ("other_layering_audit", "Tram Network", True),
+        "rapid_transport_network_layering_audit": (
+            "other_layering_audit",
+            "Rapid Transport Network",
+            True,
+        ),
+        "nexus_metro_links_layering_audit": (
+            "bespoke_layering_audit",
+            "Nexus Metro Links",
+            True,
+        ),
+        "nexus_metro_stations_layering_audit": (
+            "bespoke_layering_audit",
+            "Nexus Metro Stations",
+            True,
+        ),
+        "road_summary_audit": ("summary_audit", "Road", True),
+        "rail_summary_audit": ("summary_audit", "Rail", True),
+        "other_summary_audit": ("summary_audit", "Other", True),
+        "bespoke_summary_audit": ("summary_audit", "Bespoke", True),
+        "os_road_summary_audit": ("road_summary_audit", "OS Roads", True),
+        "noham_summary_audit": ("road_summary_audit", "NoHAM", True),
+        "model_road_summary_audit": ("road_summary_audit", "Model Roads", True),
+        "passenger_rail_summary_audit": ("rail_summary_audit", "Passenger Rail", True),
+        "freight_rail_summary_audit": ("rail_summary_audit", "Freight Rail", True),
+        "national_cycle_network_summary_audit": (
+            "other_summary_audit",
+            "National Cycle Network",
+            True,
+        ),
+        "tram_network_summary_audit": ("other_summary_audit", "Tram Network", True),
+        "rapid_transport_network_summary_audit": (
+            "other_summary_audit",
+            "Rapid Transport Network",
+            True,
+        ),
+        "nexus_metro_links_summary_audit": (
+            "bespoke_summary_audit",
+            "Nexus Metro Links",
+            True,
+        ),
+    }
 
-    @property
-    def model_interim_output(self) -> pathlib.Path:
-        """Create model interim output directory and return path."""
-        model_interim_output = self.root / "model interim outputs"
-        model_interim_output.mkdir(parents=True, exist_ok=True)
-        return model_interim_output
+    def __getattr__(self, name: str) -> pathlib.Path:
+        """Resolve configured path attributes lazily."""
+        if name not in self._PATH_SPECS:
+            raise AttributeError(f"{type(self).__name__!s} has no attribute {name!r}")
+        return self._resolve_path(name)
 
-    @property
-    def model_output(self) -> pathlib.Path:
-        """Create model output directory and return path."""
-        model_output = self.root / "model outputs"
-        model_output.mkdir(parents=True, exist_ok=True)
-        return model_output
+    def _resolve_path(self, name: str) -> pathlib.Path:
+        if name in self._resolved_paths:
+            return self._resolved_paths[name]
 
-    @property
-    def log(self) -> pathlib.Path:
-        """Create logging directory and return path."""
-        log_path = self.root / "Logging"
-        log_path.mkdir(parents=True, exist_ok=True)
-        return log_path
+        parent_name, suffix, is_directory = self._PATH_SPECS[name]
+        parent = getattr(self, parent_name)
+        path = parent / suffix
 
-    @property
-    def audit(self) -> pathlib.Path:
-        """Create model audit directory and return path."""
-        audit_path = self.root / "audit"
-        audit_path.mkdir(parents=True, exist_ok=True)
-        return audit_path
+        if is_directory:
+            path.mkdir(parents=True, exist_ok=True)
 
-    @property
-    def infrastructure_model_input(self) -> pathlib.Path:
-        """Create infrastructure model input directory and return path."""
-        infrastructure_model_input = self.model_input / "Infrastructure"
-        infrastructure_model_input.mkdir(parents=True, exist_ok=True)
-        return infrastructure_model_input
+        self._resolved_paths[name] = path
+        return path
 
-    @property
-    def hazards_model_input(self) -> pathlib.Path:
-        """Create hazards model input directory and return path."""
-        hazards_model_input = self.model_input / "Hazards"
-        hazards_model_input.mkdir(parents=True, exist_ok=True)
-        return hazards_model_input
-
-    @property
-    def demand_model_input(self) -> pathlib.Path:
-        """Create demand model input directory and return path."""
-        demand_model_input = self.model_input / "Demand"
-        demand_model_input.mkdir(parents=True, exist_ok=True)
-        return demand_model_input
-
-    @property
-    def road_model_input(self) -> pathlib.Path:
-        """Create road model input directory and return path."""
-        road_model_input = self.infrastructure_model_input / "Road"
-        road_model_input.mkdir(parents=True, exist_ok=True)
-        return road_model_input
-
-    @property
-    def rail_model_input(self) -> pathlib.Path:
-        """Create rail model input directory and return path."""
-        rail_model_input = self.infrastructure_model_input / "Rail"
-        rail_model_input.mkdir(parents=True, exist_ok=True)
-        return rail_model_input
-
-    @property
-    def other_model_input(self) -> pathlib.Path:
-        """Create other model input directory and return path."""
-        other_model_input = self.infrastructure_model_input / "Other"
-        other_model_input.mkdir(parents=True, exist_ok=True)
-        return other_model_input
-
-    @property
-    def bespoke_model_input(self) -> pathlib.Path:
-        """Create bespoke model input directory and return path."""
-        bespoke_model_input = self.model_input / "Bespoke"
-        bespoke_model_input.mkdir(parents=True, exist_ok=True)
-        return bespoke_model_input
-
-    @property
-    def os_road_model_input(self) -> pathlib.Path:
-        """Create OS road model input directory and return path."""
-        return self.road_model_input / "os_road.gpkg"
-
-    @property
-    def noham_road_model_input(self) -> pathlib.Path:
-        """Create NoHAM road model input directory and return path."""
-        return self.road_model_input / "noham_2023.gpkg"
-
-    @property
-    def model_roads_model_input(self) -> pathlib.Path:
-        """Create model road input directory and return path."""
-        return self.road_model_input / "model_roads.gpkg"
-
-    @property
-    def passenger_rail_model_input(self) -> pathlib.Path:
-        """Create passenger rail model input directory and return path."""
-        return self.rail_model_input / "passenger_rail_links.gpkg"
-
-    @property
-    def freight_rail_model_input(self) -> pathlib.Path:
-        """Create freight rail model input directory and return path."""
-        return self.rail_model_input / "freight_rail_links.gpkg"
-
-    @property
-    def airports_model_input(self) -> pathlib.Path:
-        """Create airports model input directory and return path."""
-        return self.other_model_input / "airports.gpkg"
-
-    @property
-    def bus_stops_model_input(self) -> pathlib.Path:
-        """Create bus stops model input directory and return path."""
-        return self.other_model_input / "bus_stops.gpkg"
-
-    @property
-    def train_stations_model_input(self) -> pathlib.Path:
-        """Create train stations model input directory and return path."""
-        return self.other_model_input / "train_stations.gpkg"
-
-    @property
-    def tram_stations_model_input(self) -> pathlib.Path:
-        """Create tram stations model input directory and return path."""
-        return self.other_model_input / "tram_stations.gpkg"
-
-    @property
-    def rapid_transport_stations_model_input(self) -> pathlib.Path:
-        """Create rapid transport stations model input directory and return path."""
-        return self.other_model_input / "rapid_transport_stations.gpkg"
-
-    @property
-    def ferry_terminals_model_input(self) -> pathlib.Path:
-        """Create ferry terminals model input directory and return path."""
-        return self.other_model_input / "ferry_terminals.gpkg"
-
-    @property
-    def bus_coach_stations_model_input(self) -> pathlib.Path:
-        """Create bus coach stations model input directory and return path."""
-        return self.other_model_input / "bus_coach_stations.gpkg"
-
-    @property
-    def tram_network_model_input(self) -> pathlib.Path:
-        """Create tram network model input directory and return path."""
-        return self.other_model_input / "tram_network.gpkg"
-
-    @property
-    def rapid_transport_network_model_input(self) -> pathlib.Path:
-        """Create rapid transport network model input directory and return path."""
-        return self.other_model_input / "rapid_transport_network.gpkg"
-
-    @property
-    def national_cycle_network_model_input(self) -> pathlib.Path:
-        """Create national cycle network model input directory and return path."""
-        return self.other_model_input / "national_cycle_network.gpkg"
-
-    @property
-    def nexus_metro_stations_model_input(self) -> pathlib.Path:
-        """Create Nexus Metro stations model input directory and return path."""
-        return self.bespoke_model_input / "nexus_metro_stations.gpkg"
-
-    @property
-    def hazard_model_input(self) -> pathlib.Path:
-        """Create hazard model input directory and return path."""
-        hazard_model_input_path = self.model_input / "Hazards"
-        hazard_model_input_path.mkdir(parents=True, exist_ok=True)
-        return hazard_model_input_path
-
-    @property
-    def extreme_weather_model_input(self) -> pathlib.Path:
-        """Create extreme weather model input directory and return path."""
-        extreme_weather_model_input_path = self.hazard_model_input / "Extreme Weather"
-        extreme_weather_model_input_path.mkdir(parents=True, exist_ok=True)
-        return extreme_weather_model_input_path
-
-    @property
-    def flooding_model_input(self) -> pathlib.Path:
-        """Create flooding model input directory and return path."""
-        flooding_model_input_path = self.hazard_model_input / "Flooding"
-        flooding_model_input_path.mkdir(parents=True, exist_ok=True)
-        return flooding_model_input_path
-
-    @property
-    def ground_stability_model_input(self) -> pathlib.Path:
-        """Create ground stability model input directory and return path."""
-        ground_stability_model_input_path = self.hazard_model_input / "Ground Stability"
-        ground_stability_model_input_path.mkdir(parents=True, exist_ok=True)
-        return ground_stability_model_input_path
-
-    @property
-    def coastal_erosion_model_input(self) -> pathlib.Path:
-        """Create coastal erosion model input directory and return path."""
-        coastal_erosion_model_input_path = self.hazard_model_input / "Coastal Erosion"
-        coastal_erosion_model_input_path.mkdir(parents=True, exist_ok=True)
-        return coastal_erosion_model_input_path
-
-    @property
-    def hazard_grid_model_input(self) -> pathlib.Path:
-        """Return hazard grid path."""
-        return self.hazard_model_input / "hazard_grid.gpkg"
-
-    @property
-    def summer_max_temperature_model_input(self) -> pathlib.Path:
-        """Return max temperature model input path."""
-        return self.extreme_weather_model_input / "summer_max_temperature_change.csv"
-
-    @property
-    def winter_min_temperature_model_input(self) -> pathlib.Path:
-        """Return min temperature model input path."""
-        return self.extreme_weather_model_input / "winter_min_temperature_change.csv"
-
-    @property
-    def summer_precipitation_model_input(self) -> pathlib.Path:
-        """Return precipitation model input path."""
-        return self.extreme_weather_model_input / "summer_precipitation_change.csv"
-
-    @property
-    def winter_precipitation_model_input(self) -> pathlib.Path:
-        """Return winter precipitation model input path."""
-        return self.extreme_weather_model_input / "winter_precipitation_change.csv"
-
-    @property
-    def rain_days_model_input(self) -> pathlib.Path:
-        """Return rain days model input path."""
-        return self.extreme_weather_model_input / "10mm_rain_days.gpkg"
-
-    @property
-    def drought_severity_index_model_input(self) -> pathlib.Path:
-        """Return drought severity index model input path."""
-        return self.extreme_weather_model_input / "drought_severity_index.gpkg"
-
-    @property
-    def hot_summer_days_model_input(self) -> pathlib.Path:
-        """Return hot summer days model input path."""
-        return self.extreme_weather_model_input / "hot_summer_days.csv"
-
-    @property
-    def extreme_summer_days_model_input(self) -> pathlib.Path:
-        """Return extreme summer days model input path."""
-        return self.extreme_weather_model_input / "extreme_summer_days.csv"
-
-    @property
-    def frost_days_model_input(self) -> pathlib.Path:
-        """Return frost days model input path."""
-        return self.extreme_weather_model_input / "frost_days.csv"
-
-    @property
-    def icing_days_model_input(self) -> pathlib.Path:
-        """Return icing days model input path."""
-        return self.extreme_weather_model_input / "icing_days.csv"
-
-    @property
-    def wind_speed_model_input(self) -> pathlib.Path:
-        """Return wind speed model input path."""
-        return self.extreme_weather_model_input / "wind_speed.gpkg"
-
-    @property
-    def wind_driven_rain_model_input(self) -> pathlib.Path:
-        """Return wind driven rain model input path."""
-        return self.extreme_weather_model_input / "wind_driven_rain_index.gpkg"
+    def __dir__(self) -> list[str]:
+        """Include dynamically resolved path names in dir()."""
+        return sorted({*super().__dir__(), *self._PATH_SPECS})
 
     def flooding_type_scenario_model_input(
         self, flooding_type: FloodingTypes, scenario: Scenarios
@@ -338,10 +374,9 @@ class PathConfig(ctk.BaseConfig):
         """Return flooding model input path based on flooding type and scenario."""
         return self.flooding_model_input / f"{flooding_type}_{scenario}.gpkg"
 
-    @property
-    def groundwater_flooding_model_input(self) -> pathlib.Path:
-        """Return groundwater flooding model input path."""
-        return self.flooding_model_input / "groundwater.gpkg"
+    def flooding_tile_grid_model_interim_output(self, tile_size: int) -> pathlib.Path:
+        """Return the path to the flooding tile grid model interim output."""
+        return self.model_interim_output / f"flooding_tiles_{tile_size}m.gpkg"
 
     def geosure_model_input(self, geohazard: GroundStabilityRiskCols | None) -> pathlib.Path:
         """Return GeoSure model input path based on the geohazard."""
@@ -355,551 +390,6 @@ class PathConfig(ctk.BaseConfig):
             self.coastal_erosion_model_input
             / f"national_coastal_erosion_risk_mapping_smp_{year}_70CC.gpkg"
         )
-
-    @property
-    def freight_demand_model_input(self) -> pathlib.Path:
-        """Return freight demand model input path."""
-        return self.demand_model_input / "freight_network_demand.gpkg"
-
-    @property
-    def noham_demand_model_input(self) -> pathlib.Path:
-        """Return NoHAM demand model input path."""
-        return self.demand_model_input / "noham_network_demand.gpkg"
-
-    @property
-    def model_roads_demand_model_input(self) -> pathlib.Path:
-        """Return model roads demand model input path."""
-        return self.demand_model_input / "model_roads_demand.gpkg"
-
-    @property
-    def nexus_metro_demand_model_input(self) -> pathlib.Path:
-        """Return Nexus Metro demand model input path."""
-        return self.demand_model_input / "nexus_metro_demand.gpkg"
-
-    @property
-    def extreme_weather_risk_model_interim_output(self) -> pathlib.Path:
-        """Return extreme weather model interim output path."""
-        return self.model_interim_output / "extreme_weather_risk.gpkg"
-
-    @property
-    def flooding_tile_grid_model_interim_output(self) -> pathlib.Path:
-        """Return flooding tile grid model interim output path."""
-        return self.model_interim_output / f"flooding_tiles_{FLOODING_TILE_SIZE_M}m.gpkg"
-
-    @property
-    def flooding_risk_vector_overlay_model_interim_output(self) -> pathlib.Path:
-        """Return flooding risk vector overlay model interim output path."""
-        return self.model_interim_output / "flooding_risk_vector_overlay.gpkg"
-
-    @property
-    def flooding_risk_vector_model_interim_output(self) -> pathlib.Path:
-        """Return flooding risk vector model interim output path."""
-        return self.model_interim_output / "flooding_risk_vector.gpkg"
-
-    @property
-    def flooding_risk_raster_model_interim_output(self) -> pathlib.Path:
-        """Return flooding risk raster model interim output path."""
-        return self.model_interim_output / "flooding_risk_raster.tif"
-
-    @property
-    def ground_stability_risk_model_interim_output(self) -> pathlib.Path:
-        """Return ground stability risk model interim output path."""
-        return self.model_interim_output / "ground_stability_risk.gpkg"
-
-    @property
-    def coastal_erosion_risk_model_interim_output(self) -> pathlib.Path:
-        """Return coastal erosion risk model interim output path."""
-        return self.model_interim_output / "coastal_erosion_risk.gpkg"
-
-    @property
-    def road_model_output(self) -> pathlib.Path:
-        """Create road model output directory and return path."""
-        road_model_output_path = self.model_output / "Road"
-        road_model_output_path.mkdir(parents=True, exist_ok=True)
-        return road_model_output_path
-
-    @property
-    def rail_model_output(self) -> pathlib.Path:
-        """Create rail model output directory and return path."""
-        rail_model_output_path = self.model_output / "Rail"
-        rail_model_output_path.mkdir(parents=True, exist_ok=True)
-        return rail_model_output_path
-
-    @property
-    def other_model_output(self) -> pathlib.Path:
-        """Create other infrastructure model output directory and return path."""
-        other_model_output_path = self.model_output / "Other"
-        other_model_output_path.mkdir(parents=True, exist_ok=True)
-        return other_model_output_path
-
-    @property
-    def os_road_model_output(self) -> pathlib.Path:
-        """Create OS road model output directory and return path."""
-        os_road_model_output_path = self.road_model_output / "OS Road"
-        os_road_model_output_path.mkdir(parents=True, exist_ok=True)
-        return os_road_model_output_path
-
-    @property
-    def noham_model_output(self) -> pathlib.Path:
-        """Create NoHAM model output directory and return path."""
-        noham_model_output_path = self.road_model_output / "NoHAM"
-        noham_model_output_path.mkdir(parents=True, exist_ok=True)
-        return noham_model_output_path
-
-    @property
-    def model_roads_model_output(self) -> pathlib.Path:
-        """Create model roads output directory and return path."""
-        model_roads_model_output_path = self.road_model_output / "Model Roads"
-        model_roads_model_output_path.mkdir(parents=True, exist_ok=True)
-        return model_roads_model_output_path
-
-    @property
-    def passenger_rail_model_output(self) -> pathlib.Path:
-        """Create passenger rail model output directory and return path."""
-        passenger_rail_model_output_path = self.rail_model_output / "Passenger Rail"
-        passenger_rail_model_output_path.mkdir(parents=True, exist_ok=True)
-        return passenger_rail_model_output_path
-
-    @property
-    def freight_rail_model_output(self) -> pathlib.Path:
-        """Create freight rail model output directory and return path."""
-        freight_rail_model_output_path = self.rail_model_output / "Freight Rail"
-        freight_rail_model_output_path.mkdir(parents=True, exist_ok=True)
-        return freight_rail_model_output_path
-
-    @property
-    def train_stations_model_output(self) -> pathlib.Path:
-        """Create train stations model output directory and return path."""
-        train_stations_model_output_path = self.other_model_output / "Train Stations"
-        train_stations_model_output_path.mkdir(parents=True, exist_ok=True)
-        return train_stations_model_output_path
-
-    @property
-    def airports_model_output(self) -> pathlib.Path:
-        """Create airports model output directory and return path."""
-        airports_model_output_path = self.other_model_output / "Airports"
-        airports_model_output_path.mkdir(parents=True, exist_ok=True)
-        return airports_model_output_path
-
-    @property
-    def bus_coach_stations_model_output(self) -> pathlib.Path:
-        """Create bus and coach stations model output directory and return path."""
-        bus_coach_stations_model_output_path = (
-            self.other_model_output / "Bus and Coach Stations"
-        )
-        bus_coach_stations_model_output_path.mkdir(parents=True, exist_ok=True)
-        return bus_coach_stations_model_output_path
-
-    @property
-    def bus_stops_model_output(self) -> pathlib.Path:
-        """Create bus stops model output directory and return path."""
-        bus_stops_model_output_path = self.other_model_output / "Bus Stops"
-        bus_stops_model_output_path.mkdir(parents=True, exist_ok=True)
-        return bus_stops_model_output_path
-
-    @property
-    def tram_stations_model_output(self) -> pathlib.Path:
-        """Create tram stations model output directory and return path."""
-        tram_stations_model_output_path = self.other_model_output / "Tram Stations"
-        tram_stations_model_output_path.mkdir(parents=True, exist_ok=True)
-        return tram_stations_model_output_path
-
-    @property
-    def rapid_transport_stations_model_output(self) -> pathlib.Path:
-        """Create rapid transport stations model output directory and return path."""
-        rapid_transport_stations_model_output_path = (
-            self.other_model_output / "Rapid Transport Stations"
-        )
-        rapid_transport_stations_model_output_path.mkdir(parents=True, exist_ok=True)
-        return rapid_transport_stations_model_output_path
-
-    @property
-    def ferry_terminals_model_output(self) -> pathlib.Path:
-        """Create ferry terminals model output directory and return path."""
-        ferry_terminals_model_output_path = self.other_model_output / "Ferry Terminals"
-        ferry_terminals_model_output_path.mkdir(parents=True, exist_ok=True)
-        return ferry_terminals_model_output_path
-
-    @property
-    def national_cycle_network_model_output(self) -> pathlib.Path:
-        """Create national cycle network model output directory and return path."""
-        national_cycle_network_model_output_path = (
-            self.other_model_output / "National Cycle Network"
-        )
-        national_cycle_network_model_output_path.mkdir(parents=True, exist_ok=True)
-        return national_cycle_network_model_output_path
-
-    @property
-    def tram_network_model_output(self) -> pathlib.Path:
-        """Create tram network model output directory and return path."""
-        tram_network_model_output_path = self.other_model_output / "Tram Network"
-        tram_network_model_output_path.mkdir(parents=True, exist_ok=True)
-        return tram_network_model_output_path
-
-    @property
-    def rapid_transport_network_model_output(self) -> pathlib.Path:
-        """Create rapid transport network model output directory and return path."""
-        rapid_transport_network_model_output_path = (
-            self.other_model_output / "Rapid Transport Network"
-        )
-        rapid_transport_network_model_output_path.mkdir(parents=True, exist_ok=True)
-        return rapid_transport_network_model_output_path
-
-    @property
-    def nexus_metro_links_model_output(self) -> pathlib.Path:
-        """Create Nexus Metro links model output directory and return path."""
-        nexus_metro_links_model_output_path = self.other_model_output / "Nexus Metro Links"
-        nexus_metro_links_model_output_path.mkdir(parents=True, exist_ok=True)
-        return nexus_metro_links_model_output_path
-
-    @property
-    def nexus_metro_stations_model_output(self) -> pathlib.Path:
-        """Create Nexus Metro stations model output directory and return path."""
-        nexus_metro_stations_model_output_path = (
-            self.other_model_output / "Nexus Metro Stations"
-        )
-        nexus_metro_stations_model_output_path.mkdir(parents=True, exist_ok=True)
-        return nexus_metro_stations_model_output_path
-
-    @property
-    def functional_rules_audit(self) -> pathlib.Path:
-        """Create functional rules audit model output directory and return path."""
-        functional_rules_audit_path = self.audit / "Functional Rules"
-        functional_rules_audit_path.mkdir(parents=True, exist_ok=True)
-        return functional_rules_audit_path
-
-    @property
-    def layering_audit(self) -> pathlib.Path:
-        """Create layering audit model output directory and return path."""
-        layering_audit_path = self.audit / "Layering"
-        layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return layering_audit_path
-
-    @property
-    def summary_audit(self) -> pathlib.Path:
-        """Create summary audit model output directory and return path."""
-        summary_audit_path = self.audit / "Summary"
-        summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return summary_audit_path
-
-    @property
-    def extreme_weather_audit(self) -> pathlib.Path:
-        """Create extreme weather audit model output directory and return path."""
-        extreme_weather_audit_path = self.functional_rules_audit / "Extreme Weather"
-        extreme_weather_audit_path.mkdir(parents=True, exist_ok=True)
-        return extreme_weather_audit_path
-
-    @property
-    def flooding_audit(self) -> pathlib.Path:
-        """Create flooding audit model output directory and return path."""
-        flooding_audit_path = self.functional_rules_audit / "Flooding"
-        flooding_audit_path.mkdir(parents=True, exist_ok=True)
-        return flooding_audit_path
-
-    @property
-    def ground_stability_audit(self) -> pathlib.Path:
-        """Create ground stability audit model output directory and return path."""
-        ground_stability_audit_path = self.functional_rules_audit / "Ground Stability"
-        ground_stability_audit_path.mkdir(parents=True, exist_ok=True)
-        return ground_stability_audit_path
-
-    @property
-    def coastal_erosion_audit(self) -> pathlib.Path:
-        """Create coastal erosion audit model output directory and return path."""
-        coastal_erosion_audit_path = self.functional_rules_audit / "Coastal Erosion"
-        coastal_erosion_audit_path.mkdir(parents=True, exist_ok=True)
-        return coastal_erosion_audit_path
-
-    @property
-    def extreme_heat_audit(self) -> pathlib.Path:
-        """Create extreme heat audit model output directory and return path."""
-        extreme_heat_audit_path = self.extreme_weather_audit / "Extreme Heat Risk Index"
-        extreme_heat_audit_path.mkdir(parents=True, exist_ok=True)
-        return extreme_heat_audit_path
-
-    @property
-    def extreme_cold_audit(self) -> pathlib.Path:
-        """Create extreme cold audit model output directory and return path."""
-        extreme_cold_audit_path = self.extreme_weather_audit / "Extreme Cold Risk Index"
-        extreme_cold_audit_path.mkdir(parents=True, exist_ok=True)
-        return extreme_cold_audit_path
-
-    @property
-    def storm_audit(self) -> pathlib.Path:
-        """Create storm audit model output directory and return path."""
-        storm_audit_path = self.extreme_weather_audit / "Storm Risk Index"
-        storm_audit_path.mkdir(parents=True, exist_ok=True)
-        return storm_audit_path
-
-    @property
-    def drought_audit(self) -> pathlib.Path:
-        """Create drought audit model output directory and return path."""
-        drought_audit_path = self.extreme_weather_audit / "Drought Risk Index"
-        drought_audit_path.mkdir(parents=True, exist_ok=True)
-        return drought_audit_path
-
-    @property
-    def extreme_weather_index_audit(self) -> pathlib.Path:
-        """Create extreme weather index audit model output directory and return path."""
-        extreme_weather_index_audit_path = (
-            self.extreme_weather_audit / "Extreme Weather Risk Index"
-        )
-        extreme_weather_index_audit_path.mkdir(parents=True, exist_ok=True)
-        return extreme_weather_index_audit_path
-
-    @property
-    def road_layering_audit(self) -> pathlib.Path:
-        """Create road layering audit model output directory and return path."""
-        road_layering_audit_path = self.layering_audit / "Road"
-        road_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return road_layering_audit_path
-
-    @property
-    def rail_layering_audit(self) -> pathlib.Path:
-        """Create rail layering audit model output directory and return path."""
-        rail_layering_audit_path = self.layering_audit / "Rail"
-        rail_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return rail_layering_audit_path
-
-    @property
-    def other_layering_audit(self) -> pathlib.Path:
-        """Create other layering audit model output directory and return path."""
-        other_layering_audit_path = self.layering_audit / "Other"
-        other_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return other_layering_audit_path
-
-    @property
-    def bespoke_layering_audit(self) -> pathlib.Path:
-        """Create bespoke layering audit model output directory and return path."""
-        bespoke_layering_audit_path = self.layering_audit / "Bespoke"
-        bespoke_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return bespoke_layering_audit_path
-
-    @property
-    def os_road_layering_audit(self) -> pathlib.Path:
-        """Create OS road layering audit model output directory and return path."""
-        os_road_layering_audit_path = self.road_layering_audit / "OS Roads"
-        os_road_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return os_road_layering_audit_path
-
-    @property
-    def noham_layering_audit(self) -> pathlib.Path:
-        """Create NOHAM layering audit model output directory and return path."""
-        noham_layering_audit_path = self.road_layering_audit / "NoHAM"
-        noham_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return noham_layering_audit_path
-
-    @property
-    def model_roads_layering_audit(self) -> pathlib.Path:
-        """Create model roads layering audit model output directory and return path."""
-        model_roads_layering_audit_path = self.road_layering_audit / "Model Roads"
-        model_roads_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return model_roads_layering_audit_path
-
-    @property
-    def passenger_rail_layering_audit(self) -> pathlib.Path:
-        """Create passenger rail layering audit model output directory and return path."""
-        passenger_rail_layering_audit_path = self.rail_layering_audit / "Passenger Rail"
-        passenger_rail_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return passenger_rail_layering_audit_path
-
-    @property
-    def freight_rail_layering_audit(self) -> pathlib.Path:
-        """Create freight rail layering audit model output directory and return path."""
-        freight_rail_layering_audit_path = self.rail_layering_audit / "Freight Rail"
-        freight_rail_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return freight_rail_layering_audit_path
-
-    @property
-    def train_stations_layering_audit(self) -> pathlib.Path:
-        """Create train stations layering audit model output directory and return path."""
-        train_stations_layering_audit_path = self.other_layering_audit / "Train Stations"
-        train_stations_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return train_stations_layering_audit_path
-
-    @property
-    def airports_layering_audit(self) -> pathlib.Path:
-        """Create airports layering audit model output directory and return path."""
-        airports_layering_audit_path = self.other_layering_audit / "Airports"
-        airports_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return airports_layering_audit_path
-
-    @property
-    def bus_coach_stations_layering_audit(self) -> pathlib.Path:
-        """Create bus & coach stations layering audit model output directory and path."""
-        bus_coach_stations_layering_audit_path = (
-            self.other_layering_audit / "Bus and Coach Stations"
-        )
-        bus_coach_stations_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return bus_coach_stations_layering_audit_path
-
-    @property
-    def bus_stops_layering_audit(self) -> pathlib.Path:
-        """Create bus stops layering audit model output directory and return path."""
-        bus_stops_layering_audit_path = self.other_layering_audit / "Bus Stops"
-        bus_stops_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return bus_stops_layering_audit_path
-
-    @property
-    def tram_stations_layering_audit(self) -> pathlib.Path:
-        """Create tram stations layering audit model output directory and return path."""
-        tram_stations_layering_audit_path = self.other_layering_audit / "Tram Stations"
-        tram_stations_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return tram_stations_layering_audit_path
-
-    @property
-    def rapid_transport_stations_layering_audit(self) -> pathlib.Path:
-        """Create rapid transport stations layering audit model output directory and path."""
-        rapid_transport_stations_layering_audit_path = (
-            self.other_layering_audit / "Rapid Transport Stations"
-        )
-        rapid_transport_stations_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return rapid_transport_stations_layering_audit_path
-
-    @property
-    def ferry_terminals_layering_audit(self) -> pathlib.Path:
-        """Create ferry terminals layering audit model output directory and return path."""
-        ferry_terminals_layering_audit_path = self.other_layering_audit / "Ferry Terminals"
-        ferry_terminals_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return ferry_terminals_layering_audit_path
-
-    @property
-    def national_cycle_network_layering_audit(self) -> pathlib.Path:
-        """Create national cycle network layering audit model output directory and path."""
-        national_cycle_network_layering_audit_path = (
-            self.other_layering_audit / "National Cycle Network"
-        )
-        national_cycle_network_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return national_cycle_network_layering_audit_path
-
-    @property
-    def tram_network_layering_audit(self) -> pathlib.Path:
-        """Create tram network layering audit model output directory and return path."""
-        tram_network_layering_audit_path = self.other_layering_audit / "Tram Network"
-        tram_network_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return tram_network_layering_audit_path
-
-    @property
-    def rapid_transport_network_layering_audit(self) -> pathlib.Path:
-        """Create rapid transport network layering audit model output directory and path."""
-        rapid_transport_network_layering_audit_path = (
-            self.other_layering_audit / "Rapid Transport Network"
-        )
-        rapid_transport_network_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return rapid_transport_network_layering_audit_path
-
-    @property
-    def nexus_metro_links_layering_audit(self) -> pathlib.Path:
-        """Create Nexus Metro links layering audit model output directory and path."""
-        nexus_metro_links_layering_audit_path = (
-            self.bespoke_layering_audit / "Nexus Metro Links"
-        )
-        nexus_metro_links_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return nexus_metro_links_layering_audit_path
-
-    @property
-    def nexus_metro_stations_layering_audit(self) -> pathlib.Path:
-        """Create Nexus Metro stations layering audit model output directory and path."""
-        nexus_metro_stations_layering_audit_path = (
-            self.bespoke_layering_audit / "Nexus Metro Stations"
-        )
-        nexus_metro_stations_layering_audit_path.mkdir(parents=True, exist_ok=True)
-        return nexus_metro_stations_layering_audit_path
-
-    @property
-    def road_summary_audit(self) -> pathlib.Path:
-        """Create road summary audit model output directory and return path."""
-        road_summary_audit_path = self.summary_audit / "Road"
-        road_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return road_summary_audit_path
-
-    @property
-    def rail_summary_audit(self) -> pathlib.Path:
-        """Create rail summary audit model output directory and return path."""
-        rail_summary_audit_path = self.summary_audit / "Rail"
-        rail_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return rail_summary_audit_path
-
-    @property
-    def other_summary_audit(self) -> pathlib.Path:
-        """Create other summary audit model output directory and return path."""
-        other_summary_audit_path = self.summary_audit / "Other"
-        other_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return other_summary_audit_path
-
-    @property
-    def bespoke_summary_audit(self) -> pathlib.Path:
-        """Create bespoke summary audit model output directory and return path."""
-        bespoke_summary_audit_path = self.summary_audit / "Bespoke"
-        bespoke_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return bespoke_summary_audit_path
-
-    @property
-    def os_road_summary_audit(self) -> pathlib.Path:
-        """Create OS road summary audit model output directory and return path."""
-        os_road_summary_audit_path = self.road_summary_audit / "OS Roads"
-        os_road_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return os_road_summary_audit_path
-
-    @property
-    def noham_summary_audit(self) -> pathlib.Path:
-        """Create NoHAM summary audit model output directory and return path."""
-        noham_summary_audit_path = self.road_summary_audit / "NoHAM"
-        noham_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return noham_summary_audit_path
-
-    @property
-    def model_road_summary_audit(self) -> pathlib.Path:
-        """Create model road summary audit model output directory and return path."""
-        model_road_summary_audit_path = self.road_summary_audit / "Model Roads"
-        model_road_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return model_road_summary_audit_path
-
-    @property
-    def passenger_rail_summary_audit(self) -> pathlib.Path:
-        """Create passenger rail summary audit model output directory and return path."""
-        passenger_rail_summary_audit_path = self.rail_summary_audit / "Passenger Rail"
-        passenger_rail_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return passenger_rail_summary_audit_path
-
-    @property
-    def freight_rail_summary_audit(self) -> pathlib.Path:
-        """Create freight rail summary audit model output directory and return path."""
-        freight_rail_summary_audit_path = self.rail_summary_audit / "Freight Rail"
-        freight_rail_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return freight_rail_summary_audit_path
-
-    @property
-    def national_cycle_network_summary_audit(self) -> pathlib.Path:
-        """Create national cycle network summary audit model output directory and path."""
-        national_cycle_network_summary_audit_path = (
-            self.other_summary_audit / "National Cycle Network"
-        )
-        national_cycle_network_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return national_cycle_network_summary_audit_path
-
-    @property
-    def tram_network_summary_audit(self) -> pathlib.Path:
-        """Create tram network summary audit model output directory and return path."""
-        tram_network_summary_audit_path = self.other_summary_audit / "Tram Network"
-        tram_network_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return tram_network_summary_audit_path
-
-    @property
-    def rapid_transport_network_summary_audit(self) -> pathlib.Path:
-        """Create rapid transport network summary audit model output directory and path."""
-        rapid_transport_network_summary_audit_path = (
-            self.other_summary_audit / "Rapid Transport Network"
-        )
-        rapid_transport_network_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return rapid_transport_network_summary_audit_path
-
-    @property
-    def nexus_metro_links_summary_audit(self) -> pathlib.Path:
-        """Create Nexus Metro links summary audit model output directory and return path."""
-        nexus_metro_links_summary_audit_path = self.bespoke_summary_audit / "Nexus Metro Links"
-        nexus_metro_links_summary_audit_path.mkdir(parents=True, exist_ok=True)
-        return nexus_metro_links_summary_audit_path
 
 
 class OtherInput(ctk.BaseConfig):
@@ -1304,8 +794,6 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to compute the direct flooding overlay.
     flooding_index_raster: bool
         Whether to use the flooding index raster in the analysis.
-    noham_zip_extract : bool
-        Whether to extract NoHAM zip files.
     """
 
     run_data_cleaning: bool
@@ -1337,7 +825,6 @@ class SwitchConfig(ctk.BaseConfig):
 
     compute_flooding_overlay: bool = False
     flooding_index_raster: bool = False
-    noham_zip_extract: bool = False
     ground_stability_premium: bool = False
 
     @pydantic.model_validator(mode="after")
