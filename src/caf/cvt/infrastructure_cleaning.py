@@ -636,13 +636,6 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     """Read, combine and clean regional bus stops datasets, then write to file."""
     # TODO (DJ): #33 Some areas of NaPTAN are missing, e.g. Cumbria Combined Authority
     # Investigate alternative dataset with full coverage.
-    missing_areas = definitions.NaPTANCols.get_missing_areas()
-    if config.parameters.stb and config.parameters.stb in missing_areas:
-        LOG.warning("Bus Stops data is partially missing for %s", config.parameters.stb)
-
-    if config.parameters.ca and config.parameters.ca in missing_areas:
-        LOG.warning("Bus Stops data is partially missing for %s", config.parameters.ca)
-
     naptan = pd.read_csv(
         config.paths.raw_input / config.infrastructure.other.bus_stops,
         usecols=[col.value for col in definitions.NaPTANCols],
@@ -669,6 +662,15 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     )
     bus_stops = bus_stops.rename(columns=definitions.NaPTANCols.rename_map())
     bus_stops = data_cleaning.clip_to_boundary(bus_stops, boundary)
+    if bus_stops.empty:
+        LOG.warning(
+            "No bus stops in source data for %s",
+            config.parameters.stb
+            if config.parameters.stb is not None
+            else config.parameters.ca
+            if config.parameters.ca is not None
+            else "model area",
+        )
     filter_removed = len_before_filter - len(bus_stops)
     LOG.debug(
         "NaPTAN filtered to bus stops - %s of %s (%.1f percent) rows removed",
@@ -699,7 +701,7 @@ def _clean_train_stations(
     train_stations = train_stations[
         (
             train_stations[definitions.MasterMapSiteCols.STAKEHOLDER_1].str.contains(
-                definitions.MasterMapStakeholder.NETWORK_RAIL
+                "Network Rail"
             )
         )
     ]
@@ -768,18 +770,9 @@ def _clean_rapid_transport_stations(
         transport_sites[definitions.MasterMapSiteCols.FUNCTION_THEME]
         == definitions.MasterMapFunctionTheme.RAIL_TRANSPORT
     ]
-    # TODO (DJ): Make this an input file so that it can be expanded if necessary, rather than
-    # hardcoding, validate input file.
     rapid_transport_stations = rail_transport[
         rail_transport[definitions.MasterMapSiteCols.STAKEHOLDER_1].str.contains(
-            "|".join(
-                [
-                    definitions.MasterMapStakeholder.TYNE_AND_WEAR_METRO,
-                    definitions.MasterMapStakeholder.GLASGOW_SUBWAY,
-                    definitions.MasterMapStakeholder.LONDON_UNDERGROUND,
-                    definitions.MasterMapStakeholder.DOCKLANDS_LIGHT_RAILWAY,
-                ]
-            )
+            "|".join(config.constants.rapid_transport_stakeholders)
         )
     ]
     rapid_transport_stations = rapid_transport_stations.drop(

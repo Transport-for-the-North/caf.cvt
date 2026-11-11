@@ -2,6 +2,7 @@
 
 import logging
 import pathlib
+from typing import cast
 
 import geopandas as gpd
 import numpy as np
@@ -29,7 +30,6 @@ from caf.cvt.definitions import (
     OSRoadStructure,
     RiskColumn,
     Scenarios,
-    UserClasses,
     VulnerabilityModifier,
 )
 
@@ -42,6 +42,13 @@ _METRO_STATION_BUFFER_SIZE_M = 25
 _INFRASTRUCTURE_BUFFER_SIZE_M = 0.01
 
 # GENERAL FUNCTIONS
+
+
+def _get_user_class_impact_cols(user_classes: list[str]) -> list[RiskColumn]:
+    """Return impact columns for the configured user classes plus total impact."""
+    return [cast("RiskColumn", f"{uc}_{ImpactCols.IMPACT}") for uc in user_classes] + [
+        ImpactCols.IMPACT
+    ]
 
 
 def _aggregate_risk(series: pd.Series) -> float | None:
@@ -284,11 +291,12 @@ def _get_impact_weights(hazards: list[str]) -> dict[str, float]:
 
 def _get_main_hazard_modifiers(
     vulnerabilities: dict[RiskColumn, VulnerabilityModifier],
+    config: model_config.Config,
 ) -> dict[MainHazardRiskCols, float]:
     """Get main hazard modifiers from sub-hazard modifiers."""
     modifiers = {}
     for main_hazard in MainHazardRiskCols:
-        weights = main_hazard.get_weights()
+        weights = config.weights.main_hazard_weights(main_hazard)
         relevant_weights = {
             hazard: weight for hazard, weight in weights.items() if hazard in vulnerabilities
         }
@@ -314,6 +322,7 @@ def _apply_asset_vulnerability(
     structure_enum: type[OSRoadStructure] | type[OSRailStructure],
     structure_col: str,
     feature_range: tuple[int, int],
+    config: model_config.Config,
 ) -> gpd.GeoDataFrame:
     """Apply asset vulnerability modifiers to risk data."""
     for structure in structure_enum:
@@ -329,7 +338,7 @@ def _apply_asset_vulnerability(
                     .astype(dtype)
                 )
 
-        main_hazard_modifiers = _get_main_hazard_modifiers(vulnerabilities)
+        main_hazard_modifiers = _get_main_hazard_modifiers(vulnerabilities, config)
         for main_hazard, modifier in main_hazard_modifiers.items():
             risk_cols = [
                 f"{main_hazard}_{scenario}"
@@ -350,10 +359,11 @@ def _apply_asset_hazard_weighting(
     asset_risk: gpd.GeoDataFrame,
     asset_type: AssetTypes,
     hazards: dict[MainHazardRiskCols, gpd.GeoDataFrame],
+    config: model_config.Config,
 ) -> gpd.GeoDataFrame:
     """Recalculate main hazard risk scores based on sub-hazard risk scores and weights."""
     for main_hazard in hazards:
-        weights = asset_type.get_asset_hazard_weights(main_hazard)
+        weights = config.weights.asset_hazard_weights(asset_type, main_hazard)
         if main_hazard == MainHazardRiskCols.COASTAL_EROSION:
             # Special case since sub hazards not included for coastal erosion
             continue
@@ -492,7 +502,7 @@ def _os_open_road_risk(
     os_road_risk = _infrastructure_risk_intersect(os_road, hazard_layers, config)
 
     os_road_risk = _apply_asset_hazard_weighting(
-        os_road_risk, AssetTypes.ROAD, hazards=hazard_layers
+        os_road_risk, AssetTypes.ROAD, hazards=hazard_layers, config=config
     )
 
     os_road_risk = _apply_asset_vulnerability(
@@ -500,6 +510,7 @@ def _os_open_road_risk(
         structure_enum=OSRoadStructure,
         structure_col=OSRoadCols.ROAD_STRUCTURE,
         feature_range=(config.constants.score_min, config.constants.score_max),
+        config=config,
     )
 
     risk_summary.create_risk_summary(
@@ -570,13 +581,18 @@ def _noham_road_risk(
     noham_risk = _infrastructure_risk_intersect(noham_net_flows, hazard_layers, config)
 
     noham_risk = _apply_asset_hazard_weighting(
-        noham_risk, AssetTypes.ROAD, hazards=hazard_layers
+        noham_risk, AssetTypes.ROAD, hazards=hazard_layers, config=config
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
-    noham_risk = _noham_impact_index(noham_risk, feature_range)
+    noham_risk = _noham_impact_index(
+        noham_risk, feature_range, config.parameters.user_classes.noham
+    )
 
-    risk_impact_cols = [*risk_cols, *ImpactCols.get_uc1_to_uc5_impact_cols()]
+    risk_impact_cols = [
+        *risk_cols,
+        *_get_user_class_impact_cols(config.parameters.user_classes.noham),
+    ]
 
     risk_summary.create_risk_summary(
         config,
@@ -615,27 +631,28 @@ def _noham_road_risk(
 
 
 def _noham_impact_index(
-    noham: gpd.GeoDataFrame, feature_range: tuple[int, int]
+    noham: gpd.GeoDataFrame, feature_range: tuple[int, int], user_classes: list[str]
 ) -> gpd.GeoDataFrame:
     """Normalise NoHAM demand, then calculate impact index."""
-    noham = _normalise_uc_demand(noham, feature_range)
+    noham = _normalise_uc_demand(noham, feature_range, user_classes)
     noham = _normalise_total_demand(noham, feature_range)
-    return _calculate_noham_impact(noham)
+    return _calculate_noham_impact(noham, user_classes)
 
 
-def _normalise_uc_demand(noham: pd.DataFrame, feature_range: tuple[int, int]) -> pd.DataFrame:
+def _normalise_uc_demand(
+    noham: pd.DataFrame, feature_range: tuple[int, int], user_classes: list[str]
+) -> pd.DataFrame:
     """Normalise NoHAM demand for each user class individually."""
-    noham_ucs = UserClasses.get_noham_classes()
     pairs = [
         (f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}")
-        for uc in noham_ucs
+        for uc in user_classes
     ]
 
     noham = functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
 
     rename_map = {
         col: col.replace("total", "demand")
-        for uc in noham_ucs
+        for uc in user_classes
         for col in [f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}"]
     }
     return noham.rename(columns=rename_map)
@@ -655,7 +672,7 @@ def _normalise_total_demand(
     )
 
 
-def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
+def _calculate_noham_impact(noham: pd.DataFrame, user_classes: list[str]) -> pd.DataFrame:
     """Calculate NoHAM impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
     risk_cols = [
@@ -670,7 +687,7 @@ def _calculate_noham_impact(noham: pd.DataFrame) -> pd.DataFrame:
             noham[f"{risk_col}_{scenario}"] * impact_weights[risk_col.removesuffix("_risk")]
             for risk_col in risk_cols
         )
-        for uc in UserClasses.get_noham_classes():
+        for uc in user_classes:
             impact_component = noham[f"{uc}_demand_{scenario}"] * impact_weights["demand"]
             noham[f"{uc}_impact_{scenario}"] = impact_component + hazard_component
 
@@ -704,15 +721,20 @@ def _model_road_risk(
     model_road_risk = _infrastructure_risk_intersect(model_net_flows, hazard_layers, config)
 
     model_road_risk = _apply_asset_hazard_weighting(
-        model_road_risk, AssetTypes.ROAD, hazards=hazard_layers
+        model_road_risk, AssetTypes.ROAD, hazards=hazard_layers, config=config
     )
 
     # TODO (DJ): (#26) Apply asset-specific vulnerability modifiers for model roads.
 
     feature_range = (config.constants.score_min, config.constants.score_max)
-    model_road_risk = _model_road_impact_index(model_road_risk, feature_range)
+    model_road_risk = _model_road_impact_index(
+        model_road_risk, feature_range, config.parameters.user_classes.model_roads
+    )
 
-    risk_impact_cols = [*risk_cols, *ImpactCols]
+    risk_impact_cols = [
+        *risk_cols,
+        *_get_user_class_impact_cols(config.parameters.user_classes.model_roads),
+    ]
 
     risk_summary.create_risk_summary(
         config,
@@ -755,7 +777,7 @@ def _model_road_risk(
 
 
 def _model_road_impact_index(
-    model_road_risk: gpd.GeoDataFrame, feature_range: tuple[int, int]
+    model_road_risk: gpd.GeoDataFrame, feature_range: tuple[int, int], user_classes: list[str]
 ) -> gpd.GeoDataFrame:
     """Normalise transport model road demand, then calculate impact index."""
     # First, normalise demand for each user class individually and for total demand
@@ -764,16 +786,18 @@ def _model_road_impact_index(
         pairs=[(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")]
         + [
             (f"{uc}_demand_{Scenarios.CURRENT}", f"{uc}_demand_{Scenarios.FORECAST}")
-            for uc in UserClasses
+            for uc in user_classes
         ],
         feature_range=feature_range,
     )
 
     # Then, calculate impact index for each user class and for total demand
-    return _calculate_model_road_impact(model_road_risk)
+    return _calculate_model_road_impact(model_road_risk, user_classes)
 
 
-def _calculate_model_road_impact(model_road_risk: pd.DataFrame) -> pd.DataFrame:
+def _calculate_model_road_impact(
+    model_road_risk: pd.DataFrame, user_classes: list[str]
+) -> pd.DataFrame:
     """Calculate transport model impact score for each user class, and for all vehicles."""
     # Calculate impact metric for each user class
     risk_cols = [
@@ -791,7 +815,7 @@ def _calculate_model_road_impact(model_road_risk: pd.DataFrame) -> pd.DataFrame:
             * impact_weights[risk_col.removesuffix("_risk")]
             for risk_col in risk_cols
         )
-        for uc in UserClasses:
+        for uc in user_classes:
             impact_component = (
                 model_road_risk[f"{uc}_demand_{scenario}"] * impact_weights["demand"]
             )
@@ -844,7 +868,7 @@ def _passenger_rail_risk(
     )
 
     passenger_rail_network_risk = _apply_asset_hazard_weighting(
-        passenger_rail_network_risk, AssetTypes.RAIL, hazards=hazard_layers
+        passenger_rail_network_risk, AssetTypes.RAIL, hazards=hazard_layers, config=config
     )
 
     passenger_rail_network_risk = _apply_asset_vulnerability(
@@ -852,6 +876,7 @@ def _passenger_rail_risk(
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
         feature_range=(config.constants.score_min, config.constants.score_max),
+        config=config,
     )
 
     risk_summary.create_risk_summary(
@@ -920,7 +945,7 @@ def _freight_rail_risk(
     )
 
     freight_rail_network_risk = _apply_asset_hazard_weighting(
-        freight_rail_network_risk, AssetTypes.RAIL, hazards=hazard_layers
+        freight_rail_network_risk, AssetTypes.RAIL, hazards=hazard_layers, config=config
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -930,6 +955,7 @@ def _freight_rail_risk(
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
         feature_range=feature_range,
+        config=config,
     )
 
     freight_rail_network_risk = _freight_impact_index(freight_rail_network_risk, feature_range)
@@ -1517,6 +1543,7 @@ def _tram_network_risk(
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
         feature_range=(config.constants.score_min, config.constants.score_max),
+        config=config,
     )
 
     risk_summary.create_risk_summary(
@@ -1589,6 +1616,7 @@ def _rapid_transport_network_risk(
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
         feature_range=feature_range,
+        config=config,
     )
 
     risk_summary.create_risk_summary(

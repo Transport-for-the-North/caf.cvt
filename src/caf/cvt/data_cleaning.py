@@ -183,7 +183,6 @@ def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
     gpd.GeoDataFrame
         The boundary GeoDataFrame to use for clipping and filtering datasets.
     """
-    # TODO (DJ): Remove STB and CA enum's and just validate config input against what's in the file
     if config.other_input.boundary_path is not None and config.other_input.boundary_path != "":
         LOG.info("Using specific boundary file: %s", config.other_input.boundary_path)
         return gpd.read_file(config.paths.raw_input / config.other_input.boundary_path)
@@ -395,6 +394,28 @@ def nearest_centroids(gdf1: gpd.GeoDataFrame, gdf2: gpd.GeoDataFrame) -> gpd.Geo
     return gdf1.merge(
         nearest.drop(columns=definitions.GEOMETRY_COL), left_index=True, right_index=True
     )
+
+
+def normalise_user_class_label(value: str | int | float) -> str:
+    """
+    Normalise a user class label to the format 'ucX', where X is an integer.
+
+    Parameters
+    ----------
+    value : str | int | float
+        The user class value to normalise.
+
+    Returns
+    -------
+    str
+        The normalised user class label in the format 'ucX'.
+    """
+    value_str = str(value).strip().lower()
+    value_str = value_str.removeprefix("uc")
+    try:
+        return f"uc{int(float(value_str))}"
+    except ValueError as exc:
+        raise ValueError(f"Invalid model road userclass value '{value}'.") from exc
 
 
 # DATA CLEANING

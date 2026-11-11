@@ -137,7 +137,6 @@ def create_risk_summary(
 ) -> None:
     """Output a summary spreadsheet for climate risk for a given asset."""
     # TODO (DJ): #31 Allow risk summary to work with point data as well as line data.
-    # TODO (DJ): #31 Add handling of case where no scenario distinction exists
     # TODO (DJ): #31 Add summary of impact metrics when available
     # TODO (DJ): #31 Rename descriptive columns to more user-friendly names
     asset_risk_summary = asset_risk.copy()

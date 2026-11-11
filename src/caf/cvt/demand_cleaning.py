@@ -20,6 +20,7 @@ LOG = logging.getLogger(__name__)
 
 _FREIGHT_DEMAND_NETWORK_MAP_MAX_DISTANCE = 500
 
+
 ## DEMAND
 
 
@@ -133,11 +134,9 @@ def _clean_noham_flows(config: model_config.Config) -> None:
     LOG.info("Cleaning NoHAM demand data...")
     noham_network = gpd.read_file(config.paths.noham_road_model_input)
     network_link_ids = set(noham_network[definitions.ID_COL])
-    noham_archive_path = config.paths.raw_input / config.demand.noham_demand
 
     scenario_flows = {}
     with tempfile.TemporaryDirectory() as tmp_dir:
-        extraction_dir = pathlib.Path(tmp_dir)
         extracted_h5_paths: dict[tuple[int, str, str], pathlib.Path] = {}
         for year_label, year in config.demand.noham_years.items():
             if year_label == "baseline":
@@ -151,8 +150,9 @@ def _clean_noham_flows(config: model_config.Config) -> None:
             flows = _aggregate_link_flows_year(
                 year=year,
                 network_link_ids=network_link_ids,
-                noham_archive_path=noham_archive_path,
-                extraction_dir=extraction_dir,
+                noham_user_classes=config.parameters.user_classes.noham,
+                noham_archive_path=config.paths.raw_input / config.demand.noham_demand,
+                extraction_dir=pathlib.Path(tmp_dir),
                 extracted_h5_paths=extracted_h5_paths,
             )
 
@@ -168,9 +168,6 @@ def _clean_noham_flows(config: model_config.Config) -> None:
 
     current_ids = set(scenario_flows[definitions.Scenarios.CURRENT][definitions.ID_COL])
     forecast_ids = set(scenario_flows[definitions.Scenarios.FORECAST][definitions.ID_COL])
-    common_ids = current_ids & forecast_ids
-    current_only_ids = current_ids - forecast_ids
-    forecast_only_ids = forecast_ids - current_ids
 
     noham_flows = scenario_flows[definitions.Scenarios.CURRENT].merge(
         scenario_flows[definitions.Scenarios.FORECAST], on=definitions.ID_COL, how="inner"
@@ -182,9 +179,9 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         "Common links: %s, Current only links: %s, Forecast only links: %s",
         len(current_ids),
         len(forecast_ids),
-        len(common_ids),
-        len(current_only_ids),
-        len(forecast_only_ids),
+        len(current_ids & forecast_ids),
+        len(current_ids - forecast_ids),
+        len(forecast_ids - current_ids),
     )
 
     noham_net_flows = noham_network.merge(noham_flows, on=definitions.ID_COL, how="left")
@@ -311,43 +308,26 @@ def _aggregate_link_flows_year(
     year: int,
     network_link_ids: set[str],
     *,
+    noham_user_classes: list[str],
     noham_archive_path: pathlib.Path,
     extraction_dir: pathlib.Path,
     extracted_h5_paths: dict[tuple[int, str, str], pathlib.Path],
 ) -> pd.DataFrame:
     """Aggregate link flows for each year, time period, and user class."""
     route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]] = {}
-    noham_ucs = definitions.UserClasses.get_noham_classes()
-
-    ts_dfs = []
+    ts_dfs: list[pd.DataFrame] = []
     for time_period in definitions.TimePeriods:
-        uc_dfs = []
-        for user_class in noham_ucs:
-            uc_dfs.append(
-                _process_single_noham_layer(
-                    noham_archive_path=noham_archive_path,
-                    extraction_dir=extraction_dir,
-                    extracted_h5_paths=extracted_h5_paths,
-                    year=year,
-                    route_links_store=route_links_store,
-                    time_period=time_period,
-                    user_class=user_class,
-                    link_ids=network_link_ids,
-                )
-            )
-
-        # Merge all user class dataframes
-        combined_uc_df = uc_dfs[0]
-        for df_uc in uc_dfs[1:]:
-            combined_uc_df = combined_uc_df.merge(df_uc, on="link_id", how="outer")
-
-        # Compute total demand for all vehicles for each time period
-        combined_uc_df[f"all_vehs_{time_period}"] = combined_uc_df[
-            [f"{uc}_{time_period}" for uc in noham_ucs]
-        ].sum(axis=1)
-
-        # Store result
-        ts_dfs.append(combined_uc_df)
+        ts_dfs = _aggregate_link_flows_tp(
+            noham_user_classes=noham_user_classes,
+            noham_archive_path=noham_archive_path,
+            extraction_dir=extraction_dir,
+            extracted_h5_paths=extracted_h5_paths,
+            year=year,
+            route_links_store=route_links_store,
+            time_period=time_period,
+            network_link_ids=network_link_ids,
+            ts_dfs=ts_dfs,
+        )
 
     # Merge all time period dataframes
     combined_ts_df = ts_dfs[0]
@@ -355,7 +335,7 @@ def _aggregate_link_flows_year(
         combined_ts_df = combined_ts_df.merge(df_ts, on="link_id", how="outer")
 
     # Compute totals for each user class across all time periods
-    for uc in noham_ucs:
+    for uc in noham_user_classes:
         combined_ts_df[f"{uc}_total"] = combined_ts_df[
             [f"{uc}_{tp}" for tp in definitions.TimePeriods]
         ].sum(axis=1)
@@ -368,8 +348,51 @@ def _aggregate_link_flows_year(
     combined_ts_df = combined_ts_df.rename(columns={"link_id": definitions.ID_COL})
 
     return combined_ts_df[
-        [definitions.ID_COL, "all_vehs_total"] + [f"{uc}_total" for uc in noham_ucs]
+        [definitions.ID_COL, "all_vehs_total"] + [f"{uc}_total" for uc in noham_user_classes]
     ]
+
+
+def _aggregate_link_flows_tp(
+    *,
+    noham_user_classes: list[str],
+    noham_archive_path: pathlib.Path,
+    extraction_dir: pathlib.Path,
+    extracted_h5_paths: dict[tuple[int, str, str], pathlib.Path],
+    year: int,
+    route_links_store: dict[tuple[str, str], tuple[pd.DataFrame, pd.DataFrame]],
+    time_period: definitions.TimePeriods,
+    network_link_ids: set[str],
+    ts_dfs: list[pd.DataFrame],
+) -> list[pd.DataFrame]:
+    uc_dfs = []
+    for user_class in noham_user_classes:
+        uc_dfs.append(
+            _process_single_noham_layer(
+                noham_archive_path=noham_archive_path,
+                extraction_dir=extraction_dir,
+                extracted_h5_paths=extracted_h5_paths,
+                year=year,
+                route_links_store=route_links_store,
+                time_period=time_period,
+                user_class=user_class,
+                link_ids=network_link_ids,
+            )
+        )
+
+    # Merge all user class dataframes
+    combined_uc_df = uc_dfs[0]
+    for df_uc in uc_dfs[1:]:
+        combined_uc_df = combined_uc_df.merge(df_uc, on="link_id", how="outer")
+
+    # Compute total demand for all vehicles for each time period
+    combined_uc_df[f"all_vehs_{time_period}"] = combined_uc_df[
+        [f"{uc}_{time_period}" for uc in noham_user_classes]
+    ].sum(axis=1)
+
+    # Store result
+    ts_dfs.append(combined_uc_df)
+
+    return ts_dfs
 
 
 ### TRANSPORT MODEL FLOWS
@@ -383,6 +406,7 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
     annualisation_factors = pd.read_csv(config.demand.model_road_flows.annualisation_factors)
 
     model_road_links = gpd.read_file(config.paths.model_roads_model_input)
+    model_road_user_classes = config.parameters.user_classes.model_roads
 
     uc_link_flows = uc_link_flows.drop(columns=["id"])
     model_road_uc_link_flows = uc_link_flows.loc[
@@ -420,18 +444,13 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
 
     # TODO (DJ): #40 Add forecast year link flow data when available, for now just copy
     years = sorted(model_road_uc_link_flows["year"].unique())
-    current_year = years[0]
-    forecast_year = years[0]
 
     current_flows = model_road_uc_link_flows[
-        model_road_uc_link_flows["year"] == current_year
+        model_road_uc_link_flows["year"] == years[0]
     ].copy()
     forecast_flows = model_road_uc_link_flows[
-        model_road_uc_link_flows["year"] == forecast_year
+        model_road_uc_link_flows["year"] == years[0]
     ].copy()
-
-    if current_year == forecast_year:
-        forecast_flows = current_flows.copy()
 
     current_flows = current_flows.pivot_table(
         index="link_id",
@@ -448,12 +467,32 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
     )
 
     current_flows.columns = [
-        f"uc{uc}_demand_{definitions.Scenarios.CURRENT}" for uc in current_flows.columns
+        f"{data_cleaning.normalise_user_class_label(uc)}_demand_{definitions.Scenarios.CURRENT}"
+        for uc in current_flows.columns
     ]
 
     forecast_flows.columns = [
-        f"uc{uc}_demand_{definitions.Scenarios.FORECAST}" for uc in forecast_flows.columns
+        f"{data_cleaning.normalise_user_class_label(uc)}_demand_{definitions.Scenarios.FORECAST}"
+        for uc in forecast_flows.columns
     ]
+
+    current_required = [
+        f"{uc}_demand_{definitions.Scenarios.CURRENT}" for uc in model_road_user_classes
+    ]
+    forecast_required = [
+        f"{uc}_demand_{definitions.Scenarios.FORECAST}" for uc in model_road_user_classes
+    ]
+
+    missing_current = [col for col in current_required if col not in current_flows.columns]
+    missing_forecast = [col for col in forecast_required if col not in forecast_flows.columns]
+    if missing_current or missing_forecast:
+        raise ValueError(
+            "Model road flow input does not contain all configured model road user classes. "
+            f"Missing current: {missing_current}; missing forecast: {missing_forecast}"
+        )
+
+    current_flows = current_flows[current_required]
+    forecast_flows = forecast_flows[forecast_required]
 
     model_road_uc_link_flows = current_flows.join(forecast_flows, how="left")
 

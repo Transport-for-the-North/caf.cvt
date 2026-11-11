@@ -23,43 +23,6 @@ RASTER_UNAVAILABLE = -9999
 # CLASSES
 
 
-class SubnationalTransportBodies(enum.StrEnum):
-    """Enumeration for subnational transport bodies."""
-
-    TRANSPORT_FOR_THE_NORTH = "Transport for the North"
-    TRANSPORT_SCOTLAND = "Transport Scotland"
-    MIDLANDS_CONNECT = "Midlands Connect"
-    ENGLANDS_ECONOMIC_HEARTLAND = "England's Economic Heartland"
-    TRANSPORT_EAST = "Transport East"
-    TRANSPORT_FOR_LONDON = "Transport for London"
-    TRANSPORT_FOR_THE_SOUTH_EAST = "Transport for the South East"
-    WESTERN_GATEWAY = "Western Gateway"
-    PENINSULA_TRANSPORT = "Peninsula Transport"
-
-
-class CombinedAuthorities(enum.StrEnum):
-    """Enumeration for combined authorities."""
-
-    # Northern CAs
-    GREATER_MANCHESTER = "Greater Manchester"
-    SOUTH_YORKSHIRE = "South Yorkshire"
-    WEST_YORKSHIRE = "West Yorkshire"
-    LIVERPOOL_CITY_REGION = "Liverpool City Region"
-    TEES_VALLEY = "Tees Valley"
-    YORK_AND_NORTH_YORKSHIRE = "York and North Yorkshire"
-    NORTH_EAST = "North East"
-    HULL_AND_EAST_YORKSHIRE = "Hull and East Yorkshire"
-    LANCASHIRE = "Lancashire"
-
-    # Other CAs
-    EAST_MIDLANDS = "East Midlands"
-    GREATER_LINCOLNSHIRE = "Greater Lincolnshire"
-    CAMBRIDGESHIRE_OR_PETERBOROUGH = "Cambridgeshire or Peterborough"
-    WEST_MIDLANDS = "West Midlands"
-    WEST_OF_ENGLAND = "West of England"
-    DEVON_AND_TORBAY = "Devon and Torbay"
-
-
 class RiskColumn(enum.StrEnum):
     """Plotting column definition base class."""
 
@@ -91,18 +54,6 @@ class ExtremeWeatherRiskCols(RiskColumn):
         }
         return cmap_mapping[self]
 
-    # TODO (DJ): Separate weights and parameters into csv files that are read in rather than
-    # hardcoding here
-    @classmethod
-    def get_weights(cls) -> dict[RiskColumn, float]:
-        """Return appropriate weights for Extreme Weather."""
-        return {
-            ExtremeWeatherRiskCols.EXTREME_HEAT: 0.25,
-            ExtremeWeatherRiskCols.EXTREME_COLD: 0.25,
-            ExtremeWeatherRiskCols.DROUGHT: 0.25,
-            ExtremeWeatherRiskCols.STORM: 0.25,
-        }
-
 
 class FloodingTypes(enum.StrEnum):
     """Enumeration for different types of flooding."""
@@ -122,15 +73,6 @@ class FloodingRiskCols(RiskColumn):
     def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given flooding subhazard column."""
         return ColourMaps.BLUES
-
-    @classmethod
-    def get_weights(cls) -> dict[RiskColumn, float]:
-        """Return appropriate weights for Flooding."""
-        return {
-            FloodingRiskCols.RIVERS_SEA: 0.5,
-            FloodingRiskCols.SURFACE_WATER: 0.5,
-            # TODO (DJ): #41 Add groundwater flooding weighting
-        }
 
     @classmethod
     def get_risk_map(cls) -> dict[int | str, float]:
@@ -159,18 +101,6 @@ class GroundStabilityRiskCols(RiskColumn):
         """Return the appropriate colormap for a given ground stability subhazard column."""
         return ColourMaps.ORANGES
 
-    @classmethod
-    def get_weights(cls) -> dict[RiskColumn, float]:
-        """Return appropriate weights for Ground Stability."""
-        return {
-            GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: 0.17,
-            GroundStabilityRiskCols.COMPRESSIBLE_GROUND: 0.17,
-            GroundStabilityRiskCols.LANDSLIDES: 0.17,
-            GroundStabilityRiskCols.RUNNING_SAND: 0.17,
-            GroundStabilityRiskCols.SHRINK_SWELL: 0.16,
-            GroundStabilityRiskCols.SOLUBLE_ROCKS: 0.16,
-        }
-
 
 class MainHazardRiskCols(RiskColumn):
     """Column definitions for main hazard layers."""
@@ -189,17 +119,6 @@ class MainHazardRiskCols(RiskColumn):
             MainHazardRiskCols.COASTAL_EROSION: ColourMaps.PURPLES,
         }
         return cmap_mapping[self]
-
-    def get_weights(self) -> dict[RiskColumn, float]:
-        """Return the weights for the sub-hazards of a given main hazard column."""
-        weights_mapping: dict[MainHazardRiskCols, dict[RiskColumn, float]] = {
-            MainHazardRiskCols.EXTREME_WEATHER: ExtremeWeatherRiskCols.get_weights(),
-            MainHazardRiskCols.FLOODING: FloodingRiskCols.get_weights(),
-            MainHazardRiskCols.GROUND_STABILITY: GroundStabilityRiskCols.get_weights(),
-            MainHazardRiskCols.COASTAL_EROSION: {},
-        }
-
-        return weights_mapping[self]
 
     def get_sub_hazards(self) -> list[RiskColumn]:
         """Return a list of sub-hazard columns for the main hazard."""
@@ -252,15 +171,6 @@ class ExtremeHeatCols(RiskColumn):
         """Return extreme heat colourmap."""
         return ColourMaps.REDS
 
-    @classmethod
-    def get_weights(cls) -> dict[RiskColumn, float]:
-        """Return appropriate weights for Extreme Heat."""
-        return {
-            ExtremeHeatCols.MAX_TEMP_SUMMER: 0.5,
-            ExtremeHeatCols.HOT_SUMMER_DAYS: 0.25,
-            ExtremeHeatCols.EXTREME_SUMMER_DAYS: 0.25,
-        }
-
 
 class ExtremeColdCols(RiskColumn):
     """Column definitions for extreme cold subhazard layers."""
@@ -273,15 +183,6 @@ class ExtremeColdCols(RiskColumn):
         """Return extreme cold colourmap."""
         return ColourMaps.BLUES
 
-    @classmethod
-    def get_weights(cls) -> dict[RiskColumn, float]:
-        """Return appropriate weights for Extreme Cold."""
-        return {
-            ExtremeColdCols.MIN_TEMP_WINTER: 0.5,
-            ExtremeColdCols.FROST_DAYS: 0.25,
-            ExtremeColdCols.ICING_DAYS: 0.25,
-        }
-
 
 class DroughtCols(RiskColumn):
     """Column definitions for drought subhazard layers."""
@@ -292,14 +193,6 @@ class DroughtCols(RiskColumn):
     def get_cmap(self) -> ColourMaps:
         """Return drought colourmap."""
         return ColourMaps.ORANGES
-
-    @classmethod
-    def get_weights(cls) -> dict[RiskColumn, float]:
-        """Return appropriate weights for Drought."""
-        return {
-            DroughtCols.DROUGHT_SEVERITY_INDEX: 0.75,
-            DroughtCols.PRECIP_SUMMER: 0.25,
-        }
 
 
 class StormCols(RiskColumn):
@@ -314,17 +207,6 @@ class StormCols(RiskColumn):
     def get_cmap(self) -> ColourMaps:
         """Return storm colourmap."""
         return ColourMaps.BLUES
-
-    @classmethod
-    def get_weights(cls) -> dict[RiskColumn, float]:
-        """Return appropriate weights for Storm."""
-        return {
-            StormCols.WIND_SPEED: 0.3,
-            StormCols.EXCEEDANCE_DAYS: 0.2,
-            StormCols.PRECIP_WINTER: 0.15,
-            StormCols.RAIN_DAYS: 0.15,
-            StormCols.WIND_DRIVEN_RAIN_INDEX: 0.2,
-        }
 
 
 class DemandCols(RiskColumn):
@@ -349,58 +231,14 @@ class Scenarios(enum.StrEnum):
         return f"{cls.CURRENT}_or_{cls.FORECAST}"
 
 
-# TODO (DJ): Make user class dynamically defined based on user input in config, then create
-# column names dynamically from that
-class UserClasses(enum.StrEnum):
-    """Definitions for user classes."""
-
-    USER_CLASS_1 = "uc1"
-    USER_CLASS_2 = "uc2"
-    USER_CLASS_3 = "uc3"
-    USER_CLASS_4 = "uc4"
-    USER_CLASS_5 = "uc5"
-    USER_CLASS_6 = "uc6"
-    USER_CLASS_7 = "uc7"
-
-    @classmethod
-    def get_noham_classes(cls) -> list[str]:
-        """Return a list of all NOHAM user classes."""
-        return [
-            cls.USER_CLASS_1,
-            cls.USER_CLASS_2,
-            cls.USER_CLASS_3,
-            cls.USER_CLASS_4,
-            cls.USER_CLASS_5,
-        ]
-
-
 class ImpactCols(RiskColumn):
     """Column definitions for impact layers."""
 
     IMPACT = "impact"
-    UC1_IMPACT = f"{UserClasses.USER_CLASS_1}_{IMPACT}"
-    UC2_IMPACT = f"{UserClasses.USER_CLASS_2}_{IMPACT}"
-    UC3_IMPACT = f"{UserClasses.USER_CLASS_3}_{IMPACT}"
-    UC4_IMPACT = f"{UserClasses.USER_CLASS_4}_{IMPACT}"
-    UC5_IMPACT = f"{UserClasses.USER_CLASS_5}_{IMPACT}"
-    UC6_IMPACT = f"{UserClasses.USER_CLASS_6}_{IMPACT}"
-    UC7_IMPACT = f"{UserClasses.USER_CLASS_7}_{IMPACT}"
 
     def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given impact column."""
         return ColourMaps.VIRIDIS
-
-    @classmethod
-    def get_uc1_to_uc5_impact_cols(cls) -> list[RiskColumn]:
-        """Return a list of all UC1 to UC5 impact columns."""
-        return [
-            cls.UC1_IMPACT,
-            cls.UC2_IMPACT,
-            cls.UC3_IMPACT,
-            cls.UC4_IMPACT,
-            cls.UC5_IMPACT,
-            cls.IMPACT,
-        ]
 
 
 class TimePeriods(enum.StrEnum):
@@ -418,6 +256,7 @@ class OSRoadStructure(enum.StrEnum):
     TUNNEL = "Road In Tunnel"
 
     # TODO (DJ): #41 Add groundwater flooding to vulnerability modifiers
+    # TODO (DJ): Move vulnerability modifiers into the config or input csv file
     def get_vulnerability(self) -> dict[RiskColumn, VulnerabilityModifier]:
         """Return the vulnerability modifiers for the road structure type."""
         mapping = {
@@ -648,17 +487,6 @@ class NaPTANCols(enum.StrEnum):
             NaPTANCols.PARENT_LOCALITY: "parent_locality",
         }
 
-    @classmethod
-    def get_missing_areas(cls) -> list[SubnationalTransportBodies | CombinedAuthorities]:
-        """Return list of areas missing from the NaPTAN data."""
-        return [
-            SubnationalTransportBodies.TRANSPORT_FOR_THE_NORTH,
-            SubnationalTransportBodies.TRANSPORT_SCOTLAND,
-            SubnationalTransportBodies.ENGLANDS_ECONOMIC_HEARTLAND,
-            SubnationalTransportBodies.TRANSPORT_EAST,
-            CombinedAuthorities.CAMBRIDGESHIRE_OR_PETERBOROUGH,
-        ]
-
 
 class MasterMapSiteCols(enum.StrEnum):
     """Column definitions for MasterMap sites."""
@@ -716,22 +544,6 @@ class MasterMapFunction(enum.StrEnum):
     AIRPORT = "Airport"
 
 
-# TODO (DJ): Put these in an input csv, as it's something that may change over time,
-# particularly the rapid transport networks
-
-
-class MasterMapStakeholder(enum.StrEnum):
-    """Stakeholder definitions for MasterMap sites."""
-
-    NETWORK_RAIL = "Network Rail"
-
-    # Rapid Transport Networks
-    LONDON_UNDERGROUND = "London Underground"
-    DOCKLANDS_LIGHT_RAILWAY = "Docklands Light Railway"
-    TYNE_AND_WEAR_METRO = "Tyne And Wear Metro"
-    GLASGOW_SUBWAY = "Glasgow Subway"
-
-
 class MasterMapFunctionTheme(enum.StrEnum):
     """Function theme definitions for MasterMap sites."""
 
@@ -777,25 +589,6 @@ class AssetTypes(enum.StrEnum):
 
     ROAD = "road"
     RAIL = "rail"
-
-    def get_asset_hazard_weights(
-        self, main_hazard: MainHazardRiskCols
-    ) -> dict[RiskColumn, float]:
-        """Return asset-specific hazard weights."""
-        default_weights = main_hazard.get_weights()
-
-        if self == AssetTypes.ROAD:
-            return default_weights
-        if self == AssetTypes.RAIL:
-            if main_hazard == MainHazardRiskCols.EXTREME_WEATHER:
-                return {
-                    ExtremeWeatherRiskCols.EXTREME_HEAT: 0.20,
-                    ExtremeWeatherRiskCols.EXTREME_COLD: 0.21,
-                    ExtremeWeatherRiskCols.DROUGHT: 0.14,
-                    ExtremeWeatherRiskCols.STORM: 0.45,
-                }
-            return default_weights
-        raise ValueError(f"Unknown asset type: {self}")
 
 
 class MasterMapHighwaysCols(enum.StrEnum):

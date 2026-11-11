@@ -764,7 +764,7 @@ def _extreme_weather_index(config: model_config.Config) -> None:
 
     extreme_weather_risk = calculate_composite_score(
         extreme_weather_risk,
-        MainHazardRiskCols.EXTREME_WEATHER.get_weights(),
+        config.weights.main_hazard_weights(MainHazardRiskCols.EXTREME_WEATHER),
         MainHazardRiskCols.EXTREME_WEATHER,
     )
 
@@ -838,7 +838,7 @@ def _extreme_heat_index(
 
     extreme_heat = calculate_composite_score(
         extreme_heat,
-        ExtremeHeatCols.get_weights(),
+        config.weights.extreme_weather_sub_hazard_weights(ExtremeWeatherRiskCols.EXTREME_HEAT),
         ExtremeWeatherRiskCols.EXTREME_HEAT,
     )
 
@@ -916,7 +916,7 @@ def _extreme_cold_index(
 
     extreme_cold = calculate_composite_score(
         extreme_cold,
-        ExtremeColdCols.get_weights(),
+        config.weights.extreme_weather_sub_hazard_weights(ExtremeWeatherRiskCols.EXTREME_COLD),
         ExtremeWeatherRiskCols.EXTREME_COLD,
     )
 
@@ -1024,7 +1024,7 @@ def _drought_index(
 
     drought_risk = calculate_composite_score(
         drought_risk,
-        DroughtCols.get_weights(),
+        config.weights.extreme_weather_sub_hazard_weights(ExtremeWeatherRiskCols.DROUGHT),
         ExtremeWeatherRiskCols.DROUGHT,
     )
 
@@ -1165,7 +1165,7 @@ def _storm_index(
 
     storm_risk = calculate_composite_score(
         storm_risk,
-        StormCols.get_weights(),
+        config.weights.extreme_weather_sub_hazard_weights(ExtremeWeatherRiskCols.STORM),
         ExtremeWeatherRiskCols.STORM,
     )
 
@@ -1240,6 +1240,7 @@ def _flooding_index_raster(
         flooding_paths,
         config.paths.flooding_risk_raster_model_interim_output,
         feature_range=(config.constants.score_min, config.constants.score_max),
+        flooding_weights=config.weights.main_hazard_weights(MainHazardRiskCols.FLOODING),
     )
     LOG.info("Flooding risk index calculation complete.")
 
@@ -1287,14 +1288,10 @@ def _rasterize_and_stack_tiled(
     flooding_paths: dict[str, pathlib.Path],
     output_path: pathlib.Path,
     feature_range: tuple[float, float],
+    flooding_weights: dict[RiskColumn, float],
 ) -> None:
     """Rasterize and stack flood layers using a tiled approach."""
-    flooding_layers = {}
-    for flooding_layer_name, flooding_path in flooding_paths.items():
-        flooding_layers[flooding_layer_name] = gpd.read_file(flooding_path)
-        flooding_layers[flooding_layer_name][flooding_layer_name] = flooding_layers[
-            flooding_layer_name
-        ][flooding_layer_name].map(FloodingRiskCols.get_risk_map())
+    flooding_layers = _read_and_map_flooding_layers(flooding_paths)
 
     scaling_params = _flooding_raster_min_max(flooding_layers)
 
@@ -1304,8 +1301,6 @@ def _rasterize_and_stack_tiled(
         col_band_map[f"{col}_{Scenarios.FORECAST}"] = forecast_band
 
     raster_metadata = _get_raster_metadata(flooding_layers)
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Create output raster
     with rasterio.open(
@@ -1340,8 +1335,21 @@ def _rasterize_and_stack_tiled(
                     scaling_params=scaling_params,
                     col_band_map=col_band_map,
                     feature_range=feature_range,
+                    flooding_weights=flooding_weights,
                     dst=dst,
                 )
+
+
+def _read_and_map_flooding_layers(
+    flooding_paths: dict[str, pathlib.Path],
+) -> dict[str, gpd.GeoDataFrame]:
+    flooding_layers = {}
+    for flooding_layer_name, flooding_path in flooding_paths.items():
+        flooding_layers[flooding_layer_name] = gpd.read_file(flooding_path)
+        flooding_layers[flooding_layer_name][flooding_layer_name] = flooding_layers[
+            flooding_layer_name
+        ][flooding_layer_name].map(FloodingRiskCols.get_risk_map())
+    return flooding_layers
 
 
 def _process_raster_flooding_tile(
@@ -1353,6 +1361,7 @@ def _process_raster_flooding_tile(
     scaling_params: dict[FloodingRiskCols, tuple[float, float]],
     col_band_map: dict[str, int],
     feature_range: tuple[float, float],
+    flooding_weights: dict[RiskColumn, float],
     dst: rasterio.io.DatasetWriter,
 ) -> None:
     window = rasterio.windows.Window(
@@ -1387,6 +1396,7 @@ def _process_raster_flooding_tile(
     _calculate_composite_flooding_raster(
         tile_stack=tile_stack,
         feature_range=feature_range,
+        flooding_weights=flooding_weights,
         dst=dst,
         window=window,
     )
@@ -1450,6 +1460,7 @@ def _rasterize_write_flooding_layer(
 def _calculate_composite_flooding_raster(
     tile_stack: np.ndarray,
     feature_range: tuple[float, float],
+    flooding_weights: dict[RiskColumn, float],
     dst: rasterio.io.DatasetWriter,
     window: rasterio.windows.Window,
 ) -> None:
@@ -1462,16 +1473,14 @@ def _calculate_composite_flooding_raster(
     surface_current_tile = tile_stack[FloodingBands.SURFACE_CURRENT.value]
     surface_forecast_tile = tile_stack[FloodingBands.SURFACE_FORECAST.value]
 
-    weights = MainHazardRiskCols.FLOODING.get_weights()
-
     composite_current = (
-        rivers_current_tile * weights[FloodingRiskCols.RIVERS_SEA]
-        + surface_current_tile * weights[FloodingRiskCols.SURFACE_WATER]
+        rivers_current_tile * flooding_weights[FloodingRiskCols.RIVERS_SEA]
+        + surface_current_tile * flooding_weights[FloodingRiskCols.SURFACE_WATER]
     )
 
     composite_forecast = (
-        rivers_forecast_tile * weights[FloodingRiskCols.RIVERS_SEA]
-        + surface_forecast_tile * weights[FloodingRiskCols.SURFACE_WATER]
+        rivers_forecast_tile * flooding_weights[FloodingRiskCols.RIVERS_SEA]
+        + surface_forecast_tile * flooding_weights[FloodingRiskCols.SURFACE_WATER]
     )
 
     _validate_raster_index_tile(composite_current, feature_range)
@@ -1597,7 +1606,7 @@ def _flooding_index_vector(
 
     flooding_risk = calculate_composite_score(
         flooding_risk,
-        MainHazardRiskCols.FLOODING.get_weights(),
+        config.weights.main_hazard_weights(MainHazardRiskCols.FLOODING),
         MainHazardRiskCols.FLOODING,
     )
 
@@ -1779,7 +1788,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
 
     ground_stability = calculate_composite_score(
         ground_stability,
-        MainHazardRiskCols.GROUND_STABILITY.get_weights(),
+        config.weights.main_hazard_weights(MainHazardRiskCols.GROUND_STABILITY),
         MainHazardRiskCols.GROUND_STABILITY,
     )
 

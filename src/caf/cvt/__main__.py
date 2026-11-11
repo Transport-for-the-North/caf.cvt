@@ -54,7 +54,7 @@ def _run_asset_risk_weighting(args: argparse.Namespace) -> None:
         incident_weights=config.asset_risk_weighting.incident_weights,
     )
 
-
+# TODO (DJ): Check that model works if a hazard layer is empty after clipping to region
 def _main() -> None:
     """Run Climate Vulnerability Tool CLI."""
     parser = argparse.ArgumentParser(

@@ -1,15 +1,24 @@
 """Module for setting up the model configuration."""
 
 import pathlib
-from typing import ClassVar, Self
+from typing import ClassVar, Self, cast
 
 import caf.toolkit as ctk
 import pydantic
 
 from caf.cvt.definitions import (
+    AssetTypes,
+    DroughtCols,
+    ExtremeColdCols,
+    ExtremeHeatCols,
+    ExtremeWeatherRiskCols,
+    FloodingRiskCols,
     FloodingTypes,
     GroundStabilityRiskCols,
+    MainHazardRiskCols,
+    RiskColumn,
     Scenarios,
+    StormCols,
 )
 
 ### CONFIG SET UP
@@ -876,10 +885,50 @@ class ParameterConfig(ctk.BaseConfig):
     ca : str | None = None
         Name of Combined Authority to run the tool for (this must exactly match the name in the
         boundary data). Should be empty if running for a STB rather than CA.
+    user_classes : RoadUserClassConfig
+        User class labels for NoHAM and model roads demand processing.
     """
+
+    class RoadUserClassConfig(ctk.BaseConfig):
+        """Configuration for road model user classes."""
+
+        # Using pydantic.Field means every config instance gets it's own default list
+        # rather than sharing a mutable default across all instances.
+        noham: list[str] = pydantic.Field(
+            default_factory=lambda: ["uc1", "uc2", "uc3", "uc4", "uc5"]
+        )
+        model_roads: list[str] = pydantic.Field(
+            default_factory=lambda: ["uc1", "uc2", "uc3", "uc4", "uc5", "uc6", "uc7"]
+        )
+
+        @staticmethod
+        def _normalise_user_class(user_class: str | int) -> str:
+            value = str(user_class).strip().lower()
+            if value.startswith("uc"):
+                suffix = value[2:]
+            else:
+                suffix = value
+
+            if not suffix.isdigit():
+                raise ValueError(
+                    f"Invalid user class '{user_class}'. Use values like 'uc1', 'uc2'."
+                )
+            return f"uc{int(suffix)}"
+
+        @pydantic.field_validator("noham", "model_roads", mode="before")
+        @classmethod
+        def _validate_user_classes(cls, value: list[str | int]) -> list[str]:
+            if not isinstance(value, list) or len(value) == 0:
+                raise ValueError("User class lists must be non-empty lists.")
+
+            normalised = [cls._normalise_user_class(v) for v in value]
+            if len(set(normalised)) != len(normalised):
+                raise ValueError("User class lists must not contain duplicates.")
+            return normalised
 
     stb: str | None = None
     ca: str | None = None
+    user_classes: RoadUserClassConfig = pydantic.Field(default_factory=RoadUserClassConfig)
 
     # Empty yaml values are loaded as strings, so need to convert to None
     @pydantic.field_validator("stb", "ca", mode="before")
@@ -896,6 +945,245 @@ class ParameterConfig(ctk.BaseConfig):
         return self
 
 
+class MainExtremeWeatherWeightsConfig(ctk.BaseConfig):
+    """Weights for extreme weather sub-hazards."""
+
+    extreme_heat: float = 0.25
+    extreme_cold: float = 0.25
+    drought: float = 0.25
+    storm: float = 0.25
+
+    def as_mapping(self) -> dict[RiskColumn, float]:
+        """Return weights keyed by risk columns."""
+        return {
+            ExtremeWeatherRiskCols.EXTREME_HEAT: self.extreme_heat,
+            ExtremeWeatherRiskCols.EXTREME_COLD: self.extreme_cold,
+            ExtremeWeatherRiskCols.DROUGHT: self.drought,
+            ExtremeWeatherRiskCols.STORM: self.storm,
+        }
+
+
+class FloodingWeightsConfig(ctk.BaseConfig):
+    """Weights for flooding sub-hazards."""
+
+    rivers_sea: float = 0.5
+    surface_water: float = 0.5
+
+    def as_mapping(self) -> dict[RiskColumn, float]:
+        """Return weights keyed by risk columns."""
+        return {
+            FloodingRiskCols.RIVERS_SEA: self.rivers_sea,
+            FloodingRiskCols.SURFACE_WATER: self.surface_water,
+        }
+
+
+class GroundStabilityWeightsConfig(ctk.BaseConfig):
+    """Weights for ground stability sub-hazards."""
+
+    collapsible_deposits: float = 0.17
+    compressible_ground: float = 0.17
+    landslides: float = 0.17
+    running_sand: float = 0.17
+    shrink_swell: float = 0.16
+    soluble_rocks: float = 0.16
+
+    def as_mapping(self) -> dict[RiskColumn, float]:
+        """Return weights keyed by risk columns."""
+        return {
+            GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: self.collapsible_deposits,
+            GroundStabilityRiskCols.COMPRESSIBLE_GROUND: self.compressible_ground,
+            GroundStabilityRiskCols.LANDSLIDES: self.landslides,
+            GroundStabilityRiskCols.RUNNING_SAND: self.running_sand,
+            GroundStabilityRiskCols.SHRINK_SWELL: self.shrink_swell,
+            GroundStabilityRiskCols.SOLUBLE_ROCKS: self.soluble_rocks,
+        }
+
+
+class MainHazardWeightsConfig(ctk.BaseConfig):
+    """Weights for main hazard indices."""
+
+    extreme_weather: MainExtremeWeatherWeightsConfig = pydantic.Field(
+        default_factory=MainExtremeWeatherWeightsConfig
+    )
+    flooding: FloodingWeightsConfig = pydantic.Field(default_factory=FloodingWeightsConfig)
+    ground_stability: GroundStabilityWeightsConfig = pydantic.Field(
+        default_factory=GroundStabilityWeightsConfig
+    )
+
+    def for_main_hazard(self, main_hazard: MainHazardRiskCols) -> dict[RiskColumn, float]:
+        """Return sub-hazard weights for a main hazard."""
+        extreme_weather = cast("MainExtremeWeatherWeightsConfig", self.extreme_weather)  # pylint: disable=no-member
+        flooding = cast("FloodingWeightsConfig", self.flooding)  # pylint: disable=no-member
+        ground_stability = cast("GroundStabilityWeightsConfig", self.ground_stability)  # pylint: disable=no-member
+        mapping: dict[MainHazardRiskCols, dict[RiskColumn, float]] = {
+            MainHazardRiskCols.EXTREME_WEATHER: extreme_weather.as_mapping(),  # pylint: disable=no-member
+            MainHazardRiskCols.FLOODING: flooding.as_mapping(),  # pylint: disable=no-member
+            MainHazardRiskCols.GROUND_STABILITY: ground_stability.as_mapping(),  # pylint: disable=no-member
+            MainHazardRiskCols.COASTAL_EROSION: {},
+        }
+        return mapping[main_hazard]
+
+
+class ExtremeHeatWeightsConfig(ctk.BaseConfig):
+    """Weights for the extreme heat index."""
+
+    max_temp_summer: float = 0.5
+    hot_summer_days: float = 0.25
+    extreme_summer_days: float = 0.25
+
+    def as_mapping(self) -> dict[RiskColumn, float]:
+        """Return weights keyed by risk columns."""
+        return {
+            ExtremeHeatCols.MAX_TEMP_SUMMER: self.max_temp_summer,
+            ExtremeHeatCols.HOT_SUMMER_DAYS: self.hot_summer_days,
+            ExtremeHeatCols.EXTREME_SUMMER_DAYS: self.extreme_summer_days,
+        }
+
+
+class ExtremeColdWeightsConfig(ctk.BaseConfig):
+    """Weights for the extreme cold index."""
+
+    min_temp_winter: float = 0.5
+    frost_days: float = 0.25
+    icing_days: float = 0.25
+
+    def as_mapping(self) -> dict[RiskColumn, float]:
+        """Return weights keyed by risk columns."""
+        return {
+            ExtremeColdCols.MIN_TEMP_WINTER: self.min_temp_winter,
+            ExtremeColdCols.FROST_DAYS: self.frost_days,
+            ExtremeColdCols.ICING_DAYS: self.icing_days,
+        }
+
+
+class DroughtWeightsConfig(ctk.BaseConfig):
+    """Weights for the drought index."""
+
+    drought_severity_index: float = 0.75
+    precip_summer: float = 0.25
+
+    def as_mapping(self) -> dict[RiskColumn, float]:
+        """Return weights keyed by risk columns."""
+        return {
+            DroughtCols.DROUGHT_SEVERITY_INDEX: self.drought_severity_index,
+            DroughtCols.PRECIP_SUMMER: self.precip_summer,
+        }
+
+
+class StormWeightsConfig(ctk.BaseConfig):
+    """Weights for the storm index."""
+
+    wind_speed: float = 0.3
+    exceedance_days: float = 0.2
+    precip_winter: float = 0.15
+    rain_days: float = 0.15
+    wind_driven_rain_index: float = 0.2
+
+    def as_mapping(self) -> dict[RiskColumn, float]:
+        """Return weights keyed by risk columns."""
+        return {
+            StormCols.WIND_SPEED: self.wind_speed,
+            StormCols.EXCEEDANCE_DAYS: self.exceedance_days,
+            StormCols.PRECIP_WINTER: self.precip_winter,
+            StormCols.RAIN_DAYS: self.rain_days,
+            StormCols.WIND_DRIVEN_RAIN_INDEX: self.wind_driven_rain_index,
+        }
+
+
+class ExtremeWeatherSubHazardWeightsConfig(ctk.BaseConfig):
+    """Weights for extreme weather sub-hazard indices."""
+
+    extreme_heat: ExtremeHeatWeightsConfig = pydantic.Field(
+        default_factory=ExtremeHeatWeightsConfig
+    )
+    extreme_cold: ExtremeColdWeightsConfig = pydantic.Field(
+        default_factory=ExtremeColdWeightsConfig
+    )
+    drought: DroughtWeightsConfig = pydantic.Field(default_factory=DroughtWeightsConfig)
+    storm: StormWeightsConfig = pydantic.Field(default_factory=StormWeightsConfig)
+
+    def for_sub_hazard(self, sub_hazard: ExtremeWeatherRiskCols) -> dict[RiskColumn, float]:
+        """Return variable weights for an extreme weather sub-hazard."""
+        extreme_heat = cast("ExtremeHeatWeightsConfig", self.extreme_heat)  # pylint: disable=no-member
+        extreme_cold = cast("ExtremeColdWeightsConfig", self.extreme_cold)  # pylint: disable=no-member
+        drought = cast("DroughtWeightsConfig", self.drought)  # pylint: disable=no-member
+        storm = cast("StormWeightsConfig", self.storm)  # pylint: disable=no-member
+        mapping: dict[ExtremeWeatherRiskCols, dict[RiskColumn, float]] = {
+            ExtremeWeatherRiskCols.EXTREME_HEAT: extreme_heat.as_mapping(),  # pylint: disable=no-member
+            ExtremeWeatherRiskCols.EXTREME_COLD: extreme_cold.as_mapping(),  # pylint: disable=no-member
+            ExtremeWeatherRiskCols.DROUGHT: drought.as_mapping(),  # pylint: disable=no-member
+            ExtremeWeatherRiskCols.STORM: storm.as_mapping(),  # pylint: disable=no-member
+        }
+        return mapping[sub_hazard]
+
+
+class RailExtremeWeatherWeightsConfig(ctk.BaseConfig):
+    """Rail-specific override for extreme weather sub-hazard weights."""
+
+    extreme_heat: float = 0.2
+    extreme_cold: float = 0.21
+    drought: float = 0.14
+    storm: float = 0.45
+
+    def as_mapping(self) -> dict[RiskColumn, float]:
+        """Return rail-specific extreme weather weights keyed by risk columns."""
+        return {
+            ExtremeWeatherRiskCols.EXTREME_HEAT: self.extreme_heat,
+            ExtremeWeatherRiskCols.EXTREME_COLD: self.extreme_cold,
+            ExtremeWeatherRiskCols.DROUGHT: self.drought,
+            ExtremeWeatherRiskCols.STORM: self.storm,
+        }
+
+
+class AssetHazardWeightOverridesConfig(ctk.BaseConfig):
+    """Asset-specific hazard weight overrides."""
+
+    rail_extreme_weather: RailExtremeWeatherWeightsConfig = pydantic.Field(
+        default_factory=RailExtremeWeatherWeightsConfig
+    )
+
+
+class WeightConfig(ctk.BaseConfig):
+    """Configuration for model hazard and index weights."""
+
+    main_hazard: MainHazardWeightsConfig = pydantic.Field(
+        default_factory=MainHazardWeightsConfig
+    )
+    extreme_weather_sub_hazard: ExtremeWeatherSubHazardWeightsConfig = pydantic.Field(
+        default_factory=ExtremeWeatherSubHazardWeightsConfig
+    )
+    asset_hazard_overrides: AssetHazardWeightOverridesConfig = pydantic.Field(
+        default_factory=AssetHazardWeightOverridesConfig
+    )
+
+    def main_hazard_weights(self, main_hazard: MainHazardRiskCols) -> dict[RiskColumn, float]:
+        """Return sub-hazard weights for a main hazard."""
+        configured_main_hazard = cast("MainHazardWeightsConfig", self.main_hazard)  # pylint: disable=no-member
+        return configured_main_hazard.for_main_hazard(main_hazard)  # pylint: disable=no-member
+
+    def extreme_weather_sub_hazard_weights(
+        self, sub_hazard: ExtremeWeatherRiskCols
+    ) -> dict[RiskColumn, float]:
+        """Return variable weights for an extreme weather sub-hazard index."""
+        configured_sub_hazards = cast(
+            "ExtremeWeatherSubHazardWeightsConfig",
+            self.extreme_weather_sub_hazard,  # pylint: disable=no-member
+        )
+        return configured_sub_hazards.for_sub_hazard(sub_hazard)  # pylint: disable=no-member
+
+    def asset_hazard_weights(
+        self, asset_type: AssetTypes, main_hazard: MainHazardRiskCols
+    ) -> dict[RiskColumn, float]:
+        """Return asset-specific hazard weights, falling back to default main hazard."""
+        configured_overrides = cast(
+            "AssetHazardWeightOverridesConfig",
+            self.asset_hazard_overrides,  # pylint: disable=no-member
+        )
+        if asset_type == AssetTypes.RAIL and main_hazard == MainHazardRiskCols.EXTREME_WEATHER:
+            return configured_overrides.rail_extreme_weather.as_mapping()  # pylint: disable=no-member
+        return self.main_hazard_weights(main_hazard)
+
+
 class ConstantConfig(ctk.BaseConfig):
     """Configuration for model constants.
 
@@ -907,11 +1195,14 @@ class ConstantConfig(ctk.BaseConfig):
         Minimum score for risk calculations.
     score_max : float
         Maximum score for risk calculations.
+    rapid_transport_stakeholders : list[str]
+        List of rapid transport stakeholders defined in the MasterMap Site data.
     """
 
     noham_road_id_threshold: int
     score_min: int
     score_max: int
+    rapid_transport_stakeholders: list[str]
 
 
 # -------------------------
@@ -938,6 +1229,8 @@ class Config(ctk.BaseConfig):
         Configuration for demand data.
     asset_risk_weighting : AssetRiskWeightingConfig | None
         Configuration for asset risk weighting workflow.
+    weights: WeightConfig
+        Configuration for hazard and index weights.
     constants: ConstantConfig
         Configuration for model constants.
     """
@@ -950,4 +1243,5 @@ class Config(ctk.BaseConfig):
     hazards: HazardsConfig
     demand: DemandConfig
     asset_risk_weighting: AssetRiskWeightingConfig | None = None
+    weights: WeightConfig = pydantic.Field(default_factory=WeightConfig)
     constants: ConstantConfig
