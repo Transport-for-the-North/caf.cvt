@@ -7,9 +7,12 @@ import pathlib
 import caf.toolkit as ctk
 
 from caf import cvt
+from caf.cvt import cleaning_funcs
 from caf.cvt.asset_risk_weighting import run_asset_risk_weighting
-from caf.cvt.data_cleaning import data_cleaning
+from caf.cvt.demand_cleaning import clean_demand
 from caf.cvt.functional_rules import apply_functional_rules
+from caf.cvt.hazard_cleaning import clean_hazards
+from caf.cvt.infrastructure_cleaning import clean_infrastructure
 from caf.cvt.layering import layering
 from caf.cvt.model_config import Config
 
@@ -22,14 +25,17 @@ def _run_model(args: argparse.Namespace) -> None:
     details = ctk.log_helpers.ToolDetails(__package__, cvt.__version__, full_version=None)
 
     with ctk.LogHelper(__package__, details, log_file=config.paths.log / "cvt.log"):
+        boundary = cleaning_funcs.get_boundary(config)
         if config.switches.run_data_cleaning:
             LOG.info("Starting data cleaning step...")
-            data_cleaning(config)
+            clean_infrastructure(config, boundary)
+            clean_hazards(config, boundary)
+            clean_demand(config, boundary)
             LOG.info("Finished data cleaning step.")
 
         if config.switches.run_functional_rules:
             LOG.info("Starting functional rules step...")
-            apply_functional_rules(config)
+            apply_functional_rules(config, boundary)
             LOG.info("Finished functional rules step.")
 
         if config.switches.run_layering:

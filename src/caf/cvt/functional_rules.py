@@ -19,7 +19,7 @@ from pyogrio.errors import DataLayerError, DataSourceError
 from rasterio.features import rasterize
 from shapely.geometry import Polygon, box
 
-from caf.cvt import data_cleaning, model_config
+from caf.cvt import cleaning_funcs, model_config
 from caf.cvt.definitions import (
     BNG_CRS,
     FLOODING_TILE_SIZE_M,
@@ -434,7 +434,7 @@ def _overlay_and_clean(
         hazard_overlay = hazard_overlay[
             (geom_types.isin(["Polygon", "MultiPolygon", "GeometryCollection"]))
         ]
-        hazard_overlay = data_cleaning.validate_geometries(hazard_overlay)
+        hazard_overlay = cleaning_funcs.validate_geometries(hazard_overlay)
         hazard_overlay = hazard_overlay.reset_index(drop=True)
         LOG.debug(
             "Overlay dropped %s points and %s lines, and kept %s area geometries",
@@ -444,7 +444,7 @@ def _overlay_and_clean(
         )
 
         # Standardise to polygons
-        hazard_overlay = data_cleaning.explode_to_polygons(hazard_overlay)
+        hazard_overlay = cleaning_funcs.explode_to_polygons(hazard_overlay)
 
         # Ensure correct CRS
         hazard_overlay = hazard_overlay.set_crs(target_crs, allow_override=True)
@@ -662,7 +662,7 @@ def _rasterize_flooding_layer(
 # FUNCTIONAL RULES
 
 
-def apply_functional_rules(config: model_config.Config) -> None:
+def apply_functional_rules(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """
     Apply functional rules to hazard datasets and spatially combine to generate risk indices.
 
@@ -674,8 +674,9 @@ def apply_functional_rules(config: model_config.Config) -> None:
     ----------
     config : Config
         Main config for the model, containing paths and settings.
+    boundary : GeoDataFrame
+        Boundary of the study area used for spatial operations.
     """
-    boundary = data_cleaning.get_boundary(config)
     if config.switches.extreme_weather:
         _extreme_weather_index(config)
     if config.switches.flooding:
@@ -787,7 +788,7 @@ def _extreme_weather_index(config: model_config.Config) -> None:
         feature_range,
     )
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         extreme_weather_risk,
         config.paths.extreme_weather_risk_model_interim_output,
     )
@@ -1622,7 +1623,7 @@ def _flooding_index_vector(
         feature_range,
     )
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         flooding_risk,
         config.paths.flooding_risk_vector_model_interim_output,
     )
@@ -1660,7 +1661,7 @@ def _tile_polygon_flooding_overlay(
         if tile_overlay is None:
             continue
 
-        data_cleaning.write_to_file(
+        cleaning_funcs.write_to_file(
             tile_overlay,
             config.paths.flooding_risk_vector_overlay_model_interim_output,
             mode="w" if first_write else "a",
@@ -1685,7 +1686,7 @@ def _create_flooding_tiles(
     tiles = tiles[tiles.geometry.intersects(boundary.geometry.iloc[0])].copy()
     tiles = tiles.reset_index(drop=True)
     tiles["tile_id"] = range(len(tiles))
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         tiles, config.paths.flooding_tile_grid_model_interim_output(tile_size_m)
     )
     return tiles
@@ -1805,7 +1806,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
         feature_range,
     )
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         ground_stability,
         config.paths.ground_stability_risk_model_interim_output,
     )
@@ -1833,7 +1834,7 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
             # Create an empty file for the coastal erosion risk index
             if scenario == Scenarios.CURRENT:
                 continue
-            data_cleaning.write_to_file(
+            cleaning_funcs.write_to_file(
                 gpd.GeoDataFrame(
                     columns=[
                         f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
@@ -1900,7 +1901,7 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
         feature_range,
     )
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         coastal_erosion_risk,
         config.paths.coastal_erosion_risk_model_interim_output,
     )

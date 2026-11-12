@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from rasterstats import zonal_stats
 
-from caf.cvt import data_cleaning, functional_rules, model_config, risk_summary
+from caf.cvt import cleaning_funcs, functional_rules, model_config, risk_summary
 from caf.cvt.definitions import (
     BNG_CRS,
     GEOMETRY_COL,
@@ -250,8 +250,8 @@ def _split_csv_shapefile(
     spatial_gdf = spatial_gdf.drop_duplicates()
 
     # Save to file
-    data_cleaning.write_to_file(spatial_gdf, out_path_no_suffix.with_suffix(".shp"))
-    data_cleaning.write_to_file(attribute_df, out_path_no_suffix.with_suffix(".csv"))
+    cleaning_funcs.write_to_file(spatial_gdf, out_path_no_suffix.with_suffix(".shp"))
+    cleaning_funcs.write_to_file(attribute_df, out_path_no_suffix.with_suffix(".csv"))
 
 
 def _audit_infrastructure_risk(
@@ -549,7 +549,7 @@ def _os_open_road_risk(
 
     output_filename = "os_road_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         os_road_risk,
         config.paths.os_road_model_output / f"{output_filename}.gpkg",
     )
@@ -622,7 +622,7 @@ def _noham_road_risk(
 
     output_filename = "noham_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         noham_risk,
         config.paths.noham_model_output / f"{output_filename}.gpkg",
     )
@@ -764,7 +764,7 @@ def _model_road_risk(
 
     output_filename = "model_road_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         model_road_risk,
         config.paths.model_roads_model_output / f"{output_filename}.gpkg",
     )
@@ -908,7 +908,7 @@ def _passenger_rail_risk(
 
     output_filename = "passenger_rail_network_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         passenger_rail_network_risk,
         config.paths.passenger_rail_model_output / f"{output_filename}.gpkg",
     )
@@ -992,7 +992,7 @@ def _freight_rail_risk(
 
     output_filename = "freight_rail_network_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         freight_rail_network_risk,
         config.paths.freight_rail_model_output / f"{output_filename}.gpkg",
     )
@@ -1143,7 +1143,7 @@ def _train_stations_risk(
 
     output_filename = "train_stations_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         train_stations_risk,
         config.paths.train_stations_model_output / f"{output_filename}.gpkg",
     )
@@ -1194,7 +1194,7 @@ def _airports_risk(
 
     output_filename = "airports_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         airports_risk,
         config.paths.airports_model_output / f"{output_filename}.gpkg",
     )
@@ -1244,7 +1244,7 @@ def _bus_coach_stations_risk(
 
     output_filename = "bus_coach_stations_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         bus_coach_stations_risk,
         config.paths.bus_coach_stations_model_output / f"{output_filename}.gpkg",
     )
@@ -1292,7 +1292,7 @@ def _bus_stops_risk(
 
     output_filename = "bus_stops_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         bus_stops_risk,
         config.paths.bus_stops_model_output / f"{output_filename}.gpkg",
     )
@@ -1343,7 +1343,7 @@ def _tram_stations_risk(
 
     output_filename = "tram_stations_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         tram_stations_risk,
         config.paths.tram_stations_model_output / f"{output_filename}.gpkg",
     )
@@ -1397,7 +1397,7 @@ def _rapid_transport_stations_risk(
 
     output_filename = "rapid_transport_stations_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         rapid_transport_stations_risk,
         config.paths.rapid_transport_stations_model_output / f"{output_filename}.gpkg",
     )
@@ -1447,7 +1447,7 @@ def _ferry_terminals_risk(
 
     output_filename = "ferry_terminals_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         ferry_terminals_risk,
         config.paths.ferry_terminals_model_output / f"{output_filename}.gpkg",
     )
@@ -1506,7 +1506,7 @@ def _national_cycle_network_risk(
 
     output_filename = "national_cycle_network_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         ncn_risk,
         config.paths.national_cycle_network_model_output / f"{output_filename}.gpkg",
     )
@@ -1575,7 +1575,7 @@ def _tram_network_risk(
 
     output_filename = "tram_network_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         tram_risk,
         config.paths.tram_network_model_output / f"{output_filename}.gpkg",
     )
@@ -1647,7 +1647,7 @@ def _rapid_transport_network_risk(
 
     output_filename = "rapid_transport_network_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         rapid_transport_risk,
         config.paths.rapid_transport_network_model_output / f"{output_filename}.gpkg",
     )
@@ -1730,7 +1730,7 @@ def _nexus_metro_links_risk(
 
     output_filename = "nexus_metro_links_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         metro_links_risk,
         config.paths.nexus_metro_links_model_output / f"{output_filename}.gpkg",
     )
@@ -1816,7 +1816,7 @@ def _nexus_metro_stations_risk(
 
     output_filename = "nexus_metro_stations_risk"
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         metro_stations_risk,
         config.paths.nexus_metro_stations_model_output / f"{output_filename}.gpkg",
     )

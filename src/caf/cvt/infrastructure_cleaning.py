@@ -8,7 +8,7 @@ import zipfile
 import geopandas as gpd
 import pandas as pd
 
-from caf.cvt import data_cleaning, definitions, model_config
+from caf.cvt import cleaning_funcs, definitions, model_config
 
 # LOGGING
 
@@ -116,8 +116,8 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
     )
     os_road = os_road.rename(columns={definitions.OSRoadCols.ID: definitions.ID_COL})
     os_road = os_road.replace(0, definitions.NA_COL)
-    os_road = data_cleaning.validate_geometries(os_road)
-    os_road = data_cleaning.clip_to_boundary(os_road, boundary)
+    os_road = cleaning_funcs.validate_geometries(os_road)
+    os_road = cleaning_funcs.clip_to_boundary(os_road, boundary)
     filter_removed = len_before_filter - len(os_road)
     LOG.debug(
         "OS roads filtered - %s of %s (%.1f percent) rows removed",
@@ -125,7 +125,7 @@ def _clean_os_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) -> 
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         os_road,
         config.paths.os_road_model_input,
     )
@@ -271,8 +271,8 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     noham_network_clean = noham_network_clean.rename(
         columns={definitions.NoHAMRoadCols.LINK_ID: definitions.ID_COL}
     )
-    noham_network_clean = data_cleaning.validate_geometries(noham_network_clean)
-    noham_network_clipped = data_cleaning.clip_to_boundary(noham_network_clean, boundary)
+    noham_network_clean = cleaning_funcs.validate_geometries(noham_network_clean)
+    noham_network_clipped = cleaning_funcs.clip_to_boundary(noham_network_clean, boundary)
     noham_network_clipped = noham_network_clipped.reset_index(drop=True)
     filter_removed = len_before_filter - len(noham_network_clipped)
     LOG.debug(
@@ -281,7 +281,7 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         noham_network_clipped,
         config.paths.noham_road_model_input,
     )
@@ -349,7 +349,7 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     )
 
     len_before_filter = len(model_roads)
-    model_roads = data_cleaning.clip_to_boundary(model_roads, boundary)
+    model_roads = cleaning_funcs.clip_to_boundary(model_roads, boundary)
     LOG.debug(
         "Model roads filtered - %s of %s (%.1f percent) rows removed",
         len_before_filter - len(model_roads),
@@ -357,7 +357,7 @@ def _clean_model_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         ((len_before_filter - len(model_roads)) / len_before_filter) * 100,
     )
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         model_roads,
         config.paths.model_roads_model_input,
     )
@@ -423,8 +423,8 @@ def _get_rail_links(
         definitions.OSRailCols.get_descriptive_cols()
     ].replace(0, definitions.NA_COL)
     rail_links = rail_links.rename(columns={definitions.OSRailCols.ID: definitions.ID_COL})
-    rail_links = data_cleaning.validate_geometries(rail_links)
-    rail_links = data_cleaning.clip_to_boundary(rail_links, boundary)
+    rail_links = cleaning_funcs.validate_geometries(rail_links)
+    rail_links = cleaning_funcs.clip_to_boundary(rail_links, boundary)
     filter_removed = len_before_filter - len(rail_links)
     LOG.debug(
         "OS Transport Network Rail links filtered - %s of %s (%.1f percent) rows removed",
@@ -463,7 +463,7 @@ def _clean_passenger_rail(config: model_config.Config, rail_links: gpd.GeoDataFr
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         passenger_rail,
         config.paths.passenger_rail_model_input,
     )
@@ -487,7 +487,7 @@ def _clean_freight_rail(config: model_config.Config, rail_links: gpd.GeoDataFram
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         freight_rail,
         config.paths.freight_rail_model_input,
     )
@@ -589,7 +589,7 @@ def _clean_mastermap_sites(
     transport_sites[definitions.MasterMapSiteCols.get_descriptive_cols()] = transport_sites[
         definitions.MasterMapSiteCols.get_descriptive_cols()
     ].fillna(definitions.NA_COL)
-    transport_sites = data_cleaning.validate_geometries(transport_sites)
+    transport_sites = cleaning_funcs.validate_geometries(transport_sites)
     filter_removed = len_before_filter - len(transport_sites)
     LOG.debug(
         "OS MasterMap sites filtered - %s of %s (%.1f percent) rows removed",
@@ -629,7 +629,7 @@ def _clean_airports(config: model_config.Config, transport_sites: gpd.GeoDataFra
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(airports, config.paths.airports_model_input)
+    cleaning_funcs.write_to_file(airports, config.paths.airports_model_input)
 
 
 def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -661,11 +661,11 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         ]
     )
     bus_stops = bus_stops.rename(columns=definitions.NaPTANCols.rename_map())
-    bus_stops = data_cleaning.clip_to_boundary(bus_stops, boundary)
+    bus_stops = cleaning_funcs.clip_to_boundary(bus_stops, boundary)
     if bus_stops.empty:
         LOG.warning(
             "No bus stops in source data for %s",
-            data_cleaning.get_boundary_name(config),
+            cleaning_funcs.get_boundary_name(config),
         )
     filter_removed = len_before_filter - len(bus_stops)
     LOG.debug(
@@ -674,7 +674,7 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(bus_stops, config.paths.bus_stops_model_input)
+    cleaning_funcs.write_to_file(bus_stops, config.paths.bus_stops_model_input)
 
 
 def _clean_train_stations(
@@ -716,7 +716,7 @@ def _clean_train_stations(
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         train_stations,
         config.paths.train_stations_model_input,
     )
@@ -751,7 +751,7 @@ def _clean_tram_stations(
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         tram_stations,
         config.paths.tram_stations_model_input,
     )
@@ -786,7 +786,7 @@ def _clean_rapid_transport_stations(
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         rapid_transport_stations,
         config.paths.rapid_transport_stations_model_input,
     )
@@ -821,7 +821,7 @@ def _clean_ferry_terminals(
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         ferry_terminals,
         config.paths.ferry_terminals_model_input,
     )
@@ -861,7 +861,7 @@ def _clean_bus_coach_stations(
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         bus_coach_stations,
         config.paths.bus_coach_stations_model_input,
     )
@@ -893,7 +893,7 @@ def _clean_tram_network(config: model_config.Config, rail_links: gpd.GeoDataFram
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(tram_links, config.paths.tram_network_model_input)
+    cleaning_funcs.write_to_file(tram_links, config.paths.tram_network_model_input)
 
 
 def _clean_rapid_transport_network(
@@ -925,7 +925,7 @@ def _clean_rapid_transport_network(
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         rapid_transport_links,
         config.paths.rapid_transport_network_model_input,
     )
@@ -951,8 +951,8 @@ def _clean_national_cycle_network(
     ]
     ncn[ncn_cols_replace] = ncn[ncn_cols_replace].replace(0, definitions.NA_COL)
     ncn = ncn.rename(columns=definitions.NationalCycleNetworkCols.rename_map())
-    ncn = data_cleaning.validate_geometries(ncn)
-    ncn = data_cleaning.clip_to_boundary(ncn, boundary)
+    ncn = cleaning_funcs.validate_geometries(ncn)
+    ncn = cleaning_funcs.clip_to_boundary(ncn, boundary)
     filter_removed = len_before_filter - len(ncn)
     LOG.debug(
         "National Cycle Network filtered - %s of %s (%.1f percent) rows removed",
@@ -960,7 +960,7 @@ def _clean_national_cycle_network(
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         ncn,
         config.paths.national_cycle_network_model_input,
     )

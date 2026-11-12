@@ -12,7 +12,7 @@ import geopandas as gpd
 import pandas as pd
 import xarray as xr
 
-from caf.cvt import data_cleaning, definitions, model_config
+from caf.cvt import cleaning_funcs, definitions, model_config
 
 # LOGGING
 
@@ -110,7 +110,7 @@ def _clean_hazard_grid(
     )
     hazard_grid["grid_id"] = range(1, len(hazard_grid) + 1)
     len_before_filter = len(hazard_grid)
-    hazard_grid = data_cleaning.clip_to_boundary(hazard_grid, boundary)
+    hazard_grid = cleaning_funcs.clip_to_boundary(hazard_grid, boundary)
     filter_removed = len_before_filter - len(hazard_grid)
     LOG.debug(
         "Extreme weather grid filtered - %s of %s (%.1f percent) rows removed",
@@ -118,8 +118,8 @@ def _clean_hazard_grid(
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    hazard_grid = data_cleaning.explode_to_polygons(hazard_grid, track_part=True)
-    data_cleaning.write_to_file(
+    hazard_grid = cleaning_funcs.explode_to_polygons(hazard_grid, track_part=True)
+    cleaning_funcs.write_to_file(
         hazard_grid,
         config.paths.hazard_grid_model_input,
     )
@@ -165,7 +165,7 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(temp_max, config.paths.summer_max_temperature_model_input)
+    cleaning_funcs.write_to_file(temp_max, config.paths.summer_max_temperature_model_input)
 
 
 def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -207,7 +207,7 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         temp_min,
         config.paths.winter_min_temperature_model_input,
     )
@@ -259,7 +259,7 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(precip_sum, config.paths.summer_precipitation_model_input)
+    cleaning_funcs.write_to_file(precip_sum, config.paths.summer_precipitation_model_input)
 
 
 def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -308,7 +308,7 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(precip_win, config.paths.winter_precipitation_model_input)
+    cleaning_funcs.write_to_file(precip_win, config.paths.winter_precipitation_model_input)
 
 
 def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -319,7 +319,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         mask=boundary,
     )
     len_before_filter = len(rain_days)
-    rain_days = data_cleaning.clip_to_boundary(rain_days, boundary)
+    rain_days = cleaning_funcs.clip_to_boundary(rain_days, boundary)
     rain_days = rain_days.rename(
         columns={
             "Rain10mmDays": (
@@ -334,8 +334,8 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    rain_days = data_cleaning.explode_to_polygons(rain_days)
-    data_cleaning.write_to_file(rain_days, config.paths.rain_days_model_input)
+    rain_days = cleaning_funcs.explode_to_polygons(rain_days)
+    cleaning_funcs.write_to_file(rain_days, config.paths.rain_days_model_input)
 
 
 def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -357,7 +357,7 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
         }
     )
     len_before_filter = len(drought_index)
-    drought_index = data_cleaning.clip_to_boundary(drought_index, boundary)
+    drought_index = cleaning_funcs.clip_to_boundary(drought_index, boundary)
     filter_removed = len_before_filter - len(drought_index)
     LOG.debug(
         "Drought severity index filtered - %s of %s (%.1f percent) rows removed",
@@ -365,8 +365,10 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    drought_index = data_cleaning.explode_to_polygons(drought_index)
-    data_cleaning.write_to_file(drought_index, config.paths.drought_severity_index_model_input)
+    drought_index = cleaning_funcs.explode_to_polygons(drought_index)
+    cleaning_funcs.write_to_file(
+        drought_index, config.paths.drought_severity_index_model_input
+    )
 
 
 def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -397,7 +399,7 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(hot_days, config.paths.hot_summer_days_model_input)
+    cleaning_funcs.write_to_file(hot_days, config.paths.hot_summer_days_model_input)
 
 
 def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -428,7 +430,7 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         extr_days,
         config.paths.extreme_summer_days_model_input,
     )
@@ -462,7 +464,7 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(frost_days, config.paths.frost_days_model_input)
+    cleaning_funcs.write_to_file(frost_days, config.paths.frost_days_model_input)
 
 
 def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
@@ -493,7 +495,7 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    data_cleaning.write_to_file(ice_days, config.paths.icing_days_model_input)
+    cleaning_funcs.write_to_file(ice_days, config.paths.icing_days_model_input)
 
 
 def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
@@ -524,7 +526,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     ).fillna({col: 0 for col in metric_cols})
 
     windspd_combined[definitions.GEOMETRY_COL] = [
-        data_cleaning.convert_point_to_grid(x, y, 2500)
+        cleaning_funcs.convert_point_to_grid(x, y, 2500)
         for x, y in zip(
             windspd_combined["projection_x_coordinate"],
             windspd_combined["projection_y_coordinate"],
@@ -535,7 +537,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
         windspd_combined, geometry=definitions.GEOMETRY_COL, crs=definitions.BNG_CRS
     )
     windspd_combined = windspd_combined[[*metric_cols, definitions.GEOMETRY_COL]]
-    windspd_combined = data_cleaning.clip_to_boundary(windspd_combined, boundary)
+    windspd_combined = cleaning_funcs.clip_to_boundary(windspd_combined, boundary)
     filter_removed = len_before_filter - len(windspd_combined)
     LOG.debug(
         "Wind speed projections filtered - %s of %s (%.1f percent) rows removed",
@@ -543,8 +545,8 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    windspd_combined = data_cleaning.explode_to_polygons(windspd_combined)
-    data_cleaning.write_to_file(windspd_combined, config.paths.wind_speed_model_input)
+    windspd_combined = cleaning_funcs.explode_to_polygons(windspd_combined)
+    cleaning_funcs.write_to_file(windspd_combined, config.paths.wind_speed_model_input)
 
 
 def _read_wind_speed_reduce(xr_path: pathlib.Path, scenario: str) -> tuple[pd.DataFrame, int]:
@@ -630,7 +632,7 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
     wind_driven_rain = gpd.GeoDataFrame(
         wind_driven_rain, geometry=definitions.GEOMETRY_COL, crs="EPSG:3857"
     )
-    wind_driven_rain = data_cleaning.clip_to_boundary(wind_driven_rain, boundary)
+    wind_driven_rain = cleaning_funcs.clip_to_boundary(wind_driven_rain, boundary)
     filter_removed = len_before_filter - len(wind_driven_rain)
     LOG.debug(
         "Wind driven rain index filtered - %s of %s (%.1f percent) rows removed",
@@ -638,8 +640,8 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
         len_before_filter,
         (filter_removed / len_before_filter) * 100,
     )
-    wind_driven_rain = data_cleaning.explode_to_polygons(wind_driven_rain)
-    data_cleaning.write_to_file(
+    wind_driven_rain = cleaning_funcs.explode_to_polygons(wind_driven_rain)
+    cleaning_funcs.write_to_file(
         wind_driven_rain,
         config.paths.wind_driven_rain_model_input,
     )
@@ -668,7 +670,7 @@ def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     Risk of Flooding from Rivers and Sea (RoFRS) and
     Risk of Flooding from Surface Water (RoFSW) data.
     """
-    bng_codes = data_cleaning.get_bng_codes(boundary)
+    bng_codes = cleaning_funcs.get_bng_codes(boundary)
     all_empty = True
     for flooding_type in [
         definitions.FloodingTypes.RIVERS_SEA,
@@ -711,7 +713,7 @@ def _clean_groundwater(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     groundwater_flooding = groundwater_flooding.rename(
         columns={"CLASS": "groundwater_flooding_risk"}
     )
-    groundwater_flooding = data_cleaning.clip_to_boundary(groundwater_flooding, boundary)
+    groundwater_flooding = cleaning_funcs.clip_to_boundary(groundwater_flooding, boundary)
     if groundwater_flooding.empty:
         LOG.warning(
             "Groundwater flooding data unavailable for %s.",
@@ -722,9 +724,9 @@ def _clean_groundwater(config: model_config.Config, boundary: gpd.GeoDataFrame) 
             else "model area.",
         )
         return True
-    groundwater_flooding = data_cleaning.explode_to_polygons(groundwater_flooding)
+    groundwater_flooding = cleaning_funcs.explode_to_polygons(groundwater_flooding)
     groundwater_flooding = groundwater_flooding.to_crs(definitions.BNG_CRS)
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         groundwater_flooding,
         output_path=config.paths.groundwater_flooding_model_input,
     )
@@ -763,11 +765,11 @@ def _clean_flooding_layer(
 
         all_empty = False
 
-        flooding_data = data_cleaning.extract_poly_from_geomcollection(flooding_data)
+        flooding_data = cleaning_funcs.extract_poly_from_geomcollection(flooding_data)
 
         flooding_data = flooding_data.rename(columns={"Risk_band": rename_risk_col})
 
-        data_cleaning.write_to_file(
+        cleaning_funcs.write_to_file(
             flooding_data,
             out_path,
             mode="w" if first_write else "a",
@@ -907,7 +909,7 @@ def _clean_premium_geosure(config: model_config.Config, boundary: gpd.GeoDataFra
         geosure_data_clean[f"{geohazard}_{definitions.Scenarios.FORECAST}"] = (
             geosure_data_clean[f"{geohazard}_{definitions.Scenarios.CURRENT}"]
         )
-        geosure_layers[geohazard] = data_cleaning.clip_to_boundary(
+        geosure_layers[geohazard] = cleaning_funcs.clip_to_boundary(
             geosure_data_clean, boundary
         )
         filter_removed = len_before_filter - len(geosure_layers[geohazard])
@@ -918,11 +920,11 @@ def _clean_premium_geosure(config: model_config.Config, boundary: gpd.GeoDataFra
             len_before_filter,
             (filter_removed / len_before_filter) * 100,
         )
-        geosure_layers[geohazard] = data_cleaning.explode_to_polygons(
+        geosure_layers[geohazard] = cleaning_funcs.explode_to_polygons(
             geosure_layers[geohazard]
         )
         geosure_layers[geohazard] = geosure_layers[geohazard].to_crs(definitions.BNG_CRS)
-        data_cleaning.write_to_file(
+        cleaning_funcs.write_to_file(
             geosure_layers[geohazard],
             config.paths.geosure_model_input(geohazard),
         )
@@ -1006,7 +1008,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
         len_before_filter = len(geosure_data)
         geosure_data_clean = geosure_data.rename(columns={"CLASS": code})
         geosure_data_clean[code] = pd.to_numeric(geosure_data_clean[code], errors="coerce")
-        geosure_layers[code] = data_cleaning.clip_to_boundary(geosure_data_clean, boundary)
+        geosure_layers[code] = cleaning_funcs.clip_to_boundary(geosure_data_clean, boundary)
         LOG.debug(
             "GeoSure %s filtered - %s of %s (%.1f percent) rows removed",
             code.replace("_", " ").title(),
@@ -1014,12 +1016,12 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
             len_before_filter,
             ((len_before_filter - len(geosure_layers[code])) / len_before_filter) * 100,
         )
-        geosure_layers[code] = data_cleaning.explode_to_polygons(geosure_layers[code])
+        geosure_layers[code] = cleaning_funcs.explode_to_polygons(geosure_layers[code])
 
     if all_empty:
         LOG.warning(
             "Geosure data is unavailable for %s. Switching ground stability hazard off.",
-            data_cleaning.get_boundary_name(config),
+            cleaning_funcs.get_boundary_name(config),
         )
         return True
 
@@ -1032,7 +1034,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
         layer_subset = layer[
             [code, definitions.GEOMETRY_COL]
         ]  # Select only the relevant class and geometry columns
-        matched = data_cleaning.nearest_centroids(geosure, layer_subset)
+        matched = cleaning_funcs.nearest_centroids(geosure, layer_subset)
         geosure[code] = matched[code]  # Add the matched CLASS column to the base dataframe
 
     geosure_risk_cols = [col for col in geosure.columns if "_risk" in col]
@@ -1041,7 +1043,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
         geosure = geosure.rename(columns={col: f"{col}_{definitions.Scenarios.CURRENT}"})
     geosure_risk_cols = [col for col in geosure.columns if "_risk" in col]
     geosure = geosure[[*geosure_risk_cols, definitions.GEOMETRY_COL]]
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         geosure,
         config.paths.geosure_model_input(None),
     )
@@ -1059,7 +1061,7 @@ def _clean_coastal_erosion(config: model_config.Config, boundary: gpd.GeoDataFra
         LOG.warning(
             "Coastal erosion data is unavailable for %s. "
             "Switching coastal erosion hazard off.",
-            data_cleaning.get_boundary_name(config),
+            cleaning_funcs.get_boundary_name(config),
         )
         config.switches.coastal_erosion = False
     LOG.info("Finished cleaning coastal erosion data.")
@@ -1086,7 +1088,7 @@ def _clean_national_coastal_erosion_risk_mapping(
             continue
         all_empty = False
         len_before_filter = len(erosion_data)
-        erosion_data = data_cleaning.clip_to_boundary(erosion_data, boundary)
+        erosion_data = cleaning_funcs.clip_to_boundary(erosion_data, boundary)
         filter_removed = len_before_filter - len(erosion_data)
         LOG.debug(
             "NCERM %s filtered - %s of %s (%.1f percent) rows removed",
@@ -1095,9 +1097,9 @@ def _clean_national_coastal_erosion_risk_mapping(
             len_before_filter,
             (filter_removed / len_before_filter) * 100,
         )
-        erosion_data = data_cleaning.explode_to_polygons(erosion_data)
+        erosion_data = cleaning_funcs.explode_to_polygons(erosion_data)
 
-        data_cleaning.write_to_file(
+        cleaning_funcs.write_to_file(
             erosion_data,
             config.paths.national_coastal_erosion_risk_mapping_model_input(year),
         )

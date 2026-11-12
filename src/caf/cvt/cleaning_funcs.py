@@ -1,4 +1,4 @@
-"""Cleans raw input data to prepare it for input into the model."""
+"""General cleaning functions used throughout infrastructure, hazards and demand cleaning."""
 
 ### LOAD LIBRARIES
 import logging
@@ -11,9 +11,6 @@ import shapely
 
 from caf.cvt import (
     definitions,
-    demand_cleaning,
-    hazard_cleaning,
-    infrastructure_cleaning,
     model_config,
 )
 
@@ -449,24 +446,3 @@ def get_boundary_name(config: model_config.Config) -> str:
     if config.parameters.ca:
         return config.parameters.ca
     return "model area"
-
-
-# DATA CLEANING
-
-
-def data_cleaning(config: model_config.Config) -> None:
-    """
-    Clean all input data for CVT.
-
-    Clean infrastructure, hazard, and impact data according to the configurations provided.
-
-    Parameters
-    ----------
-    config : Config
-        Main config for the model, containing paths and settings.
-    """
-    boundary = get_boundary(config)
-
-    infrastructure_cleaning.clean_infrastructure(config, boundary)
-    hazard_cleaning.clean_hazards(config, boundary)
-    demand_cleaning.clean_demand(config, boundary)

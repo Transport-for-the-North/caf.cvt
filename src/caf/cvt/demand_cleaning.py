@@ -10,7 +10,7 @@ import geopandas as gpd
 import pandas as pd
 import py7zr
 
-from caf.cvt import data_cleaning, definitions, model_config
+from caf.cvt import cleaning_funcs, definitions, model_config
 
 # LOGGING
 
@@ -67,7 +67,7 @@ def _clean_freight_demand(config: model_config.Config, boundary: gpd.GeoDataFram
         config.paths.freight_rail_model_input,
     )
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         os_freight_network_demand,
         config.paths.freight_demand_model_input,
     )
@@ -85,7 +85,7 @@ def _read_freight_demand(path: pathlib.Path, boundary: gpd.GeoDataFrame) -> gpd.
         }
     )
     len_before_filter = len(freight_network_demand)
-    freight_network_demand = data_cleaning.clip_to_boundary(freight_network_demand, boundary)
+    freight_network_demand = cleaning_funcs.clip_to_boundary(freight_network_demand, boundary)
     filter_removed = len_before_filter - len(freight_network_demand)
     LOG.debug(
         "Freight demand filtered - %s of %s (%.1f percent) rows removed",
@@ -190,7 +190,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
         noham_net_flows, geometry=definitions.GEOMETRY_COL, crs=noham_network.crs
     )
 
-    data_cleaning.write_to_file(noham_net_flows, config.paths.noham_demand_model_input)
+    cleaning_funcs.write_to_file(noham_net_flows, config.paths.noham_demand_model_input)
 
 
 def _read_noham_h5(
@@ -467,12 +467,12 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
     )
 
     current_flows.columns = [
-        f"{data_cleaning.normalise_user_class_label(uc)}_demand_{definitions.Scenarios.CURRENT}"
+        f"{cleaning_funcs.normalise_user_class_label(uc)}_demand_{definitions.Scenarios.CURRENT}"
         for uc in current_flows.columns
     ]
 
     forecast_flows.columns = [
-        f"{data_cleaning.normalise_user_class_label(uc)}_demand_{definitions.Scenarios.FORECAST}"
+        f"{cleaning_funcs.normalise_user_class_label(uc)}_demand_{definitions.Scenarios.FORECAST}"
         for uc in forecast_flows.columns
     ]
 
@@ -526,7 +526,7 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         model_road_uc_link_flows, geometry=definitions.GEOMETRY_COL, crs=definitions.BNG_CRS
     )
 
-    data_cleaning.write_to_file(
+    cleaning_funcs.write_to_file(
         model_road_uc_link_flows,
         config.paths.model_roads_demand_model_input,
     )
