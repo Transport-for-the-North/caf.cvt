@@ -30,7 +30,6 @@ from caf.cvt.definitions import (
     OSRoadStructure,
     RiskColumn,
     Scenarios,
-    VulnerabilityModifier,
 )
 
 LOG = logging.getLogger(__name__)
@@ -290,7 +289,7 @@ def _get_impact_weights(hazards: list[str]) -> dict[str, float]:
 
 
 def _get_main_hazard_modifiers(
-    vulnerabilities: dict[RiskColumn, VulnerabilityModifier],
+    vulnerabilities: dict[RiskColumn, float],
     config: model_config.Config,
 ) -> dict[MainHazardRiskCols, float]:
     """Get main hazard modifiers from sub-hazard modifiers."""
@@ -327,8 +326,16 @@ def _apply_asset_vulnerability(
     """Apply asset vulnerability modifiers to risk data."""
     for structure in structure_enum:
         mask = risk_data[structure_col] == structure
-        vulnerabilities = structure.get_vulnerability()
-        for hazard, modifier in structure.get_vulnerability().items():
+        if structure_enum is OSRoadStructure:
+            vulnerabilities = config.structure_vulnerability.road_for_structure(
+                cast("OSRoadStructure", structure)
+            )
+        else:
+            vulnerabilities = config.structure_vulnerability.rail_for_structure(
+                cast("OSRailStructure", structure)
+            )
+
+        for hazard, modifier in vulnerabilities.items():
             risk_cols = [col for col in risk_data.columns if hazard in col]
             for risk_col in risk_cols:
                 dtype = risk_data[risk_col].dtype

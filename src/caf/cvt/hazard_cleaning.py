@@ -4,6 +4,7 @@
 import gc
 import logging
 import pathlib
+import sys
 import warnings
 
 import fiona
@@ -63,6 +64,15 @@ def clean_hazards(config: model_config.Config, boundary: gpd.GeoDataFrame) -> No
         _clean_ground_stability(config, boundary)
     if config.switches.coastal_erosion:
         _clean_coastal_erosion(config, boundary)
+
+    if (
+        not config.switches.extreme_weather
+        and not config.switches.flooding
+        and not config.switches.ground_stability
+        and not config.switches.coastal_erosion
+    ):
+        LOG.warning("All hazard data is empty. Ending model running.")
+        sys.exit()
     LOG.info("Finished cleaning hazard data.")
 
 
@@ -629,13 +639,17 @@ def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFr
 def _clean_flooding(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean flooding data ready for analysis."""
     LOG.info("Cleaning flooding data...")
-    _clean_rofrs_rofsw(config, boundary)
+    is_empty = _clean_rofrs_rofsw(config, boundary)
     if config.hazards.flooding.groundwater is not None:
-        _clean_groundwater(config, boundary)
+        is_empty = _clean_groundwater(config, boundary)
+
+    if is_empty:
+        LOG.warning("Flooding data unavailable. Switching flooding off.")
+        config.switches.flooding = False
     LOG.info("Finished cleaning flooding data.")
 
 
-def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) -> bool:
     """Clean and write RoFRS and RoFSW data ready for analysis.
 
     Gets BNG codes for the boundary, then read and clean the
@@ -672,9 +686,10 @@ def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) 
             if config.parameters.ca is not None
             else "model area.",
         )
+    return all_empty
 
 
-def _clean_groundwater(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_groundwater(config: model_config.Config, boundary: gpd.GeoDataFrame) -> bool:
     """Clean groundwater flooding data ready for analysis."""
     LOG.info("Cleaning groundwater flooding data...")
     groundwater_flooding = gpd.read_file(
@@ -685,12 +700,23 @@ def _clean_groundwater(config: model_config.Config, boundary: gpd.GeoDataFrame) 
         columns={"CLASS": "groundwater_flooding_risk"}
     )
     groundwater_flooding = data_cleaning.clip_to_boundary(groundwater_flooding, boundary)
+    if groundwater_flooding.empty:
+        LOG.warning(
+            "Groundwater flooding data unavailable for %s.",
+            config.parameters.stb
+            if config.parameters.stb is not None
+            else config.parameters.ca
+            if config.parameters.ca is not None
+            else "model area.",
+        )
+        return True
     groundwater_flooding = data_cleaning.explode_to_polygons(groundwater_flooding)
     groundwater_flooding = groundwater_flooding.to_crs(definitions.BNG_CRS)
     data_cleaning.write_to_file(
         groundwater_flooding,
         output_path=config.paths.groundwater_flooding_model_input,
     )
+    return False
 
 
 def _clean_flooding_layer(
@@ -801,13 +827,17 @@ def _clean_ground_stability(config: model_config.Config, boundary: gpd.GeoDataFr
     """Clean ground stability data ready for analysis."""
     LOG.info("Cleaning ground stability data...")
     if config.switches.ground_stability_premium:
-        _clean_premium_geosure(config, boundary)
+        is_empty = _clean_premium_geosure(config, boundary)
     else:
-        _clean_open_geosure(config, boundary)
+        is_empty = _clean_open_geosure(config, boundary)
+
+    if is_empty:
+        LOG.warning("Switching ground stability hazard off.")
+        config.switches.ground_stability = False
     LOG.info("Finished cleaning ground stability data.")
 
 
-def _clean_premium_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+def _clean_premium_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> bool:
     """Clean premium GeoSure data then write to file."""
     geosure_layers = {
         definitions.GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: gpd.read_file(
@@ -848,12 +878,16 @@ def _clean_premium_geosure(config: model_config.Config, boundary: gpd.GeoDataFra
         ),
     }
 
+    all_empty = True
     for geohazard, geosure_data in geosure_layers.items():
         if geosure_data.empty:
-            raise ValueError(
-                f"GeoSure {geohazard} layer is empty after reading. "
-                f"Check the source file and boundary."
+            LOG.warning(
+                "GeoSure %s layer is empty after reading. Check the source file and boundary.",
+                geohazard.replace("_", " ").replace("risk", "").title(),
             )
+            continue
+
+        all_empty = False
         len_before_filter = len(geosure_data)
         geosure_data_clean = geosure_data.rename(
             columns={"CLASS": f"{geohazard}_{definitions.Scenarios.CURRENT}"}
@@ -881,8 +915,20 @@ def _clean_premium_geosure(config: model_config.Config, boundary: gpd.GeoDataFra
             config.paths.geosure_model_input(geohazard),
         )
 
+    if all_empty:
+        LOG.warning(
+            "Geosure data is unavailable for %s.Switching ground stability hazard off.",
+            config.parameters.stb
+            if config.parameters.stb is not None
+            else config.parameters.ca
+            if config.parameters.ca is not None
+            else "model area.",
+        )
+        return True
+    return False
 
-def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+
+def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> bool:
     """Clean GeoSureHexGrids data, merge by nearest centroids, then write to file."""
     geosure_layers = {
         definitions.GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: gpd.read_file(
@@ -935,25 +981,35 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
         ),
     }
 
+    all_empty = True
     for code, geosure_data in geosure_layers.items():
         if geosure_data.empty:
-            raise ValueError(
-                f"GeoSure {code} layer is empty after reading. "
-                f"Check the source file and boundary."
+            LOG.warning(
+                "GeoSure %s layer is empty after reading. Check the source file and boundary.",
+                code.replace("_", " ").replace("risk", "").title(),
             )
+            continue
+
+        all_empty = False
         len_before_filter = len(geosure_data)
         geosure_data_clean = geosure_data.rename(columns={"CLASS": code})
         geosure_data_clean[code] = pd.to_numeric(geosure_data_clean[code], errors="coerce")
         geosure_layers[code] = data_cleaning.clip_to_boundary(geosure_data_clean, boundary)
-        filter_removed = len_before_filter - len(geosure_layers[code])
         LOG.debug(
             "GeoSure %s filtered - %s of %s (%.1f percent) rows removed",
             code.replace("_", " ").title(),
-            filter_removed,
+            len_before_filter - len(geosure_layers[code]),
             len_before_filter,
-            (filter_removed / len_before_filter) * 100,
+            ((len_before_filter - len(geosure_layers[code])) / len_before_filter) * 100,
         )
         geosure_layers[code] = data_cleaning.explode_to_polygons(geosure_layers[code])
+
+    if all_empty:
+        LOG.warning(
+            "Geosure data is unavailable for %s. Switching ground stability hazard off.",
+            data_cleaning.get_boundary_name(config),
+        )
+        return True
 
     # Merge layers based on nearest centroids
     base_code = next(iter(geosure_layers.keys()))
@@ -977,6 +1033,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
         geosure,
         config.paths.geosure_model_input(None),
     )
+    return False
 
 
 ### COASTAL EROSION
@@ -985,17 +1042,25 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
 def _clean_coastal_erosion(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean coastal erosion data ready for analysis."""
     LOG.info("Cleaning coastal erosion data...")
-    _clean_national_coastal_erosion_risk_mapping(config, boundary)
+    is_empty = _clean_national_coastal_erosion_risk_mapping(config, boundary)
+    if is_empty:
+        LOG.warning(
+            "Coastal erosion data is unavailable for %s. "
+            "Switching coastal erosion hazard off.",
+            data_cleaning.get_boundary_name(config),
+        )
+        config.switches.coastal_erosion = False
     LOG.info("Finished cleaning coastal erosion data.")
 
 
 def _clean_national_coastal_erosion_risk_mapping(
     config: model_config.Config, boundary: gpd.GeoDataFrame
-) -> None:
+) -> bool:
     """Clean erosion data from the National Coastal Erosion Risk Mapping (NCERM).
 
     Reads NCERM coastal erosion data for 2055 and 2105, cleans and writes to file.
     """
+    all_empty = True
     for year in ["2055", "2105"]:
         erosion_data = gpd.read_file(
             f"zip://{config.paths.raw_input / config.hazards.coastal_erosion.zip_path}!"
@@ -1005,18 +1070,9 @@ def _clean_national_coastal_erosion_risk_mapping(
             columns=["smp_name"],
         )
         if erosion_data.empty:
-            LOG.debug("NCERM %s layer empty after filtering. Writing empty file.", year)
-            data_cleaning.write_to_file(
-                gpd.GeoDataFrame(
-                    columns=["smp_name", definitions.GEOMETRY_COL],
-                    geometry=definitions.GEOMETRY_COL,
-                    crs=definitions.BNG_CRS,
-                ),
-                config.paths.national_coastal_erosion_risk_mapping_model_input(year),
-            )
-            if year == "2055":
-                continue
-            return
+            LOG.debug("NCERM %s layer empty after filtering.", year)
+            continue
+        all_empty = False
         len_before_filter = len(erosion_data)
         erosion_data = data_cleaning.clip_to_boundary(erosion_data, boundary)
         filter_removed = len_before_filter - len(erosion_data)
@@ -1033,3 +1089,5 @@ def _clean_national_coastal_erosion_risk_mapping(
             erosion_data,
             config.paths.national_coastal_erosion_risk_mapping_model_input(year),
         )
+
+    return all_empty

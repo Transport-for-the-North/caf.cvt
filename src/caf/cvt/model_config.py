@@ -16,6 +16,8 @@ from caf.cvt.definitions import (
     FloodingTypes,
     GroundStabilityRiskCols,
     MainHazardRiskCols,
+    OSRailStructure,
+    OSRoadStructure,
     RiskColumn,
     Scenarios,
     StormCols,
@@ -945,6 +947,159 @@ class ParameterConfig(ctk.BaseConfig):
         return self
 
 
+class VulnerabilityModifierScoresConfig(ctk.BaseConfig):
+    """Modifier scores for vulnerability categories."""
+
+    very_low: float = 0.8
+    low: float = 0.9
+    neutral: float = 1.0
+    high: float = 1.1
+    very_high: float = 1.2
+
+    @pydantic.model_validator(mode="after")
+    def _validate_scores(self) -> Self:
+        values = [self.very_low, self.low, self.neutral, self.high, self.very_high]
+        if any(score <= 0 for score in values):
+            raise ValueError("All vulnerability modifier scores must be greater than zero.")
+        if not self.very_low <= self.low <= self.neutral <= self.high <= self.very_high:
+            raise ValueError(
+                "Vulnerability modifier scores must be ordered: "
+                "very_low <= low <= neutral <= high <= very_high."
+            )
+        return self
+
+    @classmethod
+    def _normalise_modifier_name(cls, name: str) -> str:
+        return name.strip().lower().replace("-", "_").replace(" ", "_")
+
+    def resolve(self, modifier_name: str) -> float:
+        """Return the numeric score for a modifier name."""
+        mapping = {
+            "very_low": self.very_low,
+            "low": self.low,
+            "neutral": self.neutral,
+            "high": self.high,
+            "very_high": self.very_high,
+        }
+        key = self._normalise_modifier_name(modifier_name)
+        if key not in mapping:
+            raise ValueError(
+                f"Invalid vulnerability modifier '{modifier_name}'. "
+                "Use one of: very_low, low, neutral, high, very_high."
+            )
+        return mapping[key]
+
+
+class RoadStructureVulnerabilityConfig(ctk.BaseConfig):
+    """Road structure vulnerability configuration."""
+
+    bridge: dict[str, str]
+    tunnel: dict[str, str]
+
+
+class RailStructureVulnerabilityConfig(ctk.BaseConfig):
+    """Rail structure vulnerability configuration."""
+
+    cutting: dict[str, str]
+    embankment: dict[str, str]
+    under_structure: dict[str, str]
+    on_structure: dict[str, str]
+    bridge: dict[str, str]
+    tunnel: dict[str, str]
+    building: dict[str, str]
+
+
+class StructureVulnerabilityConfig(ctk.BaseConfig):
+    """Asset structure vulnerability configuration."""
+
+    modifier_scores: VulnerabilityModifierScoresConfig
+    road: RoadStructureVulnerabilityConfig
+    rail: RailStructureVulnerabilityConfig
+
+    @classmethod
+    def _normalise_hazard_name(cls, name: str) -> str:
+        return name.strip().lower().replace("-", "_").replace(" ", "_")
+
+    @classmethod
+    def _hazard_lookup(cls) -> dict[str, RiskColumn]:
+        """Build accepted hazard-name aliases mapped to RiskColumn enums."""
+        hazards = [*ExtremeWeatherRiskCols, *FloodingRiskCols, *GroundStabilityRiskCols]
+        lookup: dict[str, RiskColumn] = {}
+        for hazard in hazards:
+            hazard_name = hazard.name.lower()
+            hazard_value = hazard.value.lower()
+            lookup[hazard_name] = hazard
+            lookup[hazard_value] = hazard
+            if hazard_value.endswith("_risk"):
+                lookup[hazard_value.removesuffix("_risk")] = hazard
+            if hazard_value.endswith("_flooding_risk"):
+                lookup[hazard_value.removesuffix("_flooding_risk")] = hazard
+        return lookup
+
+    def _resolve_vulnerability_mapping(
+        self, vulnerability_mapping: dict[str, str], asset: str
+    ) -> dict[RiskColumn, float]:
+        """Parse vulnerability mapping and return risk column to score mapping."""
+        lookup = self._hazard_lookup()
+        resolved: dict[RiskColumn, float] = {}
+        for hazard_name, modifier_name in vulnerability_mapping.items():
+            key = self._normalise_hazard_name(hazard_name)
+            if key not in lookup:
+                raise ValueError(
+                    f"Invalid hazard '{hazard_name}' in structure_vulnerability.{asset}."
+                )
+            hazard_col = lookup[key]
+            if hazard_col in resolved:
+                raise ValueError(
+                    f"Duplicate hazard '{hazard_name}' in structure_vulnerability.{asset}."
+                )
+            resolved[hazard_col] = self.modifier_scores.resolve(modifier_name)
+        return resolved
+
+    @pydantic.model_validator(mode="after")
+    def _validate_mappings(self) -> Self:
+        road = cast("RoadStructureVulnerabilityConfig", self.road)  # pylint: disable=no-member
+        rail = cast("RailStructureVulnerabilityConfig", self.rail)  # pylint: disable=no-member
+
+        self._resolve_vulnerability_mapping(road.bridge, "road.bridge")
+        self._resolve_vulnerability_mapping(road.tunnel, "road.tunnel")
+        self._resolve_vulnerability_mapping(rail.cutting, "rail.cutting")
+        self._resolve_vulnerability_mapping(rail.embankment, "rail.embankment")
+        self._resolve_vulnerability_mapping(rail.under_structure, "rail.under_structure")
+        self._resolve_vulnerability_mapping(rail.on_structure, "rail.on_structure")
+        self._resolve_vulnerability_mapping(rail.bridge, "rail.bridge")
+        self._resolve_vulnerability_mapping(rail.tunnel, "rail.tunnel")
+        self._resolve_vulnerability_mapping(rail.building, "rail.building")
+        return self
+
+    def road_for_structure(self, structure: OSRoadStructure) -> dict[RiskColumn, float]:
+        """Return road structure vulnerability modifiers keyed by risk column."""
+        road = cast("RoadStructureVulnerabilityConfig", self.road)  # pylint: disable=no-member
+        mapping = {
+            OSRoadStructure.BRIDGE: road.bridge,
+            OSRoadStructure.TUNNEL: road.tunnel,
+        }
+        return self._resolve_vulnerability_mapping(
+            mapping[structure], f"road.{structure.name.lower()}"
+        )
+
+    def rail_for_structure(self, structure: OSRailStructure) -> dict[RiskColumn, float]:
+        """Return rail structure vulnerability modifiers keyed by risk column."""
+        rail = cast("RailStructureVulnerabilityConfig", self.rail)  # pylint: disable=no-member
+        mapping = {
+            OSRailStructure.CUTTING: rail.cutting,
+            OSRailStructure.EMBANKMENT: rail.embankment,
+            OSRailStructure.UNDER_STRUCTURE: rail.under_structure,
+            OSRailStructure.ON_STRUCTURE: rail.on_structure,
+            OSRailStructure.BRIDGE: rail.bridge,
+            OSRailStructure.TUNNEL: rail.tunnel,
+            OSRailStructure.BUILDING: rail.building,
+        }
+        return self._resolve_vulnerability_mapping(
+            mapping[structure], f"rail.{structure.name.lower()}"
+        )
+
+
 class MainExtremeWeatherWeightsConfig(ctk.BaseConfig):
     """Weights for extreme weather sub-hazards."""
 
@@ -1002,13 +1157,9 @@ class GroundStabilityWeightsConfig(ctk.BaseConfig):
 class MainHazardWeightsConfig(ctk.BaseConfig):
     """Weights for main hazard indices."""
 
-    extreme_weather: MainExtremeWeatherWeightsConfig = pydantic.Field(
-        default_factory=MainExtremeWeatherWeightsConfig
-    )
-    flooding: FloodingWeightsConfig = pydantic.Field(default_factory=FloodingWeightsConfig)
-    ground_stability: GroundStabilityWeightsConfig = pydantic.Field(
-        default_factory=GroundStabilityWeightsConfig
-    )
+    extreme_weather: MainExtremeWeatherWeightsConfig
+    flooding: FloodingWeightsConfig
+    ground_stability: GroundStabilityWeightsConfig
 
     def for_main_hazard(self, main_hazard: MainHazardRiskCols) -> dict[RiskColumn, float]:
         """Return sub-hazard weights for a main hazard."""
@@ -1093,14 +1244,10 @@ class StormWeightsConfig(ctk.BaseConfig):
 class ExtremeWeatherSubHazardWeightsConfig(ctk.BaseConfig):
     """Weights for extreme weather sub-hazard indices."""
 
-    extreme_heat: ExtremeHeatWeightsConfig = pydantic.Field(
-        default_factory=ExtremeHeatWeightsConfig
-    )
-    extreme_cold: ExtremeColdWeightsConfig = pydantic.Field(
-        default_factory=ExtremeColdWeightsConfig
-    )
-    drought: DroughtWeightsConfig = pydantic.Field(default_factory=DroughtWeightsConfig)
-    storm: StormWeightsConfig = pydantic.Field(default_factory=StormWeightsConfig)
+    extreme_heat: ExtremeHeatWeightsConfig
+    extreme_cold: ExtremeColdWeightsConfig
+    drought: DroughtWeightsConfig
+    storm: StormWeightsConfig
 
     def for_sub_hazard(self, sub_hazard: ExtremeWeatherRiskCols) -> dict[RiskColumn, float]:
         """Return variable weights for an extreme weather sub-hazard."""
@@ -1138,23 +1285,15 @@ class RailExtremeWeatherWeightsConfig(ctk.BaseConfig):
 class AssetHazardWeightOverridesConfig(ctk.BaseConfig):
     """Asset-specific hazard weight overrides."""
 
-    rail_extreme_weather: RailExtremeWeatherWeightsConfig = pydantic.Field(
-        default_factory=RailExtremeWeatherWeightsConfig
-    )
+    rail_extreme_weather: RailExtremeWeatherWeightsConfig
 
 
 class WeightConfig(ctk.BaseConfig):
     """Configuration for model hazard and index weights."""
 
-    main_hazard: MainHazardWeightsConfig = pydantic.Field(
-        default_factory=MainHazardWeightsConfig
-    )
-    extreme_weather_sub_hazard: ExtremeWeatherSubHazardWeightsConfig = pydantic.Field(
-        default_factory=ExtremeWeatherSubHazardWeightsConfig
-    )
-    asset_hazard_overrides: AssetHazardWeightOverridesConfig = pydantic.Field(
-        default_factory=AssetHazardWeightOverridesConfig
-    )
+    main_hazard: MainHazardWeightsConfig
+    extreme_weather_sub_hazard: ExtremeWeatherSubHazardWeightsConfig
+    asset_hazard_overrides: AssetHazardWeightOverridesConfig
 
     def main_hazard_weights(self, main_hazard: MainHazardRiskCols) -> dict[RiskColumn, float]:
         """Return sub-hazard weights for a main hazard."""
@@ -1229,6 +1368,8 @@ class Config(ctk.BaseConfig):
         Configuration for demand data.
     asset_risk_weighting : AssetRiskWeightingConfig | None
         Configuration for asset risk weighting workflow.
+    structure_vulnerability: StructureVulnerabilityConfig
+        Vulnerability modifier definitions for road and rail structures.
     weights: WeightConfig
         Configuration for hazard and index weights.
     constants: ConstantConfig
@@ -1243,5 +1384,6 @@ class Config(ctk.BaseConfig):
     hazards: HazardsConfig
     demand: DemandConfig
     asset_risk_weighting: AssetRiskWeightingConfig | None = None
-    weights: WeightConfig = pydantic.Field(default_factory=WeightConfig)
+    structure_vulnerability: StructureVulnerabilityConfig
+    weights: WeightConfig
     constants: ConstantConfig

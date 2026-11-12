@@ -255,35 +255,6 @@ class OSRoadStructure(enum.StrEnum):
     BRIDGE = "Road On Bridge"
     TUNNEL = "Road In Tunnel"
 
-    # TODO (DJ): #41 Add groundwater flooding to vulnerability modifiers
-    # TODO (DJ): Move vulnerability modifiers into the config or input csv file
-    def get_vulnerability(self) -> dict[RiskColumn, VulnerabilityModifier]:
-        """Return the vulnerability modifiers for the road structure type."""
-        mapping = {
-            OSRoadStructure.BRIDGE: {
-                ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.VERY_HIGH,
-                ExtremeWeatherRiskCols.EXTREME_COLD: VulnerabilityModifier.VERY_HIGH,
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.VERY_HIGH,
-            },
-            OSRoadStructure.TUNNEL: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.LOW,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-            },
-        }
-        return mapping[self]
-
-
-class VulnerabilityModifier(float, enum.Enum):
-    """Definitions for vulnerability modifiers."""
-
-    VERY_LOW = 0.8
-    LOW = 0.9
-    NEUTRAL = 1.0
-    HIGH = 1.1
-    VERY_HIGH = 1.2
-
 
 class OSRoadCols(enum.StrEnum):
     """Definitions for OS road columns."""
@@ -404,48 +375,6 @@ class OSRailStructure(enum.StrEnum):
     BRIDGE = "On Bridge"
     TUNNEL = "In Tunnel"
     BUILDING = "In Building"
-
-    # TODO (DJ): #41 Update vulnerability modifiers with groundwater flooding risk
-    def get_vulnerability(self) -> dict[RiskColumn, VulnerabilityModifier]:
-        """Return the vulnerability modifiers for the rail structure type."""
-        mapping: dict[OSRailStructure, dict[RiskColumn, VulnerabilityModifier]] = {
-            OSRailStructure.CUTTING: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-                ExtremeWeatherRiskCols.DROUGHT: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-                GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
-            },
-            OSRailStructure.EMBANKMENT: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-                ExtremeWeatherRiskCols.DROUGHT: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.VERY_HIGH,
-                FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-                GroundStabilityRiskCols.LANDSLIDES: VulnerabilityModifier.VERY_HIGH,
-                GroundStabilityRiskCols.SHRINK_SWELL: VulnerabilityModifier.VERY_HIGH,
-            },
-            OSRailStructure.BRIDGE: {
-                ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.VERY_HIGH,
-                ExtremeWeatherRiskCols.EXTREME_COLD: VulnerabilityModifier.VERY_HIGH,
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.VERY_HIGH,
-            },
-            OSRailStructure.TUNNEL: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.LOW,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.SURFACE_WATER: VulnerabilityModifier.VERY_HIGH,
-            },
-            OSRailStructure.BUILDING: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.VERY_LOW,
-            },
-            OSRailStructure.UNDER_STRUCTURE: {},
-            OSRailStructure.ON_STRUCTURE: {
-                ExtremeWeatherRiskCols.STORM: VulnerabilityModifier.HIGH,
-                ExtremeWeatherRiskCols.EXTREME_HEAT: VulnerabilityModifier.HIGH,
-                FloodingRiskCols.RIVERS_SEA: VulnerabilityModifier.HIGH,
-            },
-        }
-        return mapping[self]
 
 
 class OSRailPhysicalLevel(enum.StrEnum):

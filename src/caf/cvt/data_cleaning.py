@@ -418,6 +418,28 @@ def normalise_user_class_label(value: str | int | float) -> str:
         raise ValueError(f"Invalid model road userclass value '{value}'.") from exc
 
 
+def get_boundary_name(config: model_config.Config) -> str:
+    """
+    Get the name of the boundary area from the config.
+
+    Parameters
+    ----------
+    config : Config
+        Main config for the model, containing boundary information.
+
+    Returns
+    -------
+    str
+        The name of the boundary area, either the STB, CA, or "model area" if neither is
+        specified.
+    """
+    if config.parameters.stb:
+        return config.parameters.stb
+    if config.parameters.ca:
+        return config.parameters.ca
+    return "model area"
+
+
 # DATA CLEANING
 
 

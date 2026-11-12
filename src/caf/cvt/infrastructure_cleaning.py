@@ -665,11 +665,7 @@ def _clean_bus_stops(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
     if bus_stops.empty:
         LOG.warning(
             "No bus stops in source data for %s",
-            config.parameters.stb
-            if config.parameters.stb is not None
-            else config.parameters.ca
-            if config.parameters.ca is not None
-            else "model area",
+            data_cleaning.get_boundary_name(config),
         )
     filter_removed = len_before_filter - len(bus_stops)
     LOG.debug(
