@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
@@ -239,6 +239,20 @@ class ImpactCols(RiskColumn):
     def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given impact column."""
         return ColourMaps.VIRIDIS
+
+
+class UserClassImpactCol(str):
+    """String-backed user-class impact column with RiskColumn-like behaviour."""
+
+    def __new__(cls, user_class: str) -> UserClassImpactCol:
+        """Create a new UserClassImpactCol for the given user class."""
+        return cast(
+            "UserClassImpactCol", super().__new__(cls, f"{user_class}_{ImpactCols.IMPACT}")
+        )
+
+    def get_cmap(self) -> ColourMaps:
+        """Return the same colormap used for generic impact columns."""
+        return ImpactCols.IMPACT.get_cmap()
 
 
 class TimePeriods(enum.StrEnum):

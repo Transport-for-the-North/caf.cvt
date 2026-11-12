@@ -345,9 +345,20 @@ def validate_geometries(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     -------
     gpd.GeoDataFrame
         The validated GeoDataFrame with empty and invalid geometries removed.
+
+    Raises
+    ------
+    ValueError
+        If all geometries are empty.
     """
+    if gdf.geometry.is_empty.sum() == len(gdf):
+        raise ValueError("All geometries are empty, returning empty GeoDataFrame.")
     if gdf.geometry.is_empty.sum() > 0:
-        LOG.warning("Found %s empty geometries, removing them.", gdf.geometry.is_empty.sum())
+        LOG.debug(
+            "Found %s empty geometries out of %s, removing them.",
+            gdf.geometry.is_empty.sum(),
+            len(gdf),
+        )
         gdf = gdf[~gdf.geometry.is_empty]
     if gdf.geometry.notna().sum() < len(gdf):
         LOG.warning(

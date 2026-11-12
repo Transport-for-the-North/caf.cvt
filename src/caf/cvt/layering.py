@@ -30,6 +30,7 @@ from caf.cvt.definitions import (
     OSRoadStructure,
     RiskColumn,
     Scenarios,
+    UserClassImpactCol,
 )
 
 LOG = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ _INFRASTRUCTURE_BUFFER_SIZE_M = 0.01
 
 def _get_user_class_impact_cols(user_classes: list[str]) -> list[RiskColumn]:
     """Return impact columns for the configured user classes plus total impact."""
-    return [cast("RiskColumn", f"{uc}_{ImpactCols.IMPACT}") for uc in user_classes] + [
+    return [cast("RiskColumn", UserClassImpactCol(uc)) for uc in user_classes] + [
         ImpactCols.IMPACT
     ]
 
@@ -112,6 +113,7 @@ def _infrastructure_risk_intersect(
     infrastructure_with_risk = infrastructure_data.copy()
 
     for hazard_name, hazard_data in hazards_dict.items():
+        LOG.debug("Intersecting infrastructure with hazard: %s", hazard_name)
         if (
             hazard_name == MainHazardRiskCols.FLOODING
             and config.switches.flooding_index_raster

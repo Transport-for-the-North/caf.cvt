@@ -131,7 +131,7 @@ class PathConfig(ctk.BaseConfig):
         "flooding_model_input": ("hazard_model_input", "Flooding", True),
         "ground_stability_model_input": ("hazard_model_input", "Ground Stability", True),
         "coastal_erosion_model_input": ("hazard_model_input", "Coastal Erosion", True),
-        "hazard_grid_model_input": ("hazard_model_input", "hazard_grid.gpkg", False),
+        "hazard_grid_model_input": ("extreme_weather_model_input", "hazard_grid.gpkg", False),
         "summer_max_temperature_model_input": (
             "extreme_weather_model_input",
             "summer_max_temperature_change.csv",
@@ -357,13 +357,19 @@ class PathConfig(ctk.BaseConfig):
 
     def __getattr__(self, name: str) -> pathlib.Path:
         """Resolve configured path attributes lazily."""
+        if name.startswith("_"):
+            raise AttributeError(f"{type(self).__name__!s} has no attribute {name!r}")
         if name not in self._PATH_SPECS:
             raise AttributeError(f"{type(self).__name__!s} has no attribute {name!r}")
         return self._resolve_path(name)
 
     def _resolve_path(self, name: str) -> pathlib.Path:
-        if name in self._resolved_paths:
-            return self._resolved_paths[name]
+        private_attrs = object.__getattribute__(self, "__pydantic_private__")
+        if private_attrs is None or "_resolved_paths" not in private_attrs:
+            raise AttributeError(f"{type(self).__name__!s} has no attribute '_resolved_paths'")
+        resolved_paths = cast("dict[str, pathlib.Path]", private_attrs["_resolved_paths"])
+        if name in resolved_paths:
+            return resolved_paths[name]
 
         parent_name, suffix, is_directory = self._PATH_SPECS[name]
         parent = getattr(self, parent_name)
@@ -372,7 +378,7 @@ class PathConfig(ctk.BaseConfig):
         if is_directory:
             path.mkdir(parents=True, exist_ok=True)
 
-        self._resolved_paths[name] = path
+        resolved_paths[name] = path
         return path
 
     def __dir__(self) -> list[str]:
@@ -805,6 +811,8 @@ class SwitchConfig(ctk.BaseConfig):
         Whether to compute the direct flooding overlay.
     flooding_index_raster: bool
         Whether to use the flooding index raster in the analysis.
+    ground_stability_premium: bool
+        Whether to use the premium version of the ground stability data in the analysis.
     """
 
     run_data_cleaning: bool

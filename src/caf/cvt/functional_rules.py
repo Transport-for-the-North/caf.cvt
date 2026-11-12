@@ -1877,7 +1877,8 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
     num_na = coastal_erosion_risk.isna().sum()
     coastal_erosion_risk = coastal_erosion_risk.fillna(0)
     LOG.debug(
-        "Infilled %s NA values with 0 where there is no risk in coastal erosion index.", num_na
+        "Infilled \n %s NA values with 0 where there is no risk in coastal erosion index.",
+        num_na,
     )
 
     coastal_erosion_risk = gpd.GeoDataFrame(coastal_erosion_risk, geometry=GEOMETRY_COL)

@@ -128,6 +128,7 @@ def _clean_hazard_grid(
 
 def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean max summer temperature change projections, then write to file."""
+    LOG.info("Cleaning summer maximum temperature change projections.")
     temp_max = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.max_temp_summer,
         columns=["tasmax_summer_01_20_median", "tasmax_summer_change_40_median"],
@@ -169,6 +170,7 @@ def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
 
 def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean min winter temperature change projections, then write to file."""
+    LOG.info("Cleaning winter minimum temperature change projections.")
     temp_min = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.min_temp_winter,
         columns=["tasmin_winter_01_20_median", "tasmin_winter_change_40_median"],
@@ -213,6 +215,7 @@ def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None
 
 def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean summer precipitation change projections, then write to file."""
+    LOG.info("Cleaning summer precipitation change projections.")
     precip_sum = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.precip_summer,
         columns=["pr_summer_01_20_median", "pr_summer_change_40_median"],
@@ -261,6 +264,7 @@ def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
 
 def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean winter precipitation change projections, then write to file."""
+    LOG.info("Cleaning winter precipitation change projections.")
     precip_win = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.precip_winter,
         columns=["pr_winter_01_20_median", "pr_winter_change_40_median"],
@@ -309,6 +313,7 @@ def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) ->
 
 def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean 10mm rain days observations, then write to file."""
+    LOG.info("Cleaning 10mm rain days observations.")
     rain_days = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.rain_days,
         mask=boundary,
@@ -335,6 +340,7 @@ def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) ->
 
 def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean drought severity index data, then write to file."""
+    LOG.info("Cleaning drought severity index data.")
     drought_index = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.drought_index,
         mask=boundary,
@@ -365,6 +371,7 @@ def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame
 
 def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean hot summer days projections, then write to file."""
+    LOG.info("Cleaning hot summer days projections.")
     hot_days = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.hot_days,
         columns=["HSD_baseline_01_20_median", "HSD_40_median"],
@@ -395,6 +402,7 @@ def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) 
 
 def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean extreme summer days projections, then write to file."""
+    LOG.info("Cleaning extreme summer days projections.")
     extr_days = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.extreme_summer_days,
         columns=["ESD_baseline_01_20_median", "ESD_40_median"],
@@ -428,6 +436,7 @@ def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFra
 
 def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean frost days projections, then write to file."""
+    LOG.info("Cleaning frost days projections.")
     frost_days = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.frost_days,
         columns=["FrostDays_baseline_01_20_median", "FrostDays_40_median"],
@@ -458,6 +467,7 @@ def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
 
 def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
     """Read and clean icing days projections, then write to file."""
+    LOG.info("Cleaning icing days projections.")
     ice_days = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.icing_days,
         columns=["IcingDays_baseline_01_20_median", "IcingDays_40_median"],
@@ -488,6 +498,7 @@ def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> No
 
 def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read wind speed projections, calculate metrics, clean, then write to file."""
+    LOG.info("Cleaning wind speed projections.")
     windspd_current_agg, len_before_filter_current = _read_wind_speed_reduce(
         config.paths.raw_input / config.hazards.extreme_weather.wind_speed["1990_2000"],
         definitions.Scenarios.CURRENT,
@@ -585,6 +596,7 @@ def _calculate_windspd_percentile(
 
 def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Read and clean wind driven rain index data, then write to file."""
+    LOG.info("Cleaning wind driven rain index data.")
     wind_driven_rain = gpd.read_file(
         config.paths.raw_input / config.hazards.extreme_weather.wdr_index,
         mask=boundary,
