@@ -22,6 +22,7 @@ LOG = logging.getLogger(__name__)
 
 _WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
 _WIND_SPEED_PERCENTILE = 0.99
+_WIND_SPEED_GRID_SIZE_M = 5000
 
 # WARNING FILTERS
 
@@ -526,7 +527,7 @@ def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -
     ).fillna({col: 0 for col in metric_cols})
 
     windspd_combined[definitions.GEOMETRY_COL] = [
-        cleaning_funcs.convert_point_to_grid(x, y, 2500)
+        cleaning_funcs.convert_point_to_grid(x, y, _WIND_SPEED_GRID_SIZE_M)
         for x, y in zip(
             windspd_combined["projection_x_coordinate"],
             windspd_combined["projection_y_coordinate"],

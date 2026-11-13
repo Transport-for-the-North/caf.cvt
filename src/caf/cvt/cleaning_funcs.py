@@ -211,7 +211,7 @@ def get_boundary(config: model_config.Config) -> gpd.GeoDataFrame:
 
 def convert_point_to_grid(x: int, y: int, size: int) -> shapely.geometry.Polygon:
     """
-    Take a point and convert it to a grid of the given size.
+    Take a point and convert it to a grid of the given size (m).
 
     Converts a point (x, y) into a square grid of the specified size, centered on the point.
 
@@ -222,19 +222,20 @@ def convert_point_to_grid(x: int, y: int, size: int) -> shapely.geometry.Polygon
     y : int
         The y-coordinate of the point.
     size : int
-        The size of the grid to create around the point.
+        The size, in metres squared, of the grid to create around the point.
 
     Returns
     -------
     shapely.geometry.Polygon
         A square polygon centered on the point with the specified size.
     """
+    half_size = size / 2
     return shapely.geometry.Polygon(
         [
-            (x - size, y - size),
-            (x + size, y - size),
-            (x + size, y + size),
-            (x - size, y + size),
+            (x - half_size, y - half_size),
+            (x + half_size, y - half_size),
+            (x + half_size, y + half_size),
+            (x - half_size, y + half_size),
         ]
     )
 
