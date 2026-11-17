@@ -70,7 +70,7 @@ The Common Analytical Framework (CAF) Climate Vulnerability Tool (CVT) is a geos
 
 - **Data Cleaning** - Reads and cleans a wide variety of climate and transport datasets, preprocessing into a standard format in preparation for analysis.
 
-- **Apply Functional Rules** - Applies a set of funtional rules and spatial overlays to the climate data to translate complex values into distinct hazard categories and grids. 
+- **Apply Functional Rules** - Applies a set of functional rules and spatial overlays to the climate data to translate complex values into distinct hazard categories and grids. 
 
 - **Infrastructure Layering** - Layers infrastructure on top of hazard grids to assign risk to the transport assets.
 
@@ -141,6 +141,15 @@ The tool can be run from command line, with the command:
 ```sh
 caf.cvt
 ```
+
+Asset risk weighting can be run with:
+
+```sh
+caf.cvt asset-risk-weighting
+```
+
+Input/output file paths and incident weights for this command are defined in
+the `asset_risk_weighting` section of `config.yml`.
 
 See [Command-Line Interface (User Guide)](https://cafcvt.readthedocs.io/en/stable/usage/cli.html)
 for full explanations of the parameters.
