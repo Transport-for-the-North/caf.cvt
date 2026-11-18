@@ -66,6 +66,10 @@ CAF.cvt is a python model that takes climate and transport data and generates a 
 
 The Common Analytical Framework (CAF) Climate Vulnerability Tool (CVT) is a geospatial python package that translates complex climate and infrastructure data into a set of climate risk assessments for the North of England's key transport networks. 
 
+In model outputs, **likelihood** represents hazard exposure, **consequence** represents the
+asset-level effect per hazard event (currently derived from demand proxies), and **risk**
+represents the combined overall vulnerability metric.
+
 ### Main Features
 
 - **Data Cleaning** - Reads and cleans a wide variety of climate and transport datasets, preprocessing into a standard format in preparation for analysis.
@@ -142,14 +146,14 @@ The tool can be run from command line, with the command:
 caf.cvt
 ```
 
-Asset risk weighting can be run with:
+Asset hazard weighting can be run with:
 
 ```sh
-caf.cvt asset-risk-weighting
+caf.cvt asset-hazard-weighting
 ```
 
 Input/output file paths and incident weights for this command are defined in
-the `asset_risk_weighting` section of `config.yml`.
+the `asset_hazard_weighting` section of `config.yml`.
 
 See [Command-Line Interface (User Guide)](https://cafcvt.readthedocs.io/en/stable/usage/cli.html)
 for full explanations of the parameters.

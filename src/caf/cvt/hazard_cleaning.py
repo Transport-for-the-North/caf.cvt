@@ -686,7 +686,7 @@ def _clean_rofrs_rofsw(config: model_config.Config, boundary: gpd.GeoDataFrame) 
                 out_path=(
                     config.paths.flooding_type_scenario_model_input(flooding_type, scenario)
                 ),
-                rename_risk_col=f"{flooding_type}_flooding_risk_{scenario}",
+                rename_risk_col=f"{flooding_type}_flooding_likelihood_{scenario}",
                 climate_change=(scenario == definitions.Scenarios.FUTURE),
                 bng_codes=bng_codes,
                 all_empty=all_empty,
@@ -855,37 +855,37 @@ def _clean_ground_stability(config: model_config.Config, boundary: gpd.GeoDataFr
 def _clean_premium_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> bool:
     """Clean premium GeoSure data then write to file."""
     geosure_layers = {
-        definitions.GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.COLLAPSIBLE_DEPOSITS: gpd.read_file(
             config.paths.raw_input
             / config.hazards.ground_stability.geosure.premium.collapsible_deposits,
             mask=boundary,
             columns=["CLASS"],
         ),
-        definitions.GroundStabilityRiskCols.COMPRESSIBLE_GROUND: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.COMPRESSIBLE_GROUND: gpd.read_file(
             config.paths.raw_input
             / config.hazards.ground_stability.geosure.premium.compressible_ground,
             mask=boundary,
             columns=["CLASS"],
         ),
-        definitions.GroundStabilityRiskCols.LANDSLIDES: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.LANDSLIDES: gpd.read_file(
             config.paths.raw_input
             / config.hazards.ground_stability.geosure.premium.landslides,
             mask=boundary,
             columns=["CLASS"],
         ),
-        definitions.GroundStabilityRiskCols.RUNNING_SAND: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.RUNNING_SAND: gpd.read_file(
             config.paths.raw_input
             / config.hazards.ground_stability.geosure.premium.running_sands,
             mask=boundary,
             columns=["CLASS"],
         ),
-        definitions.GroundStabilityRiskCols.SHRINK_SWELL: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.SHRINK_SWELL: gpd.read_file(
             config.paths.raw_input
             / config.hazards.ground_stability.geosure.premium.shrink_swell,
             mask=boundary,
             columns=["CLASS"],
         ),
-        definitions.GroundStabilityRiskCols.SOLUBLE_ROCKS: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.SOLUBLE_ROCKS: gpd.read_file(
             config.paths.raw_input
             / config.hazards.ground_stability.geosure.premium.soluble_rocks,
             mask=boundary,
@@ -907,9 +907,9 @@ def _clean_premium_geosure(config: model_config.Config, boundary: gpd.GeoDataFra
         geosure_data_clean = geosure_data.rename(
             columns={"CLASS": f"{geohazard}_{definitions.Scenarios.CURRENT}"}
         )
-        geosure_data_clean[f"{geohazard}_{definitions.Scenarios.FUTURE}"] = (
-            geosure_data_clean[f"{geohazard}_{definitions.Scenarios.CURRENT}"]
-        )
+        geosure_data_clean[f"{geohazard}_{definitions.Scenarios.FUTURE}"] = geosure_data_clean[
+            f"{geohazard}_{definitions.Scenarios.CURRENT}"
+        ]
         geosure_layers[geohazard] = cleaning_funcs.clip_to_boundary(
             geosure_data_clean, boundary
         )
@@ -946,7 +946,7 @@ def _clean_premium_geosure(config: model_config.Config, boundary: gpd.GeoDataFra
 def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame) -> bool:
     """Clean GeoSureHexGrids data, merge by nearest centroids, then write to file."""
     geosure_layers = {
-        definitions.GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.COLLAPSIBLE_DEPOSITS: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.open.zip_path}"
             f"!{config.hazards.ground_stability.geosure.open.file_path}",
@@ -954,7 +954,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
             mask=boundary,
             columns=["CLASS"],
         ),
-        definitions.GroundStabilityRiskCols.COMPRESSIBLE_GROUND: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.COMPRESSIBLE_GROUND: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.open.zip_path}"
             f"!{config.hazards.ground_stability.geosure.open.file_path}",
@@ -962,7 +962,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
             mask=boundary,
             columns=["CLASS"],
         ),
-        definitions.GroundStabilityRiskCols.LANDSLIDES: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.LANDSLIDES: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.open.zip_path}"
             f"!{config.hazards.ground_stability.geosure.open.file_path}",
@@ -970,7 +970,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
             mask=boundary,
             columns=["CLASS"],
         ),
-        definitions.GroundStabilityRiskCols.RUNNING_SAND: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.RUNNING_SAND: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.open.zip_path}"
             f"!{config.hazards.ground_stability.geosure.open.file_path}",
@@ -978,7 +978,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
             mask=boundary,
             columns=["CLASS"],
         ),
-        definitions.GroundStabilityRiskCols.SHRINK_SWELL: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.SHRINK_SWELL: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.open.zip_path}"
             f"!{config.hazards.ground_stability.geosure.open.file_path}",
@@ -986,7 +986,7 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
             mask=boundary,
             columns=["CLASS"],
         ),
-        definitions.GroundStabilityRiskCols.SOLUBLE_ROCKS: gpd.read_file(
+        definitions.GroundStabilityLikelihoodCols.SOLUBLE_ROCKS: gpd.read_file(
             f"zip://"
             f"{config.paths.raw_input / config.hazards.ground_stability.geosure.open.zip_path}"
             f"!{config.hazards.ground_stability.geosure.open.file_path}",

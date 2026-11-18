@@ -17,8 +17,8 @@ from caf.cvt.definitions import (
     CellStyle,
     ColourMaps,
     HexColourCodes,
-    MainHazardRiskCols,
-    RiskCategories,
+    LikelihoodCategories,
+    MainHazardLikelihoodCols,
     RiskColumn,
     Scenarios,
 )
@@ -41,7 +41,7 @@ warnings.filterwarnings(
 # MODULE CONSTANTS
 
 _LENGTH_M_COL = "Length (m)"
-_RISK_CATEGORY_COL = "Risk Category"
+_RISK_CATEGORY_COL = "Likelihood Category"
 
 _VERDANA_FONT = "Verdana"
 _SOLID_FILL = "solid"
@@ -137,7 +137,7 @@ def create_risk_summary(
 ) -> None:
     """Output a summary spreadsheet for climate risk for a given asset."""
     # TODO (DJ): #31 Allow risk summary to work with point data as well as line data.
-    # TODO (DJ): #31 Add summary of impact metrics when available
+    # TODO (DJ): #31 Add summary of consequence metrics when available
     # TODO (DJ): #31 Rename descriptive columns to more user-friendly names
     asset_risk_summary = asset_risk.copy()
     asset_risk_summary = asset_risk_summary.dropna(
@@ -158,10 +158,10 @@ def create_risk_summary(
     risk_distribution = pd.DataFrame(
         [
             {
-                "Risk Category": category,
+                _RISK_CATEGORY_COL: category,
                 "Score": f"{lower}-{upper}",
             }
-            for category, (lower, upper) in RiskCategories.get_risk_bands().items()
+            for category, (lower, upper) in LikelihoodCategories.get_likelihood_bands().items()
         ]
     )
 
@@ -186,12 +186,12 @@ def create_risk_summary(
         for descriptive_col in descriptive_cols
     }
 
-    for main_hazard in MainHazardRiskCols:
+    for main_hazard in MainHazardLikelihoodCols:
         if main_hazard not in asset_risk_summary.columns.str.replace(
             f"_{Scenarios.CURRENT}", ""
         ):
             continue
-        for sub_hazard in MainHazardRiskCols.get_sub_hazards(main_hazard):
+        for sub_hazard in MainHazardLikelihoodCols.get_sub_hazards(main_hazard):
             risk_distribution, risk_averages = _fill_risk_summary_column(
                 config,
                 asset_risk=asset_risk_summary,
@@ -248,7 +248,7 @@ def _fill_risk_summary_column(
     config: model_config.Config,
     *,
     asset_risk: gpd.GeoDataFrame,
-    hazard: MainHazardRiskCols | str,
+    hazard: MainHazardLikelihoodCols | str,
     risk_distribution: pd.DataFrame,
     risk_averages: pd.DataFrame,
     total_length: float,
@@ -265,7 +265,7 @@ def _fill_risk_summary_column(
             config, asset_risk, risk_column, total_length
         ).items():
             risk_distribution.loc[
-                risk_distribution["Risk Category"] == category, out_risk_column
+                risk_distribution[_RISK_CATEGORY_COL] == category, out_risk_column
             ] = pct
 
         length_weighted_avgs[scenario] = round(
@@ -300,10 +300,10 @@ def _calculate_risk_distribution_percentages(
     asset_risk: gpd.GeoDataFrame,
     risk_column: str,
     total_length: float,
-) -> dict[RiskCategories, int]:
+) -> dict[LikelihoodCategories, int]:
     percentages = []
     categories = []
-    for category, (lower, upper) in RiskCategories.get_risk_bands().items():
+    for category, (lower, upper) in LikelihoodCategories.get_likelihood_bands().items():
         if upper == config.constants.score_max:
             mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] <= upper)
         else:
@@ -323,7 +323,7 @@ def _calculate_risk_distribution_percentages(
 
 def _fill_descriptive_risk_averages(
     asset_risk: gpd.GeoDataFrame,
-    hazard: MainHazardRiskCols | str,
+    hazard: MainHazardLikelihoodCols | str,
     descriptive_risk_averages: dict[str, pd.DataFrame],
     descriptive_cols: list[str],
 ) -> dict[str, pd.DataFrame]:
@@ -390,11 +390,11 @@ def _hazard_distribution_plot(
     x_labels = [Scenarios.CURRENT.capitalize(), Scenarios.FUTURE.capitalize()]
 
     risk_category_order = [
-        RiskCategories.VERY_LOW,
-        RiskCategories.LOW,
-        RiskCategories.MEDIUM,
-        RiskCategories.HIGH,
-        RiskCategories.VERY_HIGH,
+        LikelihoodCategories.VERY_LOW,
+        LikelihoodCategories.LOW,
+        LikelihoodCategories.MEDIUM,
+        LikelihoodCategories.HIGH,
+        LikelihoodCategories.VERY_HIGH,
     ]
     category_arrays = {}
 
@@ -417,7 +417,7 @@ def _hazard_distribution_plot(
             x_labels,
             category_arrays[risk_category],
             bottom=bottom,
-            color=cmap(RiskCategories.get_risk_bands()[risk_category][1]),
+            color=cmap(LikelihoodCategories.get_likelihood_bands()[risk_category][1]),
             label=risk_category,
         )
 
@@ -629,7 +629,7 @@ def _get_risk_distribution_style(
 def _apply_risk_distribution_data_bar(
     ws: openpyxl.worksheet.worksheet.Worksheet,
     cell: openpyxl.cell.Cell,
-    category: RiskCategories,
+    category: LikelihoodCategories,
 ) -> None:
     """Apply data bar formatting to a risk distribution cell."""
     cell.number_format = _PERCENT_NUMBER_FORMAT
@@ -638,7 +638,7 @@ def _apply_risk_distribution_data_bar(
         start_value=0,
         end_type="num",
         end_value=1,
-        color=RiskCategories.get_risk_band_colours()[category],
+        color=LikelihoodCategories.get_likelihood_band_colours()[category],
         showValue=True,
         minLength=None,
         maxLength=None,

@@ -472,7 +472,7 @@ if __name__ == "__main__":
             cvt.__package__,
             cvt.__version__,
         ),
-        log_file=LOG_PATH / "asset_risk_weighting.log",
+        log_file=LOG_PATH / "asset_hazard_weighting.log",
     ) as log:
         _clean_nexus_metro()
         _clean_nexus_demand()

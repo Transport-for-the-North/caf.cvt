@@ -1,4 +1,4 @@
-"""Apply functional rules to hazard and impact datasets, and normalise."""
+"""Apply functional rules to hazard likelihood datasets, and normalise."""
 
 ### LOAD LIBRARIES
 import logging
@@ -28,12 +28,12 @@ from caf.cvt.definitions import (
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
-    ExtremeWeatherRiskCols,
+    ExtremeWeatherLikelihoodCols,
     FloodingBands,
-    FloodingRiskCols,
+    FloodingLikelihoodCols,
     FloodingTypes,
-    GroundStabilityRiskCols,
-    MainHazardRiskCols,
+    GroundStabilityLikelihoodCols,
+    MainHazardLikelihoodCols,
     RiskColumn,
     Scenarios,
     StormCols,
@@ -199,11 +199,11 @@ def _create_ordered_risk_map(
 
 
 def _spatial_infill_na_grids(
-    risk_grid: gpd.GeoDataFrame, variables: list[str]
+    hazard_exposure_grid: gpd.GeoDataFrame, variables: list[str]
 ) -> gpd.GeoDataFrame:
     """Apply spatial infilling to GeoDataFrame on given variables."""
     neighbours = gpd.sjoin(
-        risk_grid, risk_grid, how="left", predicate="touches"
+        hazard_exposure_grid, hazard_exposure_grid, how="left", predicate="touches"
     )  # Find neighbouring grids
 
     # Calculate the average value of the neighbouring grids
@@ -213,30 +213,30 @@ def _spatial_infill_na_grids(
 
     for var in variables:
         # Set condition as variable is NA
-        na_condition = risk_grid[var].isna()
+        na_condition = hazard_exposure_grid[var].isna()
 
         # Fill with neighbour average
-        risk_grid.loc[na_condition, var] = risk_grid.loc[na_condition].index.map(
-            neighbours_avg[f"{var}_right"]
-        )
+        hazard_exposure_grid.loc[na_condition, var] = hazard_exposure_grid.loc[
+            na_condition
+        ].index.map(neighbours_avg[f"{var}_right"])
 
-    return risk_grid
+    return hazard_exposure_grid
 
 
 def _nearest_join_infilling(
-    risk_grid: gpd.GeoDataFrame,
+    hazard_exposure_grid: gpd.GeoDataFrame,
     variables: list[str],
     max_distance: int,
     prev_na_count: int,
 ) -> gpd.GeoDataFrame:
     """Fill remaining NA values using nearest-join spatial infilling."""
-    remaining_na = risk_grid[risk_grid[variables].isna().any(axis=1)]
+    remaining_na = hazard_exposure_grid[hazard_exposure_grid[variables].isna().any(axis=1)]
     if remaining_na.empty:
-        return risk_grid
+        return hazard_exposure_grid
 
     nearest = gpd.sjoin_nearest(
         remaining_na,
-        risk_grid.drop(remaining_na.index),
+        hazard_exposure_grid.drop(remaining_na.index),
         how="left",
         max_distance=max_distance,
     )
@@ -245,12 +245,12 @@ def _nearest_join_infilling(
     nearest_avg = nearest.groupby(nearest.index)[[f"{var}_right" for var in variables]].mean()
 
     for var in variables:
-        na_condition = risk_grid[var].isna()
-        risk_grid.loc[na_condition, var] = risk_grid.loc[na_condition].index.map(
-            nearest_avg[f"{var}_right"]
-        )
+        na_condition = hazard_exposure_grid[var].isna()
+        hazard_exposure_grid.loc[na_condition, var] = hazard_exposure_grid.loc[
+            na_condition
+        ].index.map(nearest_avg[f"{var}_right"])
 
-    final_remaining = risk_grid[variables].isna().sum().sum()
+    final_remaining = hazard_exposure_grid[variables].isna().sum().sum()
     filled_nearest = prev_na_count - final_remaining
 
     LOG.debug(
@@ -261,32 +261,32 @@ def _nearest_join_infilling(
     )
 
     for var in variables:
-        risk_grid[var] = risk_grid[var].fillna(0)
+        hazard_exposure_grid[var] = hazard_exposure_grid[var].fillna(0)
 
     LOG.debug("Filled remaining %s NA values with 0", final_remaining)
 
-    return risk_grid
+    return hazard_exposure_grid
 
 
 def _iterative_spatial_infilling(
-    risk_grid: gpd.GeoDataFrame,
+    hazard_exposure_grid: gpd.GeoDataFrame,
     variables: list[str],
     max_iterations: int = 10,
     nearest_join_max_distance: int = 5000,
 ) -> gpd.GeoDataFrame:
     """Apply spatial infilling iteratively to GeoDataFrame on given variables."""
     prev_na_count = None
-    total_na_count = risk_grid[variables].isna().sum().sum()
+    total_na_count = hazard_exposure_grid[variables].isna().sum().sum()
     LOG.debug("Spatial infilling %s NA values.", total_na_count)
 
     for i in range(max_iterations):
         # Count current NA values
-        current_na_count = risk_grid[variables].isna().sum().sum()
+        current_na_count = hazard_exposure_grid[variables].isna().sum().sum()
 
         # Stop if all filled
         if current_na_count == 0:
             LOG.debug("All NA values filled after %s iterations.", i)
-            return risk_grid
+            return hazard_exposure_grid
 
         # Stop if no improvement
         if prev_na_count is not None and current_na_count == prev_na_count:
@@ -300,9 +300,9 @@ def _iterative_spatial_infilling(
 
         prev_na_count = current_na_count
 
-        risk_grid = _spatial_infill_na_grids(risk_grid, variables)
+        hazard_exposure_grid = _spatial_infill_na_grids(hazard_exposure_grid, variables)
 
-        new_na_count = risk_grid[variables].isna().sum().sum()
+        new_na_count = hazard_exposure_grid[variables].isna().sum().sum()
         filled_this_iter = prev_na_count - new_na_count
         LOG.debug(
             "Iteration %s: filled %s NA values (%s remaining)",
@@ -313,7 +313,7 @@ def _iterative_spatial_infilling(
 
     # Fallback: nearest join for remaining NAs
     return _nearest_join_infilling(
-        risk_grid=risk_grid,
+        hazard_exposure_grid=hazard_exposure_grid,
         variables=variables,
         max_distance=nearest_join_max_distance,
         prev_na_count=prev_na_count or 0,
@@ -707,16 +707,16 @@ def _extreme_weather_index(config: model_config.Config) -> None:
         [
             "grid_id",
             "part",
-            f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.CURRENT}",
-            f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.FUTURE}",
+            f"{ExtremeWeatherLikelihoodCols.EXTREME_HEAT}_{Scenarios.CURRENT}",
+            f"{ExtremeWeatherLikelihoodCols.EXTREME_HEAT}_{Scenarios.FUTURE}",
         ]
     ].merge(
         extreme_cold[
             [
                 "grid_id",
                 "part",
-                f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.FUTURE}",
+                f"{ExtremeWeatherLikelihoodCols.EXTREME_COLD}_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherLikelihoodCols.EXTREME_COLD}_{Scenarios.FUTURE}",
                 GEOMETRY_COL,
             ]
         ],
@@ -733,15 +733,15 @@ def _extreme_weather_index(config: model_config.Config) -> None:
         extreme_heat_cold,
         drought[
             [
-                f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FUTURE}",
+                f"{ExtremeWeatherLikelihoodCols.DROUGHT}_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherLikelihoodCols.DROUGHT}_{Scenarios.FUTURE}",
                 GEOMETRY_COL,
             ]
         ],
         storm[
             [
-                f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FUTURE}",
+                f"{ExtremeWeatherLikelihoodCols.STORM}_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherLikelihoodCols.STORM}_{Scenarios.FUTURE}",
                 GEOMETRY_COL,
             ]
         ],
@@ -751,22 +751,22 @@ def _extreme_weather_index(config: model_config.Config) -> None:
     extreme_weather_risk = _iterative_spatial_infilling(
         extreme_weather_risk,
         [
-            f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.CURRENT}",
-            f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.FUTURE}",
-            f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.CURRENT}",
-            f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.FUTURE}",
-            f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.CURRENT}",
-            f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FUTURE}",
-            f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.CURRENT}",
-            f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FUTURE}",
+            f"{ExtremeWeatherLikelihoodCols.EXTREME_HEAT}_{Scenarios.CURRENT}",
+            f"{ExtremeWeatherLikelihoodCols.EXTREME_HEAT}_{Scenarios.FUTURE}",
+            f"{ExtremeWeatherLikelihoodCols.EXTREME_COLD}_{Scenarios.CURRENT}",
+            f"{ExtremeWeatherLikelihoodCols.EXTREME_COLD}_{Scenarios.FUTURE}",
+            f"{ExtremeWeatherLikelihoodCols.DROUGHT}_{Scenarios.CURRENT}",
+            f"{ExtremeWeatherLikelihoodCols.DROUGHT}_{Scenarios.FUTURE}",
+            f"{ExtremeWeatherLikelihoodCols.STORM}_{Scenarios.CURRENT}",
+            f"{ExtremeWeatherLikelihoodCols.STORM}_{Scenarios.FUTURE}",
         ],
         _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE,
     )
 
     extreme_weather_risk = calculate_composite_score(
         extreme_weather_risk,
-        config.weights.main_hazard_weights(MainHazardRiskCols.EXTREME_WEATHER),
-        MainHazardRiskCols.EXTREME_WEATHER,
+        config.weights.main_hazard_weights(MainHazardLikelihoodCols.EXTREME_WEATHER),
+        MainHazardLikelihoodCols.EXTREME_WEATHER,
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -777,13 +777,13 @@ def _extreme_weather_index(config: model_config.Config) -> None:
 
     _validate_index(
         extreme_weather_risk,
-        [*ExtremeWeatherRiskCols, MainHazardRiskCols.EXTREME_WEATHER],
+        [*ExtremeWeatherLikelihoodCols, MainHazardLikelihoodCols.EXTREME_WEATHER],
         feature_range,
     )
 
     _audit_index(
         extreme_weather_risk,
-        [*ExtremeWeatherRiskCols, MainHazardRiskCols.EXTREME_WEATHER],
+        [*ExtremeWeatherLikelihoodCols, MainHazardLikelihoodCols.EXTREME_WEATHER],
         config.paths.extreme_weather_index_audit,
         feature_range,
     )
@@ -839,16 +839,18 @@ def _extreme_heat_index(
 
     extreme_heat = calculate_composite_score(
         extreme_heat,
-        config.weights.extreme_weather_sub_hazard_weights(ExtremeWeatherRiskCols.EXTREME_HEAT),
-        ExtremeWeatherRiskCols.EXTREME_HEAT,
+        config.weights.extreme_weather_sub_hazard_weights(
+            ExtremeWeatherLikelihoodCols.EXTREME_HEAT
+        ),
+        ExtremeWeatherLikelihoodCols.EXTREME_HEAT,
     )
 
     extreme_heat = min_max_scaling_pair(
         extreme_heat,
         [
             (
-                f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.FUTURE}",
+                f"{ExtremeWeatherLikelihoodCols.EXTREME_HEAT}_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherLikelihoodCols.EXTREME_HEAT}_{Scenarios.FUTURE}",
             )
         ],
         feature_range,
@@ -859,13 +861,13 @@ def _extreme_heat_index(
 
     _validate_index(
         extreme_heat,
-        [*ExtremeHeatCols, ExtremeWeatherRiskCols.EXTREME_HEAT],
+        [*ExtremeHeatCols, ExtremeWeatherLikelihoodCols.EXTREME_HEAT],
         feature_range,
     )
 
     _audit_index(
         extreme_heat,
-        [*ExtremeHeatCols, ExtremeWeatherRiskCols.EXTREME_HEAT],
+        [*ExtremeHeatCols, ExtremeWeatherLikelihoodCols.EXTREME_HEAT],
         config.paths.extreme_heat_audit,
         feature_range,
     )
@@ -917,16 +919,18 @@ def _extreme_cold_index(
 
     extreme_cold = calculate_composite_score(
         extreme_cold,
-        config.weights.extreme_weather_sub_hazard_weights(ExtremeWeatherRiskCols.EXTREME_COLD),
-        ExtremeWeatherRiskCols.EXTREME_COLD,
+        config.weights.extreme_weather_sub_hazard_weights(
+            ExtremeWeatherLikelihoodCols.EXTREME_COLD
+        ),
+        ExtremeWeatherLikelihoodCols.EXTREME_COLD,
     )
 
     extreme_cold = min_max_scaling_pair(
         extreme_cold,
         [
             (
-                f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.FUTURE}",
+                f"{ExtremeWeatherLikelihoodCols.EXTREME_COLD}_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherLikelihoodCols.EXTREME_COLD}_{Scenarios.FUTURE}",
             )
         ],
         feature_range,
@@ -936,13 +940,13 @@ def _extreme_cold_index(
 
     _validate_index(
         extreme_cold,
-        [*ExtremeColdCols, ExtremeWeatherRiskCols.EXTREME_COLD],
+        [*ExtremeColdCols, ExtremeWeatherLikelihoodCols.EXTREME_COLD],
         feature_range,
     )
 
     _audit_index(
         extreme_cold,
-        [*ExtremeColdCols, ExtremeWeatherRiskCols.EXTREME_COLD],
+        [*ExtremeColdCols, ExtremeWeatherLikelihoodCols.EXTREME_COLD],
         config.paths.extreme_cold_audit,
         feature_range,
     )
@@ -1025,16 +1029,18 @@ def _drought_index(
 
     drought_risk = calculate_composite_score(
         drought_risk,
-        config.weights.extreme_weather_sub_hazard_weights(ExtremeWeatherRiskCols.DROUGHT),
-        ExtremeWeatherRiskCols.DROUGHT,
+        config.weights.extreme_weather_sub_hazard_weights(
+            ExtremeWeatherLikelihoodCols.DROUGHT
+        ),
+        ExtremeWeatherLikelihoodCols.DROUGHT,
     )
 
     drought_risk = min_max_scaling_pair(
         drought_risk,
         [
             (
-                f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FUTURE}",
+                f"{ExtremeWeatherLikelihoodCols.DROUGHT}_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherLikelihoodCols.DROUGHT}_{Scenarios.FUTURE}",
             )
         ],
         feature_range,
@@ -1044,12 +1050,12 @@ def _drought_index(
 
     feature_range = (config.constants.score_min, config.constants.score_max)
     _validate_index(
-        drought_risk, [*DroughtCols, ExtremeWeatherRiskCols.DROUGHT], feature_range
+        drought_risk, [*DroughtCols, ExtremeWeatherLikelihoodCols.DROUGHT], feature_range
     )
 
     _audit_index(
         drought_risk,
-        [*DroughtCols, ExtremeWeatherRiskCols.DROUGHT],
+        [*DroughtCols, ExtremeWeatherLikelihoodCols.DROUGHT],
         config.paths.drought_audit,
         feature_range,
     )
@@ -1166,16 +1172,16 @@ def _storm_index(
 
     storm_risk = calculate_composite_score(
         storm_risk,
-        config.weights.extreme_weather_sub_hazard_weights(ExtremeWeatherRiskCols.STORM),
-        ExtremeWeatherRiskCols.STORM,
+        config.weights.extreme_weather_sub_hazard_weights(ExtremeWeatherLikelihoodCols.STORM),
+        ExtremeWeatherLikelihoodCols.STORM,
     )
 
     storm_risk = min_max_scaling_pair(
         storm_risk,
         [
             (
-                f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FUTURE}",
+                f"{ExtremeWeatherLikelihoodCols.STORM}_{Scenarios.CURRENT}",
+                f"{ExtremeWeatherLikelihoodCols.STORM}_{Scenarios.FUTURE}",
             )
         ],
         feature_range,
@@ -1183,11 +1189,13 @@ def _storm_index(
 
     storm_risk = gpd.GeoDataFrame(storm_risk, geometry=GEOMETRY_COL, crs=BNG_CRS)
 
-    _validate_index(storm_risk, [*StormCols, ExtremeWeatherRiskCols.STORM], feature_range)
+    _validate_index(
+        storm_risk, [*StormCols, ExtremeWeatherLikelihoodCols.STORM], feature_range
+    )
 
     _audit_index(
         storm_risk,
-        [*StormCols, ExtremeWeatherRiskCols.STORM],
+        [*StormCols, ExtremeWeatherLikelihoodCols.STORM],
         config.paths.storm_audit,
         feature_range,
     )
@@ -1218,7 +1226,7 @@ def _flooding_index(
     """Calculate the flooding index, either raster or vector methods based on configuration."""
     # TODO (DJ): #41 Add groundwater flooding into index calculation when acquired.
     flooding_paths = {
-        f"{flooding_type}_flooding_risk_{scenario}": (
+        f"{flooding_type}_flooding_likelihood_{scenario}": (
             config.paths.flooding_type_scenario_model_input(flooding_type, scenario)
         )
         for flooding_type in [FloodingTypes.RIVERS_SEA, FloodingTypes.SURFACE_WATER]
@@ -1241,7 +1249,7 @@ def _flooding_index_raster(
         flooding_paths,
         config.paths.flooding_risk_raster_model_interim_output,
         feature_range=(config.constants.score_min, config.constants.score_max),
-        flooding_weights=config.weights.main_hazard_weights(MainHazardRiskCols.FLOODING),
+        flooding_weights=config.weights.main_hazard_weights(MainHazardLikelihoodCols.FLOODING),
     )
     LOG.info("Flooding risk index calculation complete.")
 
@@ -1252,11 +1260,17 @@ def _get_raster_metadata(
     """Retrieve metadata needed for rasterizing."""
     all_bounds = np.array(
         [
-            flood_layers[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}"].total_bounds,
-            flood_layers[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FUTURE}"].total_bounds,
-            flood_layers[f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}"].total_bounds,
             flood_layers[
-                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FUTURE}"
+                f"{FloodingLikelihoodCols.RIVERS_SEA}_{Scenarios.CURRENT}"
+            ].total_bounds,
+            flood_layers[
+                f"{FloodingLikelihoodCols.RIVERS_SEA}_{Scenarios.FUTURE}"
+            ].total_bounds,
+            flood_layers[
+                f"{FloodingLikelihoodCols.SURFACE_WATER}_{Scenarios.CURRENT}"
+            ].total_bounds,
+            flood_layers[
+                f"{FloodingLikelihoodCols.SURFACE_WATER}_{Scenarios.FUTURE}"
             ].total_bounds,
         ]
     )
@@ -1349,7 +1363,7 @@ def _read_and_map_flooding_layers(
         flooding_layers[flooding_layer_name] = gpd.read_file(flooding_path)
         flooding_layers[flooding_layer_name][flooding_layer_name] = flooding_layers[
             flooding_layer_name
-        ][flooding_layer_name].map(FloodingRiskCols.get_risk_map())
+        ][flooding_layer_name].map(FloodingLikelihoodCols.get_likelihood_map())
     return flooding_layers
 
 
@@ -1359,7 +1373,7 @@ def _process_raster_flooding_tile(
     *,
     raster_metadata: dict[str, int | rasterio.Affine],
     flooding_layers: dict[str, gpd.GeoDataFrame],
-    scaling_params: dict[FloodingRiskCols, tuple[float, float]],
+    scaling_params: dict[FloodingLikelihoodCols, tuple[float, float]],
     col_band_map: dict[str, int],
     feature_range: tuple[float, float],
     flooding_weights: dict[RiskColumn, float],
@@ -1475,13 +1489,13 @@ def _calculate_composite_flooding_raster(
     surface_future_tile = tile_stack[FloodingBands.SURFACE_FUTURE.value]
 
     composite_current = (
-        rivers_current_tile * flooding_weights[FloodingRiskCols.RIVERS_SEA]
-        + surface_current_tile * flooding_weights[FloodingRiskCols.SURFACE_WATER]
+        rivers_current_tile * flooding_weights[FloodingLikelihoodCols.RIVERS_SEA]
+        + surface_current_tile * flooding_weights[FloodingLikelihoodCols.SURFACE_WATER]
     )
 
     composite_future = (
-        rivers_future_tile * flooding_weights[FloodingRiskCols.RIVERS_SEA]
-        + surface_future_tile * flooding_weights[FloodingRiskCols.SURFACE_WATER]
+        rivers_future_tile * flooding_weights[FloodingLikelihoodCols.RIVERS_SEA]
+        + surface_future_tile * flooding_weights[FloodingLikelihoodCols.SURFACE_WATER]
     )
 
     _validate_raster_index_tile(composite_current, feature_range)
@@ -1495,16 +1509,14 @@ def _calculate_composite_flooding_raster(
     dst.write(
         composite_current, indexes=FloodingBands.FLOODING_CURRENT.value + 1, window=window
     )
-    dst.write(
-        composite_future, indexes=FloodingBands.FLOODING_FUTURE.value + 1, window=window
-    )
+    dst.write(composite_future, indexes=FloodingBands.FLOODING_FUTURE.value + 1, window=window)
 
 
 def _flooding_raster_min_max(
     flooding_layers: dict[str, gpd.GeoDataFrame],
-) -> dict[FloodingRiskCols, tuple[float, float]]:
+) -> dict[FloodingLikelihoodCols, tuple[float, float]]:
     scaling_params = {}
-    for risk_col in FloodingRiskCols:
+    for risk_col in FloodingLikelihoodCols:
         combined_min = min(
             flooding_layers[f"{risk_col}_{Scenarios.CURRENT}"][
                 f"{risk_col}_{Scenarios.CURRENT}"
@@ -1576,17 +1588,19 @@ def _flooding_index_vector(
     LOG.info("Applying functional rules to flooding overlay...")
 
     # Fill NA values with very low risk since no data means very low risk in the data
-    flooding_risk = flooding_risk.fillna(FloodingRiskCols.get_risk_map()["Very low"])
+    flooding_risk = flooding_risk.fillna(
+        FloodingLikelihoodCols.get_likelihood_map()["Very low"]
+    )
 
     # Map original risk categories to numeric scores
     for col in [
-        f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}",
-        f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FUTURE}",
-        f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}",
-        f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FUTURE}",
+        f"{FloodingLikelihoodCols.RIVERS_SEA}_{Scenarios.CURRENT}",
+        f"{FloodingLikelihoodCols.RIVERS_SEA}_{Scenarios.FUTURE}",
+        f"{FloodingLikelihoodCols.SURFACE_WATER}_{Scenarios.CURRENT}",
+        f"{FloodingLikelihoodCols.SURFACE_WATER}_{Scenarios.FUTURE}",
     ]:
         flooding_risk[col] = (
-            flooding_risk[col].map(FloodingRiskCols.get_risk_map()).astype(float)
+            flooding_risk[col].map(FloodingLikelihoodCols.get_likelihood_map()).astype(float)
         )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -1594,12 +1608,12 @@ def _flooding_index_vector(
         flooding_risk,
         [
             (
-                f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}",
-                f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FUTURE}",
+                f"{FloodingLikelihoodCols.RIVERS_SEA}_{Scenarios.CURRENT}",
+                f"{FloodingLikelihoodCols.RIVERS_SEA}_{Scenarios.FUTURE}",
             ),
             (
-                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}",
-                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FUTURE}",
+                f"{FloodingLikelihoodCols.SURFACE_WATER}_{Scenarios.CURRENT}",
+                f"{FloodingLikelihoodCols.SURFACE_WATER}_{Scenarios.FUTURE}",
             ),
         ],
         feature_range,
@@ -1607,18 +1621,20 @@ def _flooding_index_vector(
 
     flooding_risk = calculate_composite_score(
         flooding_risk,
-        config.weights.main_hazard_weights(MainHazardRiskCols.FLOODING),
-        MainHazardRiskCols.FLOODING,
+        config.weights.main_hazard_weights(MainHazardLikelihoodCols.FLOODING),
+        MainHazardLikelihoodCols.FLOODING,
     )
 
     _validate_index(
-        flooding_risk, [*FloodingRiskCols, MainHazardRiskCols.FLOODING], feature_range
+        flooding_risk,
+        [*FloodingLikelihoodCols, MainHazardLikelihoodCols.FLOODING],
+        feature_range,
     )
 
     feature_range = (config.constants.score_min, config.constants.score_max)
     _audit_index(
         flooding_risk,
-        [*FloodingRiskCols, MainHazardRiskCols.FLOODING],
+        [*FloodingLikelihoodCols, MainHazardLikelihoodCols.FLOODING],
         config.paths.flooding_audit,
         feature_range,
     )
@@ -1723,7 +1739,7 @@ def _process_flooding_overlay_tile(
 
     expected_cols = []
     for scenario in Scenarios:
-        for flood_risk in FloodingRiskCols:
+        for flood_risk in FloodingLikelihoodCols:
             expected_cols.append(f"{flood_risk}_{scenario}")
             if f"{flood_risk}_{scenario}" not in tile_overlay.columns:
                 tile_overlay[f"{flood_risk}_{scenario}"] = None
@@ -1740,18 +1756,18 @@ def _ground_stability_index(config: model_config.Config) -> None:
     feature_range = (config.constants.score_min, config.constants.score_max)
     if config.switches.ground_stability_premium:
         geosure_layers = {}
-        for geosure_hazard in GroundStabilityRiskCols:
+        for geosure_hazard in GroundStabilityLikelihoodCols:
             geosure_layers[geosure_hazard] = gpd.read_file(
                 config.paths.geosure_model_input(geosure_hazard)
             )
 
         ground_stability = _overlay_and_clean(
-            geosure_layers[GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS],
-            geosure_layers[GroundStabilityRiskCols.COMPRESSIBLE_GROUND],
-            geosure_layers[GroundStabilityRiskCols.LANDSLIDES],
-            geosure_layers[GroundStabilityRiskCols.RUNNING_SAND],
-            geosure_layers[GroundStabilityRiskCols.SHRINK_SWELL],
-            geosure_layers[GroundStabilityRiskCols.SOLUBLE_ROCKS],
+            geosure_layers[GroundStabilityLikelihoodCols.COLLAPSIBLE_DEPOSITS],
+            geosure_layers[GroundStabilityLikelihoodCols.COMPRESSIBLE_GROUND],
+            geosure_layers[GroundStabilityLikelihoodCols.LANDSLIDES],
+            geosure_layers[GroundStabilityLikelihoodCols.RUNNING_SAND],
+            geosure_layers[GroundStabilityLikelihoodCols.SHRINK_SWELL],
+            geosure_layers[GroundStabilityLikelihoodCols.SOLUBLE_ROCKS],
             target_crs=BNG_CRS,
         )
 
@@ -1759,7 +1775,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
         risk_score_map = _create_ordered_risk_map(
             classes=["A", "B", "C", "D", "E"], feature_range=feature_range
         )
-        for col in GroundStabilityRiskCols:
+        for col in GroundStabilityLikelihoodCols:
             ground_stability[f"{col}_{Scenarios.CURRENT}"] = ground_stability[
                 f"{col}_{Scenarios.CURRENT}"
             ].map(risk_score_map)
@@ -1769,8 +1785,8 @@ def _ground_stability_index(config: model_config.Config) -> None:
 
         ground_stability = _iterative_spatial_infilling(
             ground_stability,
-            [f"{col}_{Scenarios.CURRENT}" for col in GroundStabilityRiskCols]
-            + [f"{col}_{Scenarios.FUTURE}" for col in GroundStabilityRiskCols],
+            [f"{col}_{Scenarios.CURRENT}" for col in GroundStabilityLikelihoodCols]
+            + [f"{col}_{Scenarios.FUTURE}" for col in GroundStabilityLikelihoodCols],
             _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE,
         )
     else:
@@ -1779,7 +1795,7 @@ def _ground_stability_index(config: model_config.Config) -> None:
         risk_score_map = _create_ordered_risk_map(
             classes=[1, 2, 3], feature_range=feature_range
         )
-        for col in GroundStabilityRiskCols:
+        for col in GroundStabilityLikelihoodCols:
             ground_stability[f"{col}_{Scenarios.CURRENT}"] = ground_stability[
                 f"{col}_{Scenarios.CURRENT}"
             ].map(risk_score_map)
@@ -1789,19 +1805,19 @@ def _ground_stability_index(config: model_config.Config) -> None:
 
     ground_stability = calculate_composite_score(
         ground_stability,
-        config.weights.main_hazard_weights(MainHazardRiskCols.GROUND_STABILITY),
-        MainHazardRiskCols.GROUND_STABILITY,
+        config.weights.main_hazard_weights(MainHazardLikelihoodCols.GROUND_STABILITY),
+        MainHazardLikelihoodCols.GROUND_STABILITY,
     )
 
     _validate_index(
         ground_stability,
-        [*GroundStabilityRiskCols, MainHazardRiskCols.GROUND_STABILITY],
+        [*GroundStabilityLikelihoodCols, MainHazardLikelihoodCols.GROUND_STABILITY],
         feature_range,
     )
 
     _audit_index(
         ground_stability,
-        [*GroundStabilityRiskCols, MainHazardRiskCols.GROUND_STABILITY],
+        [*GroundStabilityLikelihoodCols, MainHazardLikelihoodCols.GROUND_STABILITY],
         config.paths.ground_stability_audit,
         feature_range,
     )
@@ -1837,8 +1853,8 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
             cleaning_funcs.write_to_file(
                 gpd.GeoDataFrame(
                     columns=[
-                        f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
-                        f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FUTURE}",
+                        f"{MainHazardLikelihoodCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
+                        f"{MainHazardLikelihoodCols.COASTAL_EROSION}_{Scenarios.FUTURE}",
                         GEOMETRY_COL,
                     ],  # Empty GeoDataFrame
                     geometry=GEOMETRY_COL,
@@ -1848,14 +1864,14 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
             )
             return
 
-        coastal_erosion_risk[scenario][MainHazardRiskCols.COASTAL_EROSION] = (
+        coastal_erosion_risk[scenario][MainHazardLikelihoodCols.COASTAL_EROSION] = (
             config.constants.score_max
         )
 
         coastal_erosion_risk[scenario] = coastal_erosion_risk[scenario].rename(
             columns={
-                f"{MainHazardRiskCols.COASTAL_EROSION}": (
-                    f"{MainHazardRiskCols.COASTAL_EROSION}_{scenario}"
+                f"{MainHazardLikelihoodCols.COASTAL_EROSION}": (
+                    f"{MainHazardLikelihoodCols.COASTAL_EROSION}_{scenario}"
                 )
             }
         )
@@ -1867,8 +1883,8 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
     )
 
     # Check that both columns exist
-    current_col = f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}"
-    future_col = f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FUTURE}"
+    current_col = f"{MainHazardLikelihoodCols.COASTAL_EROSION}_{Scenarios.CURRENT}"
+    future_col = f"{MainHazardLikelihoodCols.COASTAL_EROSION}_{Scenarios.FUTURE}"
     if current_col not in coastal_erosion_risk.columns:
         coastal_erosion_risk[current_col] = 0
     if future_col not in coastal_erosion_risk.columns:
@@ -1885,18 +1901,20 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
     coastal_erosion_risk = gpd.GeoDataFrame(coastal_erosion_risk, geometry=GEOMETRY_COL)
     coastal_erosion_risk = coastal_erosion_risk[
         [
-            f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
-            f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FUTURE}",
+            f"{MainHazardLikelihoodCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
+            f"{MainHazardLikelihoodCols.COASTAL_EROSION}_{Scenarios.FUTURE}",
             GEOMETRY_COL,
         ]
     ]
 
     feature_range = (config.constants.score_min, config.constants.score_max)
-    _validate_index(coastal_erosion_risk, [MainHazardRiskCols.COASTAL_EROSION], feature_range)
+    _validate_index(
+        coastal_erosion_risk, [MainHazardLikelihoodCols.COASTAL_EROSION], feature_range
+    )
 
     _audit_index(
         coastal_erosion_risk,
-        [MainHazardRiskCols.COASTAL_EROSION],
+        [MainHazardLikelihoodCols.COASTAL_EROSION],
         config.paths.coastal_erosion_audit,
         feature_range,
     )
