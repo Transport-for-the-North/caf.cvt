@@ -63,7 +63,7 @@ _RISK_DISTRIBUTION_IMAGE_ROW_ADD = 21
 _RISK_AVERAGES_WS_TITLE = "Risk Averages"
 _RISK_AVERAGES_BAR_WIDTH = 0.40
 _AVERAGE_CURRENT_RISK_COL = 2
-_AVERAGE_FORECAST_RISK_COL = 3
+_AVERAGE_FUTURE_RISK_COL = 3
 _CHANGE_IN_RISK_COL = 4
 _LENGTH_WEIGHTED_PCT_RISK_COL = 5
 _RISK_AVERAGES_IMAGE_ROW_SPACING = 3
@@ -142,7 +142,7 @@ def create_risk_summary(
     asset_risk_summary = asset_risk.copy()
     asset_risk_summary = asset_risk_summary.dropna(
         subset=[f"{col}_{Scenarios.CURRENT}" for col in risk_cols]
-        + [f"{col}_{Scenarios.FORECAST}" for col in risk_cols]
+        + [f"{col}_{Scenarios.FUTURE}" for col in risk_cols]
     ).copy()
     if asset_risk_summary.empty:
         return
@@ -170,7 +170,7 @@ def create_risk_summary(
         columns=[
             "Hazard",
             f"Average {Scenarios.CURRENT.capitalize()} Risk",
-            f"Average {Scenarios.FORECAST.capitalize()} Risk",
+            f"Average {Scenarios.FUTURE.capitalize()} Risk",
             "Change in Risk",
             "Percentage of Length with Increased Risk",
         ],
@@ -274,20 +274,20 @@ def _fill_risk_summary_column(
 
     increased_risk_length = asset_risk[
         (
-            asset_risk[f"{hazard}_{Scenarios.FORECAST}"]
+            asset_risk[f"{hazard}_{Scenarios.FUTURE}"]
             > asset_risk[f"{hazard}_{Scenarios.CURRENT}"]
         )
     ][_LENGTH_M_COL].sum()
     pct_increased_risk = round((increased_risk_length / total_length) * 100)
 
     change_in_risk = round(
-        (length_weighted_avgs[Scenarios.FORECAST] - length_weighted_avgs[Scenarios.CURRENT]), 1
+        (length_weighted_avgs[Scenarios.FUTURE] - length_weighted_avgs[Scenarios.CURRENT]), 1
     )
 
     risk_averages.loc[len(risk_averages)] = [
         hazard.replace("_", " ").title(),
         length_weighted_avgs[Scenarios.CURRENT],
-        length_weighted_avgs[Scenarios.FORECAST],
+        length_weighted_avgs[Scenarios.FUTURE],
         change_in_risk,
         pct_increased_risk,
     ]
@@ -360,7 +360,7 @@ def _fill_descriptive_risk_averages(
             f"Change in {hazard.replace('_', ' ').title()}"
         ] = (
             descriptive_risk_averages[descriptive_col][
-                f"{Scenarios.FORECAST.capitalize()} {hazard.replace('_', ' ').title()}"
+                f"{Scenarios.FUTURE.capitalize()} {hazard.replace('_', ' ').title()}"
             ]
             - descriptive_risk_averages[descriptive_col][
                 f"{Scenarios.CURRENT.capitalize()} {hazard.replace('_', ' ').title()}"
@@ -384,10 +384,10 @@ def _hazard_distribution_plot(
 
     x = [
         f"{Scenarios.CURRENT.capitalize()} {hazard.replace('_', ' ').title()}",
-        f"{Scenarios.FORECAST.capitalize()} {hazard.replace('_', ' ').title()}",
+        f"{Scenarios.FUTURE.capitalize()} {hazard.replace('_', ' ').title()}",
     ]
 
-    x_labels = [Scenarios.CURRENT.capitalize(), Scenarios.FORECAST.capitalize()]
+    x_labels = [Scenarios.CURRENT.capitalize(), Scenarios.FUTURE.capitalize()]
 
     risk_category_order = [
         RiskCategories.VERY_LOW,
@@ -443,7 +443,7 @@ def _risk_averages_plot(risk_averages: pd.DataFrame, out_path: pathlib.Path) -> 
     fig, ax = plt.subplots(figsize=(10, 6))
 
     current = risk_averages[f"Average {Scenarios.CURRENT.capitalize()} Risk"].to_numpy()
-    forecast = risk_averages[f"Average {Scenarios.FORECAST.capitalize()} Risk"].to_numpy()
+    future = risk_averages[f"Average {Scenarios.FUTURE.capitalize()} Risk"].to_numpy()
     hazards = [hazard.replace(" Risk", "") for hazard in risk_averages["Hazard"].to_list()]
     x = np.arange(len(hazards))
 
@@ -456,10 +456,10 @@ def _risk_averages_plot(risk_averages: pd.DataFrame, out_path: pathlib.Path) -> 
     )
     ax.bar(
         x + _BAR_CHART_SPACING,
-        forecast,
+        future,
         width=_RISK_AVERAGES_BAR_WIDTH,
         color=ColourMaps.DARK_ORANGE,
-        label=Scenarios.FORECAST.capitalize(),
+        label=Scenarios.FUTURE.capitalize(),
     )
     ax.set_xticks(x)
     ax.set_xticklabels(hazards)
@@ -565,7 +565,7 @@ def _add_risk_distribution_images(
         dict.fromkeys(
             [
                 col.replace(f"{Scenarios.CURRENT.capitalize()} ", "").replace(
-                    f"{Scenarios.FORECAST.capitalize()} ", ""
+                    f"{Scenarios.FUTURE.capitalize()} ", ""
                 )
                 for col in risk_distribution.columns
                 if " Risk" in col
@@ -753,7 +753,7 @@ def _format_numeric_cells(
     fill_colour: HexColourCodes, value: str | int | float | None, c_idx: int
 ) -> str:
     if isinstance(value, (int, float)):
-        if c_idx in [_AVERAGE_CURRENT_RISK_COL, _AVERAGE_FORECAST_RISK_COL]:
+        if c_idx in [_AVERAGE_CURRENT_RISK_COL, _AVERAGE_FUTURE_RISK_COL]:
             fill_colour = mpl.colors.to_hex(
                 mpl.colormaps[ColourMaps.GREEN_YELLOW_RED](value / 100)
             ).replace("#", "")

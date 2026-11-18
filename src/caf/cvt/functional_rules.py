@@ -75,7 +75,7 @@ _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE = 10000
 
 _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE = 1000
 
-_COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FORECAST}
+_COASTAL_EROSION_YEAR_SCENARIO_MAP = {"2055": Scenarios.CURRENT, "2105": Scenarios.FUTURE}
 
 _NUM_TILES_DONE = 0
 _FLOODING_PIXEL_SIZE_M = 2
@@ -97,7 +97,7 @@ def min_max_scaling_pair(
 ) -> pd.DataFrame:
     """Scale paired columns jointly using Min-Max scaling.
 
-    For each tuple (col_current, col_forecast) in `pairs`, this function computes a
+    For each tuple (col_current, col_future) in `pairs`, this function computes a
     single minimum and maximum across the combined values of both columns and
     applies a shared `sklearn.preprocessing.MinMaxScaler` with the provided
     `feature_range`. This ensures the two columns in each pair are scaled
@@ -119,18 +119,18 @@ def min_max_scaling_pair(
         The original DataFrame with the specified columns scaled in-place.
     """
     scaler = sklearn.preprocessing.MinMaxScaler(feature_range=feature_range)
-    for col_current, col_forecast in pairs:
+    for col_current, col_future in pairs:
         # Combine both columns into one array for global min/max
-        combined_values = data[[col_current, col_forecast]].to_numpy().flatten().reshape(-1, 1)
+        combined_values = data[[col_current, col_future]].to_numpy().flatten().reshape(-1, 1)
         combined_values = combined_values[~pd.isna(combined_values)].reshape(-1, 1)
 
         if combined_values.size == 0:
-            raise ValueError(f"No valid values found for pair ({col_current}, {col_forecast})")
+            raise ValueError(f"No valid values found for pair ({col_current}, {col_future})")
 
         if data[col_current].notna().sum() == 0:
             raise ValueError(f"{col_current} contains no valid values")
-        if data[col_forecast].notna().sum() == 0:
-            raise ValueError(f"{col_forecast} contains no valid values")
+        if data[col_future].notna().sum() == 0:
+            raise ValueError(f"{col_future} contains no valid values")
 
         scaler.fit(combined_values)
 
@@ -140,8 +140,8 @@ def min_max_scaling_pair(
             .clip(*feature_range)
             .flatten()
         )
-        data.loc[data[col_forecast].notna(), col_forecast] = (
-            scaler.transform(data.loc[data[col_forecast].notna(), [col_forecast]].to_numpy())
+        data.loc[data[col_future].notna(), col_future] = (
+            scaler.transform(data.loc[data[col_future].notna(), [col_future]].to_numpy())
             .clip(*feature_range)
             .flatten()
         )
@@ -157,29 +157,29 @@ def min_max_scaling_pair_raster(
     """Apply min-max scaling to pairs of raster bands in a stack."""
     out_min, out_max = feature_range
 
-    for current_band, forecast_band in pairs:
+    for current_band, future_band in pairs:
         current = stack[current_band]
-        forecast = stack[forecast_band]
+        future = stack[future_band]
 
-        combined_min = np.nanmin(np.nanmin(current), np.nanmin(forecast))
-        combined_max = np.nanmax(np.nanmax(current), np.nanmax(forecast))
+        combined_min = np.nanmin(np.nanmin(current), np.nanmin(future))
+        combined_max = np.nanmax(np.nanmax(current), np.nanmax(future))
 
         if combined_max == combined_min:
             current_scaled = np.full_like(current, out_min)
-            forecast_scaled = np.full_like(forecast, out_min)
+            future_scaled = np.full_like(future, out_min)
         else:
             current_scaled = (current - combined_min) / (combined_max - combined_min) * (
                 out_max - out_min
             ) + out_min
-            forecast_scaled = (forecast - combined_min) / (combined_max - combined_min) * (
+            future_scaled = (future - combined_min) / (combined_max - combined_min) * (
                 out_max - out_min
             ) + out_min
 
         current_scaled[np.isnan(current)] = np.nan
-        forecast_scaled[np.isnan(forecast)] = np.nan
+        future_scaled[np.isnan(future)] = np.nan
 
         stack[current_band] = current_scaled
-        stack[forecast_band] = forecast_scaled
+        stack[future_band] = future_scaled
 
     return stack
 
@@ -498,7 +498,7 @@ def plot_choropleth(
 
     _fig, ax = plt.subplots(1, 2, figsize=(16, 8))
 
-    for axis, scenario in zip(ax, [Scenarios.CURRENT, Scenarios.FORECAST], strict=False):
+    for axis, scenario in zip(ax, [Scenarios.CURRENT, Scenarios.FUTURE], strict=False):
         risk_data.plot(
             column=f"{column}_{scenario}",
             cmap=cmap,
@@ -527,12 +527,12 @@ def _plot_raster_choropleth(
     column: RiskColumn,
     *,
     band_current: int,
-    band_forecast: int,
+    band_future: int,
     title: str,
     out_path: pathlib.Path,
     feature_range: tuple[int, int],
 ) -> None:
-    """Plot a raster choropleth for the current and forecast bands."""
+    """Plot a raster choropleth for the current and future bands."""
     fig, ax = plt.subplots(1, 2, figsize=(16, 8))
 
     cmap = column.get_cmap()
@@ -540,7 +540,7 @@ def _plot_raster_choropleth(
     im = {}
     for axis, band_title, band in (
         (ax[0], Scenarios.CURRENT.title(), band_current),
-        (ax[1], Scenarios.FORECAST.title(), band_forecast),
+        (ax[1], Scenarios.FUTURE.title(), band_future),
     ):
         im[band] = axis.imshow(
             raster[band], cmap=cmap, vmin=feature_range[0], vmax=feature_range[1]
@@ -624,13 +624,13 @@ def _audit_raster_index(
     out_path.mkdir(parents=True, exist_ok=True)
 
     for var in index_vars:
-        band_current, band_forecast = FloodingBands.get_band_map()[var]
+        band_current, band_future = FloodingBands.get_band_map()[var]
         # Plot Choropleth Maps for each variable
         _plot_raster_choropleth(
             raster=index,
             column=var,
             band_current=band_current,
-            band_forecast=band_forecast,
+            band_future=band_future,
             title=f"{var.replace('_', ' ').title()}",
             out_path=out_path / f"{var}_choropleth.png",
             feature_range=feature_range,
@@ -708,7 +708,7 @@ def _extreme_weather_index(config: model_config.Config) -> None:
             "grid_id",
             "part",
             f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.CURRENT}",
-            f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.FORECAST}",
+            f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.FUTURE}",
         ]
     ].merge(
         extreme_cold[
@@ -716,7 +716,7 @@ def _extreme_weather_index(config: model_config.Config) -> None:
                 "grid_id",
                 "part",
                 f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.FUTURE}",
                 GEOMETRY_COL,
             ]
         ],
@@ -734,14 +734,14 @@ def _extreme_weather_index(config: model_config.Config) -> None:
         drought[
             [
                 f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FUTURE}",
                 GEOMETRY_COL,
             ]
         ],
         storm[
             [
                 f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FUTURE}",
                 GEOMETRY_COL,
             ]
         ],
@@ -752,13 +752,13 @@ def _extreme_weather_index(config: model_config.Config) -> None:
         extreme_weather_risk,
         [
             f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.CURRENT}",
-            f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.FORECAST}",
+            f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.FUTURE}",
             f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.CURRENT}",
-            f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.FORECAST}",
+            f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.FUTURE}",
             f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.CURRENT}",
-            f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FORECAST}",
+            f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FUTURE}",
             f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.CURRENT}",
-            f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FORECAST}",
+            f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FUTURE}",
         ],
         _EXTREME_WEATHER_NEAREST_JOIN_MAX_DISTANCE,
     )
@@ -823,15 +823,15 @@ def _extreme_heat_index(
         [
             (
                 f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.CURRENT}",
-                f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.FORECAST}",
+                f"{ExtremeHeatCols.MAX_TEMP_SUMMER}_{Scenarios.FUTURE}",
             ),
             (
                 f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.CURRENT}",
-                f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.FORECAST}",
+                f"{ExtremeHeatCols.HOT_SUMMER_DAYS}_{Scenarios.FUTURE}",
             ),
             (
                 f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.CURRENT}",
-                f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.FORECAST}",
+                f"{ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{Scenarios.FUTURE}",
             ),
         ],
         feature_range,
@@ -848,7 +848,7 @@ def _extreme_heat_index(
         [
             (
                 f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherRiskCols.EXTREME_HEAT}_{Scenarios.FUTURE}",
             )
         ],
         feature_range,
@@ -901,15 +901,15 @@ def _extreme_cold_index(
         [
             (
                 f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.CURRENT}",
-                f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.FORECAST}",
+                f"{ExtremeColdCols.MIN_TEMP_WINTER}_{Scenarios.FUTURE}",
             ),
             (
                 f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.CURRENT}",
-                f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.FORECAST}",
+                f"{ExtremeColdCols.FROST_DAYS}_{Scenarios.FUTURE}",
             ),
             (
                 f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.CURRENT}",
-                f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.FORECAST}",
+                f"{ExtremeColdCols.ICING_DAYS}_{Scenarios.FUTURE}",
             ),
         ],
         feature_range,
@@ -926,7 +926,7 @@ def _extreme_cold_index(
         [
             (
                 f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherRiskCols.EXTREME_COLD}_{Scenarios.FUTURE}",
             )
         ],
         feature_range,
@@ -969,7 +969,7 @@ def _drought_index(
     precip_sum_gdf = precip_sum_gdf[
         [
             f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}",
-            f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}",
+            f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FUTURE}",
             GEOMETRY_COL,
         ]
     ]
@@ -980,9 +980,9 @@ def _drought_index(
         drought_risk,
         [
             f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}",
-            f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}",
+            f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FUTURE}",
             f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.CURRENT}",
-            f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FORECAST}",
+            f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FUTURE}",
         ],
         _DROUGHT_NEAREST_JOIN_MAX_DISTANCE,
     )
@@ -990,9 +990,9 @@ def _drought_index(
     drought_risk = drought_risk[
         [
             f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.CURRENT}",
-            f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FORECAST}",
+            f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FUTURE}",
             f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}",
-            f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}",
+            f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FUTURE}",
             GEOMETRY_COL,
         ]
     ]
@@ -1003,11 +1003,11 @@ def _drought_index(
         [
             (
                 f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.CURRENT}",
-                f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FORECAST}",
+                f"{DroughtCols.DROUGHT_SEVERITY_INDEX}_{Scenarios.FUTURE}",
             ),
             (
                 f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}",
-                f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}",
+                f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FUTURE}",
             ),
         ],
         feature_range,
@@ -1018,9 +1018,9 @@ def _drought_index(
         config.constants.score_max
         - drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}"]
     )
-    drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}"] = (
+    drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FUTURE}"] = (
         config.constants.score_max
-        - drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FORECAST}"]
+        - drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FUTURE}"]
     )
 
     drought_risk = calculate_composite_score(
@@ -1034,7 +1034,7 @@ def _drought_index(
         [
             (
                 f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherRiskCols.DROUGHT}_{Scenarios.FUTURE}",
             )
         ],
         feature_range,
@@ -1080,7 +1080,7 @@ def _storm_index(
     precip_win_gdf = precip_win_gdf[
         [
             f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",
-            f"{StormCols.PRECIP_WINTER}_{Scenarios.FORECAST}",
+            f"{StormCols.PRECIP_WINTER}_{Scenarios.FUTURE}",
             GEOMETRY_COL,
         ]
     ]
@@ -1097,13 +1097,13 @@ def _storm_index(
         [
             f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}",
             f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",
-            f"{StormCols.PRECIP_WINTER}_{Scenarios.FORECAST}",
+            f"{StormCols.PRECIP_WINTER}_{Scenarios.FUTURE}",
             f"{StormCols.WIND_SPEED}_{Scenarios.CURRENT}",
-            f"{StormCols.WIND_SPEED}_{Scenarios.FORECAST}",
+            f"{StormCols.WIND_SPEED}_{Scenarios.FUTURE}",
             f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
-            f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
+            f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FUTURE}",
             f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.CURRENT}",
-            f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FORECAST}",
+            f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FUTURE}",
             GEOMETRY_COL,
         ]
     ]
@@ -1113,13 +1113,13 @@ def _storm_index(
         [
             f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}",
             f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",
-            f"{StormCols.PRECIP_WINTER}_{Scenarios.FORECAST}",
+            f"{StormCols.PRECIP_WINTER}_{Scenarios.FUTURE}",
             f"{StormCols.WIND_SPEED}_{Scenarios.CURRENT}",
-            f"{StormCols.WIND_SPEED}_{Scenarios.FORECAST}",
+            f"{StormCols.WIND_SPEED}_{Scenarios.FUTURE}",
             f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
-            f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
+            f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FUTURE}",
             f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.CURRENT}",
-            f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FORECAST}",
+            f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FUTURE}",
         ],
         _STORM_NEAREST_JOIN_MAX_DISTANCE,
     )
@@ -1127,8 +1127,8 @@ def _storm_index(
     storm_risk[f"{StormCols.WIND_SPEED}_{Scenarios.CURRENT}"] = storm_risk[
         f"{StormCols.WIND_SPEED}_{Scenarios.CURRENT}"
     ].apply(_wind_risk_scaled)
-    storm_risk[f"{StormCols.WIND_SPEED}_{Scenarios.FORECAST}"] = storm_risk[
-        f"{StormCols.WIND_SPEED}_{Scenarios.FORECAST}"
+    storm_risk[f"{StormCols.WIND_SPEED}_{Scenarios.FUTURE}"] = storm_risk[
+        f"{StormCols.WIND_SPEED}_{Scenarios.FUTURE}"
     ].apply(_wind_risk_scaled)
 
     feature_range = (config.constants.score_min, config.constants.score_max)
@@ -1137,19 +1137,19 @@ def _storm_index(
         [
             (
                 f"{StormCols.WIND_SPEED}_{Scenarios.CURRENT}",
-                f"{StormCols.WIND_SPEED}_{Scenarios.FORECAST}",
+                f"{StormCols.WIND_SPEED}_{Scenarios.FUTURE}",
             ),
             (
                 f"{StormCols.PRECIP_WINTER}_{Scenarios.CURRENT}",
-                f"{StormCols.PRECIP_WINTER}_{Scenarios.FORECAST}",
+                f"{StormCols.PRECIP_WINTER}_{Scenarios.FUTURE}",
             ),
             (
                 f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.CURRENT}",
-                f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FORECAST}",
+                f"{StormCols.EXCEEDANCE_DAYS}_{Scenarios.FUTURE}",
             ),
             (
                 f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.CURRENT}",
-                f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FORECAST}",
+                f"{StormCols.WIND_DRIVEN_RAIN_INDEX}_{Scenarios.FUTURE}",
             ),
         ],
         feature_range,
@@ -1160,7 +1160,7 @@ def _storm_index(
     storm_risk[f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}"] = scaler.fit_transform(
         storm_risk[[f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}"]]
     ).clip(*feature_range)
-    storm_risk[f"{StormCols.RAIN_DAYS}_{Scenarios.FORECAST}"] = storm_risk[
+    storm_risk[f"{StormCols.RAIN_DAYS}_{Scenarios.FUTURE}"] = storm_risk[
         f"{StormCols.RAIN_DAYS}_{Scenarios.CURRENT}"
     ].clip(*feature_range)
 
@@ -1175,7 +1175,7 @@ def _storm_index(
         [
             (
                 f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.CURRENT}",
-                f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FORECAST}",
+                f"{ExtremeWeatherRiskCols.STORM}_{Scenarios.FUTURE}",
             )
         ],
         feature_range,
@@ -1253,10 +1253,10 @@ def _get_raster_metadata(
     all_bounds = np.array(
         [
             flood_layers[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}"].total_bounds,
-            flood_layers[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FORECAST}"].total_bounds,
+            flood_layers[f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FUTURE}"].total_bounds,
             flood_layers[f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}"].total_bounds,
             flood_layers[
-                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}"
+                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FUTURE}"
             ].total_bounds,
         ]
     )
@@ -1297,9 +1297,9 @@ def _rasterize_and_stack_tiled(
     scaling_params = _flooding_raster_min_max(flooding_layers)
 
     col_band_map = {}
-    for col, (current_band, forecast_band) in FloodingBands.get_band_map().items():
+    for col, (current_band, future_band) in FloodingBands.get_band_map().items():
         col_band_map[f"{col}_{Scenarios.CURRENT}"] = current_band
-        col_band_map[f"{col}_{Scenarios.FORECAST}"] = forecast_band
+        col_band_map[f"{col}_{Scenarios.FUTURE}"] = future_band
 
     raster_metadata = _get_raster_metadata(flooding_layers)
 
@@ -1418,7 +1418,7 @@ def _rasterize_write_flooding_layer(
 ) -> np.ndarray:
     """Rasterize a single flooding layer, write to file, and update the tile stack."""
     flooding_type = flooding_layer_name.replace(f"_{Scenarios.CURRENT}", "").replace(
-        f"_{Scenarios.FORECAST}", ""
+        f"_{Scenarios.FUTURE}", ""
     )
     tile_geom = shapely.geometry.box(
         *(rasterio.windows.bounds(window, raster_metadata["transform"]))
@@ -1470,33 +1470,33 @@ def _calculate_composite_flooding_raster(
         return
 
     rivers_current_tile = tile_stack[FloodingBands.RIVERS_CURRENT.value]
-    rivers_forecast_tile = tile_stack[FloodingBands.RIVERS_FORECAST.value]
+    rivers_future_tile = tile_stack[FloodingBands.RIVERS_FUTURE.value]
     surface_current_tile = tile_stack[FloodingBands.SURFACE_CURRENT.value]
-    surface_forecast_tile = tile_stack[FloodingBands.SURFACE_FORECAST.value]
+    surface_future_tile = tile_stack[FloodingBands.SURFACE_FUTURE.value]
 
     composite_current = (
         rivers_current_tile * flooding_weights[FloodingRiskCols.RIVERS_SEA]
         + surface_current_tile * flooding_weights[FloodingRiskCols.SURFACE_WATER]
     )
 
-    composite_forecast = (
-        rivers_forecast_tile * flooding_weights[FloodingRiskCols.RIVERS_SEA]
-        + surface_forecast_tile * flooding_weights[FloodingRiskCols.SURFACE_WATER]
+    composite_future = (
+        rivers_future_tile * flooding_weights[FloodingRiskCols.RIVERS_SEA]
+        + surface_future_tile * flooding_weights[FloodingRiskCols.SURFACE_WATER]
     )
 
     _validate_raster_index_tile(composite_current, feature_range)
-    _validate_raster_index_tile(composite_forecast, feature_range)
+    _validate_raster_index_tile(composite_future, feature_range)
 
     if np.isnan(composite_current).any():
         composite_current[np.isnan(composite_current)] = RASTER_UNAVAILABLE
-    if np.isnan(composite_forecast).any():
-        composite_forecast[np.isnan(composite_forecast)] = RASTER_UNAVAILABLE
+    if np.isnan(composite_future).any():
+        composite_future[np.isnan(composite_future)] = RASTER_UNAVAILABLE
 
     dst.write(
         composite_current, indexes=FloodingBands.FLOODING_CURRENT.value + 1, window=window
     )
     dst.write(
-        composite_forecast, indexes=FloodingBands.FLOODING_FORECAST.value + 1, window=window
+        composite_future, indexes=FloodingBands.FLOODING_FUTURE.value + 1, window=window
     )
 
 
@@ -1509,16 +1509,16 @@ def _flooding_raster_min_max(
             flooding_layers[f"{risk_col}_{Scenarios.CURRENT}"][
                 f"{risk_col}_{Scenarios.CURRENT}"
             ].min(),
-            flooding_layers[f"{risk_col}_{Scenarios.FORECAST}"][
-                f"{risk_col}_{Scenarios.FORECAST}"
+            flooding_layers[f"{risk_col}_{Scenarios.FUTURE}"][
+                f"{risk_col}_{Scenarios.FUTURE}"
             ].min(),
         )
         combined_max = max(
             flooding_layers[f"{risk_col}_{Scenarios.CURRENT}"][
                 f"{risk_col}_{Scenarios.CURRENT}"
             ].max(),
-            flooding_layers[f"{risk_col}_{Scenarios.FORECAST}"][
-                f"{risk_col}_{Scenarios.FORECAST}"
+            flooding_layers[f"{risk_col}_{Scenarios.FUTURE}"][
+                f"{risk_col}_{Scenarios.FUTURE}"
             ].max(),
         )
         scaling_params[risk_col] = (combined_min, combined_max)
@@ -1581,9 +1581,9 @@ def _flooding_index_vector(
     # Map original risk categories to numeric scores
     for col in [
         f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}",
-        f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FORECAST}",
+        f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FUTURE}",
         f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}",
-        f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}",
+        f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FUTURE}",
     ]:
         flooding_risk[col] = (
             flooding_risk[col].map(FloodingRiskCols.get_risk_map()).astype(float)
@@ -1595,11 +1595,11 @@ def _flooding_index_vector(
         [
             (
                 f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.CURRENT}",
-                f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FORECAST}",
+                f"{FloodingRiskCols.RIVERS_SEA}_{Scenarios.FUTURE}",
             ),
             (
                 f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.CURRENT}",
-                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FORECAST}",
+                f"{FloodingRiskCols.SURFACE_WATER}_{Scenarios.FUTURE}",
             ),
         ],
         feature_range,
@@ -1763,14 +1763,14 @@ def _ground_stability_index(config: model_config.Config) -> None:
             ground_stability[f"{col}_{Scenarios.CURRENT}"] = ground_stability[
                 f"{col}_{Scenarios.CURRENT}"
             ].map(risk_score_map)
-            ground_stability[f"{col}_{Scenarios.FORECAST}"] = ground_stability[
-                f"{col}_{Scenarios.FORECAST}"
+            ground_stability[f"{col}_{Scenarios.FUTURE}"] = ground_stability[
+                f"{col}_{Scenarios.FUTURE}"
             ].map(risk_score_map)
 
         ground_stability = _iterative_spatial_infilling(
             ground_stability,
             [f"{col}_{Scenarios.CURRENT}" for col in GroundStabilityRiskCols]
-            + [f"{col}_{Scenarios.FORECAST}" for col in GroundStabilityRiskCols],
+            + [f"{col}_{Scenarios.FUTURE}" for col in GroundStabilityRiskCols],
             _GROUND_STABILITY_NEAREST_JOIN_MAX_DISTANCE,
         )
     else:
@@ -1783,8 +1783,8 @@ def _ground_stability_index(config: model_config.Config) -> None:
             ground_stability[f"{col}_{Scenarios.CURRENT}"] = ground_stability[
                 f"{col}_{Scenarios.CURRENT}"
             ].map(risk_score_map)
-            ground_stability[f"{col}_{Scenarios.FORECAST}"] = ground_stability[
-                f"{col}_{Scenarios.FORECAST}"
+            ground_stability[f"{col}_{Scenarios.FUTURE}"] = ground_stability[
+                f"{col}_{Scenarios.FUTURE}"
             ].map(risk_score_map)
 
     ground_stability = calculate_composite_score(
@@ -1838,7 +1838,7 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
                 gpd.GeoDataFrame(
                     columns=[
                         f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
-                        f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FORECAST}",
+                        f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FUTURE}",
                         GEOMETRY_COL,
                     ],  # Empty GeoDataFrame
                     geometry=GEOMETRY_COL,
@@ -1862,17 +1862,17 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
 
     coastal_erosion_risk = _overlay_and_clean(
         coastal_erosion_risk[Scenarios.CURRENT],
-        coastal_erosion_risk[Scenarios.FORECAST],
+        coastal_erosion_risk[Scenarios.FUTURE],
         target_crs=BNG_CRS,
     )
 
     # Check that both columns exist
     current_col = f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}"
-    forecast_col = f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FORECAST}"
+    future_col = f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FUTURE}"
     if current_col not in coastal_erosion_risk.columns:
         coastal_erosion_risk[current_col] = 0
-    if forecast_col not in coastal_erosion_risk.columns:
-        coastal_erosion_risk[forecast_col] = 0
+    if future_col not in coastal_erosion_risk.columns:
+        coastal_erosion_risk[future_col] = 0
 
     # NA values indicate areas with 0 risk, so we fill them with 0 before further processing.
     num_na = coastal_erosion_risk.isna().sum()
@@ -1886,7 +1886,7 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
     coastal_erosion_risk = coastal_erosion_risk[
         [
             f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.CURRENT}",
-            f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FORECAST}",
+            f"{MainHazardRiskCols.COASTAL_EROSION}_{Scenarios.FUTURE}",
             GEOMETRY_COL,
         ]
     ]

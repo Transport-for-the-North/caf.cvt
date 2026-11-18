@@ -135,11 +135,11 @@ class FloodingBands(enum.Enum):
     """Enumeration for different flood bands."""
 
     RIVERS_CURRENT = 0
-    RIVERS_FORECAST = 1
+    RIVERS_FUTURE = 1
     SURFACE_CURRENT = 2
-    SURFACE_FORECAST = 3
+    SURFACE_FUTURE = 3
     FLOODING_CURRENT = 4
-    FLOODING_FORECAST = 5
+    FLOODING_FUTURE = 5
 
     @classmethod
     def get_band_map(cls) -> dict[RiskColumn, tuple[int, int]]:
@@ -147,15 +147,15 @@ class FloodingBands(enum.Enum):
         return {
             FloodingRiskCols.RIVERS_SEA: (
                 FloodingBands.RIVERS_CURRENT.value,
-                FloodingBands.RIVERS_FORECAST.value,
+                FloodingBands.RIVERS_FUTURE.value,
             ),
             FloodingRiskCols.SURFACE_WATER: (
                 FloodingBands.SURFACE_CURRENT.value,
-                FloodingBands.SURFACE_FORECAST.value,
+                FloodingBands.SURFACE_FUTURE.value,
             ),
             MainHazardRiskCols.FLOODING: (
                 FloodingBands.FLOODING_CURRENT.value,
-                FloodingBands.FLOODING_FORECAST.value,
+                FloodingBands.FLOODING_FUTURE.value,
             ),
         }
 
@@ -223,12 +223,12 @@ class Scenarios(enum.StrEnum):
     """Column definitions for scenarios."""
 
     CURRENT = "current"
-    FORECAST = "forecast"
+    FUTURE = "future"
 
     @classmethod
     def scenario_or_column(cls) -> str:
         """Return the name of the scenario column."""
-        return f"{cls.CURRENT}_or_{cls.FORECAST}"
+        return f"{cls.CURRENT}_or_{cls.FUTURE}"
 
 
 class ImpactCols(RiskColumn):

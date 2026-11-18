@@ -45,7 +45,7 @@ NEXUS_METRO_LINK_FLOWS_MODEL_INPUT_PATH = pathlib.Path(
 GEOMETRY_COL = "geometry"
 
 CURRENT = "current"
-FORECAST = "forecast"
+FUTURE = "future"
 
 MONUMENT_LINKS = [9, 11]
 
@@ -347,7 +347,7 @@ def _clean_nexus_demand() -> None:
         ],
         on=["Prod Station ID", "Attr Station ID", "Time Period ID", "Ticket ID"],
         how="inner",
-        suffixes=(f"_{CURRENT}", f"_{FORECAST}"),
+        suffixes=(f"_{CURRENT}", f"_{FUTURE}"),
         validate="one_to_one",
     )
 
@@ -397,14 +397,14 @@ def _clean_nexus_demand() -> None:
 def _aggregate_nexus_demand(demand: pd.DataFrame) -> pd.DataFrame:
     """Aggregate nexus demand data by origin-destination pairs."""
     demand_agg = demand.groupby(["Prod Station ID", "Attr Station ID"], as_index=False)[
-        [f"Demand_{CURRENT}", f"Demand_{FORECAST}"]
+        [f"Demand_{CURRENT}", f"Demand_{FUTURE}"]
     ].sum()
 
     demand_agg["station_a"] = demand_agg[["Prod Station ID", "Attr Station ID"]].min(axis=1)
     demand_agg["station_b"] = demand_agg[["Prod Station ID", "Attr Station ID"]].max(axis=1)
 
     return demand_agg.groupby(["station_a", "station_b"], as_index=False)[
-        [f"Demand_{CURRENT}", f"Demand_{FORECAST}"]
+        [f"Demand_{CURRENT}", f"Demand_{FUTURE}"]
     ].sum()
 
 
@@ -423,7 +423,7 @@ def _map_demand_to_metro_links(demand: pd.DataFrame) -> gpd.GeoDataFrame:
             row["to_station_id"],
             metro_link_id=row["metro_link_id"],
             demand_current=0,
-            demand_forecast=0,
+            demand_future=0,
         )
 
     for _, row in demand.iterrows():
@@ -442,21 +442,21 @@ def _map_demand_to_metro_links(demand: pd.DataFrame) -> gpd.GeoDataFrame:
         # Add OD demand onto each metro link along the shortest path
         for u, v in itertools.pairwise(path):
             metro_graph[u][v][f"demand_{CURRENT}"] += row[f"Demand_{CURRENT}"]
-            metro_graph[u][v][f"demand_{FORECAST}"] += row[f"Demand_{FORECAST}"]
+            metro_graph[u][v][f"demand_{FUTURE}"] += row[f"Demand_{FUTURE}"]
 
     # Write the flows back to the network
     demand_lookup = {}
     for _, _, data in metro_graph.edges(data=True):
         demand_lookup[data["metro_link_id"]] = {
             f"demand_{CURRENT}": data[f"demand_{CURRENT}"],
-            f"demand_{FORECAST}": data[f"demand_{FORECAST}"],
+            f"demand_{FUTURE}": data[f"demand_{FUTURE}"],
         }
 
     metro_network["demand_current"] = metro_network["metro_link_id"].map(
         lambda x: demand_lookup.get(x, {}).get(f"demand_{CURRENT}", 0)
     )
-    metro_network["demand_forecast"] = metro_network["metro_link_id"].map(
-        lambda x: demand_lookup.get(x, {}).get(f"demand_{FORECAST}", 0)
+    metro_network["demand_future"] = metro_network["metro_link_id"].map(
+        lambda x: demand_lookup.get(x, {}).get(f"demand_{FUTURE}", 0)
     )
 
     return metro_network

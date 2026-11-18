@@ -78,10 +78,10 @@ def _infrastructure_flooding_risk_raster(
     infrastructure_buffered.loc[zero_width_height, GEOMETRY_COL] = infrastructure_buffered.loc[
         zero_width_height, GEOMETRY_COL
     ].buffer(_INFRASTRUCTURE_BUFFER_SIZE_M)
-    for col, (current_band, forecast_band) in FloodingBands.get_band_map().items():
+    for col, (current_band, future_band) in FloodingBands.get_band_map().items():
         for scenario, band in {
             Scenarios.CURRENT: current_band,
-            Scenarios.FORECAST: forecast_band,
+            Scenarios.FUTURE: future_band,
         }.items():
             stats = zonal_stats(
                 infrastructure_buffered,
@@ -161,12 +161,12 @@ def _infrastructure_risk_intersect(
 def _reshape_for_scenarios(
     risk_data: gpd.GeoDataFrame, id_col: str, risk_cols_order: list[RiskColumn]
 ) -> gpd.GeoDataFrame:
-    """Reshape dataframe by adding a current/forecast column to distinguish identical rows."""
+    """Reshape dataframe by adding a current/future column to distinguish identical rows."""
     # Identify risk and descriptive columns
     risk_cols = [
         col
         for col in risk_data.columns
-        if col.endswith((f"_{Scenarios.CURRENT}", f"_{Scenarios.FORECAST}"))
+        if col.endswith((f"_{Scenarios.CURRENT}", f"_{Scenarios.FUTURE}"))
     ]
     descriptive_cols = [
         col
@@ -653,7 +653,7 @@ def _normalise_uc_demand(
 ) -> pd.DataFrame:
     """Normalise NoHAM demand for each user class individually."""
     pairs = [
-        (f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}")
+        (f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FUTURE}")
         for uc in user_classes
     ]
 
@@ -662,7 +662,7 @@ def _normalise_uc_demand(
     rename_map = {
         col: col.replace("total", "demand")
         for uc in user_classes
-        for col in [f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FORECAST}"]
+        for col in [f"{uc}_total_{Scenarios.CURRENT}", f"{uc}_total_{Scenarios.FUTURE}"]
     }
     return noham.rename(columns=rename_map)
 
@@ -671,12 +671,12 @@ def _normalise_total_demand(
     noham: pd.DataFrame, feature_range: tuple[int, int]
 ) -> pd.DataFrame:
     """Normalise NoHAM demand across all user classes combined."""
-    pairs = [(f"all_vehs_total_{Scenarios.CURRENT}", f"all_vehs_total_{Scenarios.FORECAST}")]
+    pairs = [(f"all_vehs_total_{Scenarios.CURRENT}", f"all_vehs_total_{Scenarios.FUTURE}")]
     noham = functional_rules.min_max_scaling_pair(noham, pairs, feature_range)
     return noham.rename(
         columns={
             f"all_vehs_total_{Scenarios.CURRENT}": f"demand_{Scenarios.CURRENT}",
-            f"all_vehs_total_{Scenarios.FORECAST}": f"demand_{Scenarios.FORECAST}",
+            f"all_vehs_total_{Scenarios.FUTURE}": f"demand_{Scenarios.FUTURE}",
         }
     )
 
@@ -792,9 +792,9 @@ def _model_road_impact_index(
     # First, normalise demand for each user class individually and for total demand
     model_road_risk = functional_rules.min_max_scaling_pair(
         data=model_road_risk,
-        pairs=[(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")]
+        pairs=[(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FUTURE}")]
         + [
-            (f"{uc}_demand_{Scenarios.CURRENT}", f"{uc}_demand_{Scenarios.FORECAST}")
+            (f"{uc}_demand_{Scenarios.CURRENT}", f"{uc}_demand_{Scenarios.FUTURE}")
             for uc in user_classes
         ],
         feature_range=feature_range,
@@ -1023,7 +1023,7 @@ def _freight_impact_index(
     """Calculate impact index using freight demand data and hazard risk."""
     freight_rail_network_risk = functional_rules.min_max_scaling_pair(
         freight_rail_network_risk,
-        [(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")],
+        [(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FUTURE}")],
         feature_range,
     )
 
@@ -1033,7 +1033,7 @@ def _freight_impact_index(
 
 
 def _calculate_freight_impact(freight_data: pd.DataFrame) -> pd.DataFrame:
-    """Calculate composite impact score for current and forecast years."""
+    """Calculate composite impact score for current and future years."""
     risk_cols = [
         col
         for col in MainHazardRiskCols
@@ -1757,7 +1757,7 @@ def _metro_impact_index(
     # First, normalise demand
     metro_risk = functional_rules.min_max_scaling_pair(
         data=metro_risk,
-        pairs=[(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FORECAST}")],
+        pairs=[(f"demand_{Scenarios.CURRENT}", f"demand_{Scenarios.FUTURE}")],
         feature_range=feature_range,
     )
 

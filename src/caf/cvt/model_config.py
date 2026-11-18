@@ -534,8 +534,8 @@ class ExtremeWeather(ctk.BaseConfig):
     ----------
     wind_spd_current : pathlib.Path
         Path to the current wind speed data.
-    wind_spd_forecast : pathlib.Path
-        Path to the forecast wind speed data.
+    wind_spd_future : pathlib.Path
+        Path to the future wind speed data.
     rain_days : ZipFileEntry
         Configuration for rain days zip file entry.
     extreme_summer_days : ZipFileEntry
