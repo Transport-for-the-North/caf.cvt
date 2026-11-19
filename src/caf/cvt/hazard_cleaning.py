@@ -1038,12 +1038,12 @@ def _clean_open_geosure(config: model_config.Config, boundary: gpd.GeoDataFrame)
         matched = cleaning_funcs.nearest_centroids(geosure, layer_subset)
         geosure[code] = matched[code]  # Add the matched CLASS column to the base dataframe
 
-    geosure_risk_cols = [col for col in geosure.columns if "_risk" in col]
-    for col in geosure_risk_cols:  # Duplicate risk cols for future scenario
+    geosure_likelihood_cols = [col for col in geosure.columns if "_likelihood" in col]
+    for col in geosure_likelihood_cols:  # Duplicate likelihood cols for future scenario
         geosure[f"{col}_{definitions.Scenarios.FUTURE}"] = geosure[col]
         geosure = geosure.rename(columns={col: f"{col}_{definitions.Scenarios.CURRENT}"})
-    geosure_risk_cols = [col for col in geosure.columns if "_risk" in col]
-    geosure = geosure[[*geosure_risk_cols, definitions.GEOMETRY_COL]]
+    geosure_likelihood_cols = [col for col in geosure.columns if "_likelihood" in col]
+    geosure = geosure[[*geosure_likelihood_cols, definitions.GEOMETRY_COL]]
     cleaning_funcs.write_to_file(
         geosure,
         config.paths.geosure_model_input(None),
