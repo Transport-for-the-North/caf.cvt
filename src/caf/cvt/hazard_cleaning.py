@@ -3,6 +3,7 @@
 # LOAD LIBRARIES
 import gc
 import logging
+import os
 import pathlib
 import sys
 import warnings
@@ -98,6 +99,30 @@ def _clean_extreme_weather(config: model_config.Config, boundary: gpd.GeoDataFra
     _clean_wind_speed(config, boundary)
     _clean_wind_driven_rain(config, boundary)
     LOG.info("Finished cleaning extreme weather data.")
+
+
+def _clean_rainfall(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
+    """Clean rainfall datasets from Weather Generator outputs."""
+    # Needs to be able to select data using grid coordinate centroids in file name
+    # Needs to average (mean/median) realisations for each grid cell
+    # Needs to aggregate hourly rainfall data to various aggregations, e.g. intensity,
+    # duration and frequency
+    LOG.info("Cleaning rainfall datasets.")
+    directory = pathlib.Path("D:/Climate Vulnerability Tool/Localisation/v3 - NPR/Data/raw input/Hazards/Extreme Weather/outputs/2026-11-23_16-30-20")
+    files = [f for f in directory.iterdir() if f.endswith(".csv")]
+    rainfall_files = [f for f in files if "rainfall" in f.name.lower()]
+    rainfall_dfs = []
+    for rainfall_file in rainfall_files:
+        LOG.info("Processing rainfall file: %s", rainfall_file)
+        easting, northing, variable = rainfall_file.stem.split("_")
+        easting = easting.replace("E", "")
+        northing = northing.replace("N", "")
+        rainfall = pd.read_csv(rainfall_file)
+        realization_cols = [col for col in rainfall.columns if "realization" in col.lower()]
+        rainfall["median"] = rainfall[realization_cols].median(axis=1)
+        rainfall = rainfall.drop(columns=realization_cols)
+        rainfall_dfs.append(rainfall)
+
 
 
 def _clean_hazard_grid(
