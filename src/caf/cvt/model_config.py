@@ -1044,10 +1044,8 @@ class StructureVulnerabilityConfig(ctk.BaseConfig):
             hazard_value = hazard.value.lower()
             lookup[hazard_name] = hazard
             lookup[hazard_value] = hazard
-            if hazard_value.endswith("_risk"):
-                lookup[hazard_value.removesuffix("_risk")] = hazard
-            if hazard_value.endswith("_flooding_risk"):
-                lookup[hazard_value.removesuffix("_flooding_risk")] = hazard
+            base_name = hazard.base_name
+            lookup[base_name] = hazard
         return lookup
 
     def _resolve_vulnerability_mapping(

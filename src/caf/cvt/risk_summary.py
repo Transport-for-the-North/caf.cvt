@@ -568,7 +568,7 @@ def _add_risk_distribution_images(
                     f"{Scenarios.FUTURE.capitalize()} ", ""
                 )
                 for col in risk_distribution.columns
-                if " Risk" in col
+                if " Likelihood" in col
             ]
         )
     )

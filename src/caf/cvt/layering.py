@@ -1800,10 +1800,10 @@ def _metro_risk_index(
     return metro_risk.rename(
         columns={
             f"demand_{Scenarios.CURRENT}": (
-                f"{ConsequenceCols.CONSEQUENCE}_{Scenarios.CURRENT}",
+                f"{ConsequenceCols.CONSEQUENCE}_{Scenarios.CURRENT}"
             ),
             f"demand_{Scenarios.FUTURE}": (
-                f"{ConsequenceCols.CONSEQUENCE}_{Scenarios.FUTURE}",
+                f"{ConsequenceCols.CONSEQUENCE}_{Scenarios.FUTURE}"
             ),
         }
     )
