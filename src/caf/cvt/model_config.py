@@ -529,11 +529,25 @@ class InfrastructureConfig(ctk.BaseConfig):
     other: Other
 
 
+class WeatherGenerator(ctk.BaseConfig):
+    """Configuration for the weather generator outputs.
+
+    Attributes
+    ----------
+    hourly_rainfall : pathlib.Path
+        Path to the hourly rainfall data.
+    """
+
+    hourly_rainfall: pathlib.Path
+
+
 class ExtremeWeather(ctk.BaseConfig):
     """Configuration for extreme weather data.
 
     Attributes
     ----------
+    weather_generator: pathlib.Path
+        Path to the weather generator outputs directory.
     wind_spd_current : pathlib.Path
         Path to the current wind speed data.
     wind_spd_future : pathlib.Path
@@ -562,6 +576,7 @@ class ExtremeWeather(ctk.BaseConfig):
         Configuration for precipitation winter zip file entry.
     """
 
+    weather_generator: WeatherGenerator
     wind_speed: dict[str, pathlib.Path]
     rain_days: pathlib.Path
     extreme_summer_days: pathlib.Path

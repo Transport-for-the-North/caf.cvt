@@ -10,6 +10,7 @@ import warnings
 
 import fiona
 import geopandas as gpd
+import osbng
 import pandas as pd
 import xarray as xr
 
@@ -84,8 +85,13 @@ def clean_hazards(config: model_config.Config, boundary: gpd.GeoDataFrame) -> No
 def _clean_extreme_weather(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
     """Clean all extreme weather datasets ready for analysis."""
     LOG.info("Cleaning extreme weather data...")
+
+    # WEATHER GENERATOR CLEANING
+    _clean_rainfall(config, boundary)
+
     hazard_grid = _clean_hazard_grid(config, boundary)
 
+    # MET OFFICE CLEANING
     _clean_temp_max(config, hazard_grid)
     _clean_temp_min(config, hazard_grid)
     _clean_summer_precip(config, hazard_grid)
@@ -101,27 +107,57 @@ def _clean_extreme_weather(config: model_config.Config, boundary: gpd.GeoDataFra
     LOG.info("Finished cleaning extreme weather data.")
 
 
+def grid_centroids(
+        grid_size: int,
+        boundary: gpd.GeoDataFrame,
+        output_path: pathlib.Path
+    )-> list[tuple[float, float]]:
+    """Generate OS British National Grid (BNG) centroids with specified grid size."""
+    LOG.info("Create BNG centroids with %dkm grid size.", grid_size)
+    bbox = boundary.total_bounds
+    grid = list(osbng.grids.bbox_to_bng_iterfeatures(*bbox, f"{grid_size}km"))
+    grid_gdf = gpd.GeoDataFrame.from_features(grid, crs="EPSG:27700")
+
+    # Filter grid to squares that intersect the boundary
+    boundary_geometry = boundary.geometry.iloc[0]
+    grid_gdf = grid_gdf[
+        grid_gdf.geometry.intersects(boundary_geometry)
+    ]
+
+    grid_gdf.to_file(
+        output_path,
+        driver="GPKG"
+    )
+
+    return [(geom.centroid.x, geom.centroid.y) for geom in grid_gdf.geometry]
+
+
 def _clean_rainfall(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Clean rainfall datasets from Weather Generator outputs."""
+    """Clean hourly rainfall datasets from Weather Generator outputs."""
     # Needs to be able to select data using grid coordinate centroids in file name
     # Needs to average (mean/median) realisations for each grid cell
     # Needs to aggregate hourly rainfall data to various aggregations, e.g. intensity,
     # duration and frequency
-    LOG.info("Cleaning rainfall datasets.")
-    directory = pathlib.Path("D:/Climate Vulnerability Tool/Localisation/v3 - NPR/Data/raw input/Hazards/Extreme Weather/outputs/2026-11-23_16-30-20")
-    files = [f for f in directory.iterdir() if f.endswith(".csv")]
+    LOG.info("Cleaning hourly rainfall datasets.")
+    directory = (
+        config.paths.raw_input
+        / config.hazards.extreme_weather.weather_generator.hourly_rainfall
+    )
+    files = [f for f in directory.iterdir() if f.name.endswith(".csv")]
     rainfall_files = [f for f in files if "rainfall" in f.name.lower()]
-    rainfall_dfs = []
+    rainfall_dfs = {}
     for rainfall_file in rainfall_files:
-        LOG.info("Processing rainfall file: %s", rainfall_file)
         easting, northing, variable = rainfall_file.stem.split("_")
+        LOG.info("Processing rainfall for %s, %s", easting, northing)
         easting = easting.replace("E", "")
         northing = northing.replace("N", "")
         rainfall = pd.read_csv(rainfall_file)
         realization_cols = [col for col in rainfall.columns if "realization" in col.lower()]
         rainfall["median"] = rainfall[realization_cols].median(axis=1)
         rainfall = rainfall.drop(columns=realization_cols)
-        rainfall_dfs.append(rainfall)
+        rainfall_dfs[(easting, northing)] = rainfall
+
+    LOG.info("Finished processing hourly rainfall datasets.")
 
 
 

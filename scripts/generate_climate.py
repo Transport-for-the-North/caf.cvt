@@ -57,10 +57,10 @@ def _generate_climate_data(
     LOG.info("Generating climate data using DARe Weather Generator tool.")
     boundaries = gpd.read_file(boundary_path)
     country_boundary = boundaries[boundaries["CAUTH25NM"] == country]
-    _generate_grid_centroids(
+    _grid_centroids(
         grid_size=BNG_GRID_SIZE_KM,
         boundary=country_boundary,
-        output_path=GRID_PATH
+        output_path=grid_path
     )
     # TEMPORARY READ TO SAVE TIME
     grid = gpd.read_file(grid_path)
@@ -99,7 +99,7 @@ def _generate_climate_data(
 
 
 
-def _generate_grid_centroids(
+def _grid_centroids(
         grid_size: int,
         boundary: gpd.GeoDataFrame,
         output_path: pathlib.Path
