@@ -1,17 +1,18 @@
 """Module for cleaning hazard datasets."""
 
 # LOAD LIBRARIES
+import base64
 import gc
+import json
 import logging
-import os
 import pathlib
 import sys
 import warnings
 
 import fiona
 import geopandas as gpd
-import osbng
 import pandas as pd
+import requests
 import xarray as xr
 
 from caf.cvt import cleaning_funcs, definitions, model_config
@@ -25,6 +26,16 @@ LOG = logging.getLogger(__name__)
 _WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
 _WIND_SPEED_PERCENTILE = 0.99
 _WIND_SPEED_GRID_SIZE_M = 5000
+
+SUCCESS_STATUS_CODE = 200
+
+CEDA_API = {
+    "url": "https://services.ceda.ac.uk/api/token/create/",
+    "username": "djtfn1015",
+    "password": "wR3pG_h4_NZ3jCU"
+}
+
+CHESS_SCAPE_SENTINEL = -1e+20
 
 # WARNING FILTERS
 
@@ -86,8 +97,14 @@ def _clean_extreme_weather(config: model_config.Config, boundary: gpd.GeoDataFra
     """Clean all extreme weather datasets ready for analysis."""
     LOG.info("Cleaning extreme weather data...")
 
-    # WEATHER GENERATOR CLEANING
-    _clean_rainfall(config, boundary)
+    ceda_token = _get_ceda_token(
+        url=CEDA_API["url"],
+        username=CEDA_API["username"],
+        password=CEDA_API["password"]
+    )
+
+    session = requests.Session()
+    session.headers.update({"Authorization": f"Bearer {ceda_token}"})
 
     hazard_grid = _clean_hazard_grid(config, boundary)
 
@@ -107,58 +124,22 @@ def _clean_extreme_weather(config: model_config.Config, boundary: gpd.GeoDataFra
     LOG.info("Finished cleaning extreme weather data.")
 
 
-def grid_centroids(
-        grid_size: int,
-        boundary: gpd.GeoDataFrame,
-        output_path: pathlib.Path
-    )-> list[tuple[float, float]]:
-    """Generate OS British National Grid (BNG) centroids with specified grid size."""
-    LOG.info("Create BNG centroids with %dkm grid size.", grid_size)
-    bbox = boundary.total_bounds
-    grid = list(osbng.grids.bbox_to_bng_iterfeatures(*bbox, f"{grid_size}km"))
-    grid_gdf = gpd.GeoDataFrame.from_features(grid, crs="EPSG:27700")
 
-    # Filter grid to squares that intersect the boundary
-    boundary_geometry = boundary.geometry.iloc[0]
-    grid_gdf = grid_gdf[
-        grid_gdf.geometry.intersects(boundary_geometry)
-    ]
+def _get_ceda_token(url: str, username: str, password: str) -> str:
+    """Get CEDA access token for authentication to the API."""
+    token = base64.b64encode(f"{username}:{password}".encode()).decode('ascii')
+    headers = {
+        "Authorization": f"Basic {token}"
+    }
+    try:
+        response = requests.request("POST", url, headers=headers, timeout=10)
+    except requests.exceptions.Timeout as e:
+        raise RuntimeError("Request to CEDA API timed out.") from e
+    response_data = json.loads(response.text)
+    if response.status_code == SUCCESS_STATUS_CODE:
+        return response_data["access_token"]
 
-    grid_gdf.to_file(
-        output_path,
-        driver="GPKG"
-    )
-
-    return [(geom.centroid.x, geom.centroid.y) for geom in grid_gdf.geometry]
-
-
-def _clean_rainfall(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Clean hourly rainfall datasets from Weather Generator outputs."""
-    # Needs to be able to select data using grid coordinate centroids in file name
-    # Needs to average (mean/median) realisations for each grid cell
-    # Needs to aggregate hourly rainfall data to various aggregations, e.g. intensity,
-    # duration and frequency
-    LOG.info("Cleaning hourly rainfall datasets.")
-    directory = (
-        config.paths.raw_input
-        / config.hazards.extreme_weather.weather_generator.hourly_rainfall
-    )
-    files = [f for f in directory.iterdir() if f.name.endswith(".csv")]
-    rainfall_files = [f for f in files if "rainfall" in f.name.lower()]
-    rainfall_dfs = {}
-    for rainfall_file in rainfall_files:
-        easting, northing, variable = rainfall_file.stem.split("_")
-        LOG.info("Processing rainfall for %s, %s", easting, northing)
-        easting = easting.replace("E", "")
-        northing = northing.replace("N", "")
-        rainfall = pd.read_csv(rainfall_file)
-        realization_cols = [col for col in rainfall.columns if "realization" in col.lower()]
-        rainfall["median"] = rainfall[realization_cols].median(axis=1)
-        rainfall = rainfall.drop(columns=realization_cols)
-        rainfall_dfs[(easting, northing)] = rainfall
-
-    LOG.info("Finished processing hourly rainfall datasets.")
-
+    raise RuntimeError(f"Failed to get CEDA token: {response.text}")
 
 
 def _clean_hazard_grid(
