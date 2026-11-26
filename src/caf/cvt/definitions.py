@@ -33,24 +33,26 @@ class RiskColumn(enum.StrEnum):
     @property
     def base_name(self) -> str:
         """Return the base name of the plotting column."""
-        return self.removesuffix("_risk")
+        return (
+            self.removesuffix("_risk").removesuffix("_likelihood").removesuffix("_consequence")
+        )
 
 
-class ExtremeWeatherRiskCols(RiskColumn):
+class ExtremeWeatherLikelihoodCols(RiskColumn):
     """Column definitions for extreme weather subhazard layers."""
 
-    EXTREME_HEAT = "extreme_heat_risk"
-    EXTREME_COLD = "extreme_cold_risk"
-    DROUGHT = "drought_risk"
-    STORM = "storm_risk"
+    EXTREME_HEAT = "extreme_heat_likelihood"
+    EXTREME_COLD = "extreme_cold_likelihood"
+    DROUGHT = "drought_likelihood"
+    STORM = "storm_likelihood"
 
     def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given extreme weather subhazard column."""
         cmap_mapping = {
-            ExtremeWeatherRiskCols.EXTREME_HEAT: ColourMaps.REDS,
-            ExtremeWeatherRiskCols.EXTREME_COLD: ColourMaps.BLUES,
-            ExtremeWeatherRiskCols.DROUGHT: ColourMaps.ORANGES,
-            ExtremeWeatherRiskCols.STORM: ColourMaps.BLUES,
+            ExtremeWeatherLikelihoodCols.EXTREME_HEAT: ColourMaps.REDS,
+            ExtremeWeatherLikelihoodCols.EXTREME_COLD: ColourMaps.BLUES,
+            ExtremeWeatherLikelihoodCols.DROUGHT: ColourMaps.ORANGES,
+            ExtremeWeatherLikelihoodCols.STORM: ColourMaps.BLUES,
         }
         return cmap_mapping[self]
 
@@ -63,11 +65,11 @@ class FloodingTypes(enum.StrEnum):
     GROUNDWATER = "groundwater"
 
 
-class FloodingRiskCols(RiskColumn):
+class FloodingLikelihoodCols(RiskColumn):
     """Column definitions for flooding subhazard layers."""
 
-    RIVERS_SEA = "rivers_sea_flooding_risk"
-    SURFACE_WATER = "surface_water_flooding_risk"
+    RIVERS_SEA = "rivers_sea_flooding_likelihood"
+    SURFACE_WATER = "surface_water_flooding_likelihood"
     # TODO (DJ): #41 Add groundwater flooding column
 
     def get_cmap(self) -> ColourMaps:
@@ -75,8 +77,8 @@ class FloodingRiskCols(RiskColumn):
         return ColourMaps.BLUES
 
     @classmethod
-    def get_risk_map(cls) -> dict[int | str, float]:
-        """Return mapping of flooding risk categories to numerical risk values."""
+    def get_likelihood_map(cls) -> dict[int | str, float]:
+        """Return mapping of flooding risk categories to numerical likelihood values."""
         return {
             0: 0,  # No risk areas stay 0
             "Unavailable": np.nan,
@@ -87,46 +89,46 @@ class FloodingRiskCols(RiskColumn):
         }
 
 
-class GroundStabilityRiskCols(RiskColumn):
+class GroundStabilityLikelihoodCols(RiskColumn):
     """Column definitions for ground stability subhazard layers."""
 
-    COLLAPSIBLE_DEPOSITS = "collapsible_deposits_risk"
-    COMPRESSIBLE_GROUND = "compressible_ground_risk"
-    LANDSLIDES = "landslides_risk"
-    RUNNING_SAND = "running_sand_risk"
-    SHRINK_SWELL = "shrink_swell_risk"
-    SOLUBLE_ROCKS = "soluble_rocks_risk"
+    COLLAPSIBLE_DEPOSITS = "collapsible_deposits_likelihood"
+    COMPRESSIBLE_GROUND = "compressible_ground_likelihood"
+    LANDSLIDES = "landslides_likelihood"
+    RUNNING_SAND = "running_sand_likelihood"
+    SHRINK_SWELL = "shrink_swell_likelihood"
+    SOLUBLE_ROCKS = "soluble_rocks_likelihood"
 
     def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given ground stability subhazard column."""
         return ColourMaps.ORANGES
 
 
-class MainHazardRiskCols(RiskColumn):
+class MainHazardLikelihoodCols(RiskColumn):
     """Column definitions for main hazard layers."""
 
-    EXTREME_WEATHER = "extreme_weather_risk"
-    FLOODING = "flooding_risk"
-    GROUND_STABILITY = "ground_stability_risk"
-    COASTAL_EROSION = "coastal_erosion_risk"
+    EXTREME_WEATHER = "extreme_weather_likelihood"
+    FLOODING = "flooding_likelihood"
+    GROUND_STABILITY = "ground_stability_likelihood"
+    COASTAL_EROSION = "coastal_erosion_likelihood"
 
     def get_cmap(self) -> ColourMaps:
         """Return the appropriate colormap for a given hazard column."""
         cmap_mapping = {
-            MainHazardRiskCols.EXTREME_WEATHER: ColourMaps.REDS,
-            MainHazardRiskCols.FLOODING: ColourMaps.BLUES,
-            MainHazardRiskCols.GROUND_STABILITY: ColourMaps.ORANGES,
-            MainHazardRiskCols.COASTAL_EROSION: ColourMaps.PURPLES,
+            MainHazardLikelihoodCols.EXTREME_WEATHER: ColourMaps.REDS,
+            MainHazardLikelihoodCols.FLOODING: ColourMaps.BLUES,
+            MainHazardLikelihoodCols.GROUND_STABILITY: ColourMaps.ORANGES,
+            MainHazardLikelihoodCols.COASTAL_EROSION: ColourMaps.PURPLES,
         }
         return cmap_mapping[self]
 
     def get_sub_hazards(self) -> list[RiskColumn]:
         """Return a list of sub-hazard columns for the main hazard."""
-        sub_hazard_mapping: dict[MainHazardRiskCols, list[RiskColumn]] = {
-            MainHazardRiskCols.EXTREME_WEATHER: list(ExtremeWeatherRiskCols),
-            MainHazardRiskCols.FLOODING: list(FloodingRiskCols),
-            MainHazardRiskCols.GROUND_STABILITY: list(GroundStabilityRiskCols),
-            MainHazardRiskCols.COASTAL_EROSION: [],
+        sub_hazard_mapping: dict[MainHazardLikelihoodCols, list[RiskColumn]] = {
+            MainHazardLikelihoodCols.EXTREME_WEATHER: list(ExtremeWeatherLikelihoodCols),
+            MainHazardLikelihoodCols.FLOODING: list(FloodingLikelihoodCols),
+            MainHazardLikelihoodCols.GROUND_STABILITY: list(GroundStabilityLikelihoodCols),
+            MainHazardLikelihoodCols.COASTAL_EROSION: [],
         }
         return sub_hazard_mapping[self]
 
@@ -135,27 +137,27 @@ class FloodingBands(enum.Enum):
     """Enumeration for different flood bands."""
 
     RIVERS_CURRENT = 0
-    RIVERS_FORECAST = 1
+    RIVERS_FUTURE = 1
     SURFACE_CURRENT = 2
-    SURFACE_FORECAST = 3
+    SURFACE_FUTURE = 3
     FLOODING_CURRENT = 4
-    FLOODING_FORECAST = 5
+    FLOODING_FUTURE = 5
 
     @classmethod
     def get_band_map(cls) -> dict[RiskColumn, tuple[int, int]]:
-        """Return mapping of flooding risk columns to their corresponding flooding bands."""
+        """Return mapping of flooding likelihood cols to their corresponding flooding bands."""
         return {
-            FloodingRiskCols.RIVERS_SEA: (
+            FloodingLikelihoodCols.RIVERS_SEA: (
                 FloodingBands.RIVERS_CURRENT.value,
-                FloodingBands.RIVERS_FORECAST.value,
+                FloodingBands.RIVERS_FUTURE.value,
             ),
-            FloodingRiskCols.SURFACE_WATER: (
+            FloodingLikelihoodCols.SURFACE_WATER: (
                 FloodingBands.SURFACE_CURRENT.value,
-                FloodingBands.SURFACE_FORECAST.value,
+                FloodingBands.SURFACE_FUTURE.value,
             ),
-            MainHazardRiskCols.FLOODING: (
+            MainHazardLikelihoodCols.FLOODING: (
                 FloodingBands.FLOODING_CURRENT.value,
-                FloodingBands.FLOODING_FORECAST.value,
+                FloodingBands.FLOODING_FUTURE.value,
             ),
         }
 
@@ -209,13 +211,13 @@ class StormCols(RiskColumn):
         return ColourMaps.BLUES
 
 
-class DemandCols(RiskColumn):
-    """Column definitions for demand cold layers."""
+class ConsequenceCols(RiskColumn):
+    """Column definitions for consequence layers."""
 
-    DEMAND = "demand"
+    CONSEQUENCE = "consequence"
 
     def get_cmap(self) -> ColourMaps:
-        """Return demand colourmap."""
+        """Return consequence colourmap."""
         return ColourMaps.VIRIDIS
 
 
@@ -223,36 +225,34 @@ class Scenarios(enum.StrEnum):
     """Column definitions for scenarios."""
 
     CURRENT = "current"
-    FORECAST = "forecast"
+    FUTURE = "future"
 
     @classmethod
     def scenario_or_column(cls) -> str:
         """Return the name of the scenario column."""
-        return f"{cls.CURRENT}_or_{cls.FORECAST}"
+        return f"{cls.CURRENT}_or_{cls.FUTURE}"
 
 
-class ImpactCols(RiskColumn):
-    """Column definitions for impact layers."""
+class RiskCols(RiskColumn):
+    """Column definitions for risk layers."""
 
-    IMPACT = "impact"
+    RISK = "risk"
 
     def get_cmap(self) -> ColourMaps:
-        """Return the appropriate colormap for a given impact column."""
+        """Return the appropriate colormap for a given risk column."""
         return ColourMaps.VIRIDIS
 
 
-class UserClassImpactCol(str):
-    """String-backed user-class impact column with RiskColumn-like behaviour."""
+class UserClassRiskCol(str):
+    """String-backed user-class risk column with RiskColumn-like behaviour."""
 
-    def __new__(cls, user_class: str) -> UserClassImpactCol:
-        """Create a new UserClassImpactCol for the given user class."""
-        return cast(
-            "UserClassImpactCol", super().__new__(cls, f"{user_class}_{ImpactCols.IMPACT}")
-        )
+    def __new__(cls, user_class: str) -> UserClassRiskCol:
+        """Create a new UserClassRiskCol for the given user class."""
+        return cast("UserClassRiskCol", super().__new__(cls, f"{user_class}_{RiskCols.RISK}"))
 
     def get_cmap(self) -> ColourMaps:
-        """Return the same colormap used for generic impact columns."""
-        return ImpactCols.IMPACT.get_cmap()
+        """Return the same colormap used for generic risk columns."""
+        return RiskCols.RISK.get_cmap()
 
 
 class TimePeriods(enum.StrEnum):
@@ -587,7 +587,7 @@ class HexColourCodes(enum.StrEnum):
     YELLOW = "FFEB84"
 
 
-class RiskCategories(enum.StrEnum):
+class LikelihoodCategories(enum.StrEnum):
     """Risk category definitions."""
 
     VERY_HIGH = "Very High"
@@ -597,25 +597,25 @@ class RiskCategories(enum.StrEnum):
     VERY_LOW = "Very Low"
 
     @classmethod
-    def get_risk_bands(cls) -> dict[RiskCategories, tuple[int, int]]:
+    def get_likelihood_bands(cls) -> dict[LikelihoodCategories, tuple[int, int]]:
         """Return a dictionary of risk bands for each risk category."""
         return {
-            RiskCategories.VERY_LOW: (0, 20),
-            RiskCategories.LOW: (20, 40),
-            RiskCategories.MEDIUM: (40, 60),
-            RiskCategories.HIGH: (60, 80),
-            RiskCategories.VERY_HIGH: (80, 100),
+            LikelihoodCategories.VERY_LOW: (0, 20),
+            LikelihoodCategories.LOW: (20, 40),
+            LikelihoodCategories.MEDIUM: (40, 60),
+            LikelihoodCategories.HIGH: (60, 80),
+            LikelihoodCategories.VERY_HIGH: (80, 100),
         }
 
     @classmethod
-    def get_risk_band_colours(cls) -> dict[RiskCategories, str]:
+    def get_likelihood_band_colours(cls) -> dict[LikelihoodCategories, str]:
         """Return a dictionary of colours for each risk category."""
         return {
-            RiskCategories.VERY_LOW: HexColourCodes.DARK_BLUE,
-            RiskCategories.LOW: HexColourCodes.TEAL,
-            RiskCategories.MEDIUM: HexColourCodes.GOLD,
-            RiskCategories.HIGH: HexColourCodes.DARK_ORANGE,
-            RiskCategories.VERY_HIGH: HexColourCodes.DARK_RED,
+            LikelihoodCategories.VERY_LOW: HexColourCodes.DARK_BLUE,
+            LikelihoodCategories.LOW: HexColourCodes.TEAL,
+            LikelihoodCategories.MEDIUM: HexColourCodes.GOLD,
+            LikelihoodCategories.HIGH: HexColourCodes.DARK_ORANGE,
+            LikelihoodCategories.VERY_HIGH: HexColourCodes.DARK_RED,
         }
 
 

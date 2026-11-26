@@ -26,10 +26,10 @@ def derive_rail_weights(
     LOG.info("Writing incident summary to CSV...")
     incident_summary.to_csv(output_path / "rail_incident_summary.csv", index=False)
 
-    impact_weights = aggregate_impact_weights(incident_summary)
+    consequence_weights = aggregate_consequence_weights(incident_summary)
 
-    LOG.info("Writing impact weights to CSV...")
-    impact_weights.to_csv(output_path / "rail_impact_weights.csv", index=False)
+    LOG.info("Writing consequence weights to CSV...")
+    consequence_weights.to_csv(output_path / "rail_consequence_weights.csv", index=False)
 
 
 def read_clean_nwr_data(
@@ -50,7 +50,7 @@ def read_clean_nwr_data(
 def calculate_incident_summary(
     rail_incidents: pd.DataFrame, incident_weights: IncidentWeightConfig
 ) -> pd.DataFrame:
-    """Calculate impact weights for rail data based on incident data."""
+    """Calculate consequence weights for rail data based on incident data."""
     LOG.info("Calculating incident summary for rail data...")
     incident_summary = (
         rail_incidents.groupby("Weather Category")
@@ -73,7 +73,7 @@ def calculate_incident_summary(
         incident_summary["total_cost"] / incident_summary["total_cost"].sum()
     )
 
-    incident_summary["impact"] = round(
+    incident_summary["consequence"] = round(
         incident_summary["incident_share"] * incident_weights.incident_share
         + incident_summary["minutes_share"] * incident_weights.minutes_share
         + incident_summary["cost_share"] * incident_weights.cost_share,
@@ -83,14 +83,14 @@ def calculate_incident_summary(
     return incident_summary
 
 
-def aggregate_impact_weights(incident_summary: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate impact weights for rail data based on incident summary."""
-    LOG.info("Aggregating impact weights for rail data...")
-    impact_weights = incident_summary[["Weather Category", "impact"]].rename(
-        columns={"Weather Category": "hazard", "impact": "impact_weight"}
+def aggregate_consequence_weights(incident_summary: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate consequence weights for rail data based on incident summary."""
+    LOG.info("Aggregating consequence weights for rail data...")
+    consequence_weights = incident_summary[["Weather Category", "consequence"]].rename(
+        columns={"Weather Category": "hazard", "consequence": "consequence_weight"}
     )
 
-    impact_weights["hazard"] = impact_weights["hazard"].map(
+    consequence_weights["hazard"] = consequence_weights["hazard"].map(
         {
             "Wind": "Storm",
             "Heat": "Extreme Heat",
@@ -101,20 +101,20 @@ def aggregate_impact_weights(incident_summary: pd.DataFrame) -> pd.DataFrame:
     )
 
     return (
-        impact_weights.groupby("hazard")
-        .agg(impact_weight=pd.NamedAgg(column="impact_weight", aggfunc="sum"))
+        consequence_weights.groupby("hazard")
+        .agg(consequence_weight=pd.NamedAgg(column="consequence_weight", aggfunc="sum"))
         .reset_index()
     )
 
 
-def run_asset_risk_weighting(
+def run_asset_hazard_weighting(
     nwr_eastern_path: pathlib.Path,
     nwr_northwest_path: pathlib.Path,
     output_path: pathlib.Path,
     incident_weights: IncidentWeightConfig,
 ) -> None:
-    """Run asset risk weighting workflow."""
-    log_file = output_path / "asset_risk_weighting.log"
+    """Run asset hazard weighting workflow."""
+    log_file = output_path / "asset_hazard_weighting.log"
 
     with ctk.LogHelper(
         pathlib.Path(__file__).stem,

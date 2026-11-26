@@ -81,7 +81,7 @@ def _read_freight_demand(path: pathlib.Path, boundary: gpd.GeoDataFrame) -> gpd.
     freight_network_demand = freight_network_demand.rename(
         columns={
             "2022_23_total": f"demand_{definitions.Scenarios.CURRENT}",
-            "2050_51 sc2_total": f"demand_{definitions.Scenarios.FORECAST}",
+            "2050_51 sc2_total": f"demand_{definitions.Scenarios.FUTURE}",
         }
     )
     len_before_filter = len(freight_network_demand)
@@ -119,9 +119,9 @@ def _map_freight_networks(
     )
 
     os_freight_network_demand[
-        [f"demand_{definitions.Scenarios.CURRENT}", f"demand_{definitions.Scenarios.FORECAST}"]
+        [f"demand_{definitions.Scenarios.CURRENT}", f"demand_{definitions.Scenarios.FUTURE}"]
     ] = os_freight_network_demand[
-        [f"demand_{definitions.Scenarios.CURRENT}", f"demand_{definitions.Scenarios.FORECAST}"]
+        [f"demand_{definitions.Scenarios.CURRENT}", f"demand_{definitions.Scenarios.FUTURE}"]
     ].fillna(0)
     return os_freight_network_demand.drop(columns=["index_right"])
 
@@ -142,7 +142,7 @@ def _clean_noham_flows(config: model_config.Config) -> None:
             if year_label == "baseline":
                 scenario = definitions.Scenarios.CURRENT
             elif year_label == "future":
-                scenario = definitions.Scenarios.FORECAST
+                scenario = definitions.Scenarios.FUTURE
             else:
                 raise ValueError(
                     f"Unexpected year label: {year_label}, expects 'baseline' or 'future'."
@@ -167,21 +167,21 @@ def _clean_noham_flows(config: model_config.Config) -> None:
             scenario_flows[scenario] = flows
 
     current_ids = set(scenario_flows[definitions.Scenarios.CURRENT][definitions.ID_COL])
-    forecast_ids = set(scenario_flows[definitions.Scenarios.FORECAST][definitions.ID_COL])
+    future_ids = set(scenario_flows[definitions.Scenarios.FUTURE][definitions.ID_COL])
 
     noham_flows = scenario_flows[definitions.Scenarios.CURRENT].merge(
-        scenario_flows[definitions.Scenarios.FORECAST], on=definitions.ID_COL, how="inner"
+        scenario_flows[definitions.Scenarios.FUTURE], on=definitions.ID_COL, how="inner"
     )
 
     LOG.debug(
         "NoHAM flows merged: \n"
-        "Current links: %s, Forecast links: %s \n"
-        "Common links: %s, Current only links: %s, Forecast only links: %s",
+        "Current links: %s, Future links: %s \n"
+        "Common links: %s, Current only links: %s, Future only links: %s",
         len(current_ids),
-        len(forecast_ids),
-        len(current_ids & forecast_ids),
-        len(current_ids - forecast_ids),
-        len(forecast_ids - current_ids),
+        len(future_ids),
+        len(current_ids & future_ids),
+        len(current_ids - future_ids),
+        len(future_ids - current_ids),
     )
 
     noham_net_flows = noham_network.merge(noham_flows, on=definitions.ID_COL, how="left")
@@ -442,13 +442,13 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         .reset_index()
     )
 
-    # TODO (DJ): #40 Add forecast year link flow data when available, for now just copy
+    # TODO (DJ): #40 Add future year link flow data when available, for now just copy
     years = sorted(model_road_uc_link_flows["year"].unique())
 
     current_flows = model_road_uc_link_flows[
         model_road_uc_link_flows["year"] == years[0]
     ].copy()
-    forecast_flows = model_road_uc_link_flows[
+    future_flows = model_road_uc_link_flows[
         model_road_uc_link_flows["year"] == years[0]
     ].copy()
 
@@ -459,7 +459,7 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         aggfunc="sum",
     )
 
-    forecast_flows = forecast_flows.pivot_table(
+    future_flows = future_flows.pivot_table(
         index="link_id",
         columns="userclass",
         values="annual_flow",
@@ -471,30 +471,30 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         for uc in current_flows.columns
     ]
 
-    forecast_flows.columns = [
-        f"{cleaning_funcs.normalise_user_class_label(uc)}_demand_{definitions.Scenarios.FORECAST}"
-        for uc in forecast_flows.columns
+    future_flows.columns = [
+        f"{cleaning_funcs.normalise_user_class_label(uc)}_demand_{definitions.Scenarios.FUTURE}"
+        for uc in future_flows.columns
     ]
 
     current_required = [
         f"{uc}_demand_{definitions.Scenarios.CURRENT}" for uc in model_road_user_classes
     ]
-    forecast_required = [
-        f"{uc}_demand_{definitions.Scenarios.FORECAST}" for uc in model_road_user_classes
+    future_required = [
+        f"{uc}_demand_{definitions.Scenarios.FUTURE}" for uc in model_road_user_classes
     ]
 
     missing_current = [col for col in current_required if col not in current_flows.columns]
-    missing_forecast = [col for col in forecast_required if col not in forecast_flows.columns]
-    if missing_current or missing_forecast:
+    missing_future = [col for col in future_required if col not in future_flows.columns]
+    if missing_current or missing_future:
         raise ValueError(
             "Model road flow input does not contain all configured model road user classes. "
-            f"Missing current: {missing_current}; missing forecast: {missing_forecast}"
+            f"Missing current: {missing_current}; missing future: {missing_future}"
         )
 
     current_flows = current_flows[current_required]
-    forecast_flows = forecast_flows[forecast_required]
+    future_flows = future_flows[future_required]
 
-    model_road_uc_link_flows = current_flows.join(forecast_flows, how="left")
+    model_road_uc_link_flows = current_flows.join(future_flows, how="left")
 
     model_road_uc_link_flows[f"demand_{definitions.Scenarios.CURRENT}"] = (
         model_road_uc_link_flows[
@@ -506,12 +506,12 @@ def _clean_model_road_flows(config: model_config.Config) -> None:
         ].sum(axis=1)
     )
 
-    model_road_uc_link_flows[f"demand_{definitions.Scenarios.FORECAST}"] = (
+    model_road_uc_link_flows[f"demand_{definitions.Scenarios.FUTURE}"] = (
         model_road_uc_link_flows[
             [
                 c
                 for c in model_road_uc_link_flows.columns
-                if c.endswith(f"_{definitions.Scenarios.FORECAST}")
+                if c.endswith(f"_{definitions.Scenarios.FUTURE}")
             ]
         ].sum(axis=1)
     )

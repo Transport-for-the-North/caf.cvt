@@ -11,11 +11,11 @@ from caf.cvt.definitions import (
     DroughtCols,
     ExtremeColdCols,
     ExtremeHeatCols,
-    ExtremeWeatherRiskCols,
-    FloodingRiskCols,
+    ExtremeWeatherLikelihoodCols,
+    FloodingLikelihoodCols,
     FloodingTypes,
-    GroundStabilityRiskCols,
-    MainHazardRiskCols,
+    GroundStabilityLikelihoodCols,
+    MainHazardLikelihoodCols,
     OSRailStructure,
     OSRoadStructure,
     RiskColumn,
@@ -395,7 +395,9 @@ class PathConfig(ctk.BaseConfig):
         """Return the path to the flooding tile grid model interim output."""
         return self.model_interim_output / f"flooding_tiles_{tile_size}m.gpkg"
 
-    def geosure_model_input(self, geohazard: GroundStabilityRiskCols | None) -> pathlib.Path:
+    def geosure_model_input(
+        self, geohazard: GroundStabilityLikelihoodCols | None
+    ) -> pathlib.Path:
         """Return GeoSure model input path based on the geohazard."""
         if geohazard is not None:
             return self.ground_stability_model_input / f"{geohazard}.gpkg"
@@ -534,8 +536,8 @@ class ExtremeWeather(ctk.BaseConfig):
     ----------
     wind_spd_current : pathlib.Path
         Path to the current wind speed data.
-    wind_spd_forecast : pathlib.Path
-        Path to the forecast wind speed data.
+    wind_spd_future : pathlib.Path
+        Path to the future wind speed data.
     rain_days : ZipFileEntry
         Configuration for rain days zip file entry.
     extreme_summer_days : ZipFileEntry
@@ -718,7 +720,7 @@ class DemandConfig(ctk.BaseConfig):
 
 
 class IncidentWeightConfig(ctk.BaseConfig):
-    """Configuration for asset risk weighting incident weights.
+    """Configuration for asset hazard weighting incident weights.
 
     Attributes
     ----------
@@ -735,8 +737,8 @@ class IncidentWeightConfig(ctk.BaseConfig):
     cost_share: float
 
 
-class AssetRiskWeightingConfig(ctk.BaseConfig):
-    """Configuration for asset risk weighting workflow.
+class AssetHazardWeightingConfig(ctk.BaseConfig):
+    """Configuration for asset hazard weighting workflow.
 
     Attributes
     ----------
@@ -745,9 +747,9 @@ class AssetRiskWeightingConfig(ctk.BaseConfig):
     nwr_northwest_path : pathlib.Path
         Path to Network Rail North West weather data CSV.
     output_path : pathlib.Path
-        Output directory for asset risk weighting results.
+        Output directory for asset hazard weighting results.
     incident_weights : IncidentWeightConfig
-        Weights used to calculate rail hazard impacts.
+        Weights used to calculate rail hazard consequences.
     """
 
     nwr_eastern_path: pathlib.Path
@@ -1031,17 +1033,19 @@ class StructureVulnerabilityConfig(ctk.BaseConfig):
     @classmethod
     def _hazard_lookup(cls) -> dict[str, RiskColumn]:
         """Build accepted hazard-name aliases mapped to RiskColumn enums."""
-        hazards = [*ExtremeWeatherRiskCols, *FloodingRiskCols, *GroundStabilityRiskCols]
+        hazards = [
+            *ExtremeWeatherLikelihoodCols,
+            *FloodingLikelihoodCols,
+            *GroundStabilityLikelihoodCols,
+        ]
         lookup: dict[str, RiskColumn] = {}
         for hazard in hazards:
             hazard_name = hazard.name.lower()
             hazard_value = hazard.value.lower()
             lookup[hazard_name] = hazard
             lookup[hazard_value] = hazard
-            if hazard_value.endswith("_risk"):
-                lookup[hazard_value.removesuffix("_risk")] = hazard
-            if hazard_value.endswith("_flooding_risk"):
-                lookup[hazard_value.removesuffix("_flooding_risk")] = hazard
+            base_name = hazard.base_name
+            lookup[base_name] = hazard
         return lookup
 
     def _resolve_vulnerability_mapping(
@@ -1119,10 +1123,10 @@ class MainExtremeWeatherWeightsConfig(ctk.BaseConfig):
     def as_mapping(self) -> dict[RiskColumn, float]:
         """Return weights keyed by risk columns."""
         return {
-            ExtremeWeatherRiskCols.EXTREME_HEAT: self.extreme_heat,
-            ExtremeWeatherRiskCols.EXTREME_COLD: self.extreme_cold,
-            ExtremeWeatherRiskCols.DROUGHT: self.drought,
-            ExtremeWeatherRiskCols.STORM: self.storm,
+            ExtremeWeatherLikelihoodCols.EXTREME_HEAT: self.extreme_heat,
+            ExtremeWeatherLikelihoodCols.EXTREME_COLD: self.extreme_cold,
+            ExtremeWeatherLikelihoodCols.DROUGHT: self.drought,
+            ExtremeWeatherLikelihoodCols.STORM: self.storm,
         }
 
 
@@ -1135,8 +1139,8 @@ class FloodingWeightsConfig(ctk.BaseConfig):
     def as_mapping(self) -> dict[RiskColumn, float]:
         """Return weights keyed by risk columns."""
         return {
-            FloodingRiskCols.RIVERS_SEA: self.rivers_sea,
-            FloodingRiskCols.SURFACE_WATER: self.surface_water,
+            FloodingLikelihoodCols.RIVERS_SEA: self.rivers_sea,
+            FloodingLikelihoodCols.SURFACE_WATER: self.surface_water,
         }
 
 
@@ -1153,12 +1157,12 @@ class GroundStabilityWeightsConfig(ctk.BaseConfig):
     def as_mapping(self) -> dict[RiskColumn, float]:
         """Return weights keyed by risk columns."""
         return {
-            GroundStabilityRiskCols.COLLAPSIBLE_DEPOSITS: self.collapsible_deposits,
-            GroundStabilityRiskCols.COMPRESSIBLE_GROUND: self.compressible_ground,
-            GroundStabilityRiskCols.LANDSLIDES: self.landslides,
-            GroundStabilityRiskCols.RUNNING_SAND: self.running_sand,
-            GroundStabilityRiskCols.SHRINK_SWELL: self.shrink_swell,
-            GroundStabilityRiskCols.SOLUBLE_ROCKS: self.soluble_rocks,
+            GroundStabilityLikelihoodCols.COLLAPSIBLE_DEPOSITS: self.collapsible_deposits,
+            GroundStabilityLikelihoodCols.COMPRESSIBLE_GROUND: self.compressible_ground,
+            GroundStabilityLikelihoodCols.LANDSLIDES: self.landslides,
+            GroundStabilityLikelihoodCols.RUNNING_SAND: self.running_sand,
+            GroundStabilityLikelihoodCols.SHRINK_SWELL: self.shrink_swell,
+            GroundStabilityLikelihoodCols.SOLUBLE_ROCKS: self.soluble_rocks,
         }
 
 
@@ -1169,16 +1173,18 @@ class MainHazardWeightsConfig(ctk.BaseConfig):
     flooding: FloodingWeightsConfig
     ground_stability: GroundStabilityWeightsConfig
 
-    def for_main_hazard(self, main_hazard: MainHazardRiskCols) -> dict[RiskColumn, float]:
+    def for_main_hazard(
+        self, main_hazard: MainHazardLikelihoodCols
+    ) -> dict[RiskColumn, float]:
         """Return sub-hazard weights for a main hazard."""
         extreme_weather = cast("MainExtremeWeatherWeightsConfig", self.extreme_weather)  # pylint: disable=no-member
         flooding = cast("FloodingWeightsConfig", self.flooding)  # pylint: disable=no-member
         ground_stability = cast("GroundStabilityWeightsConfig", self.ground_stability)  # pylint: disable=no-member
-        mapping: dict[MainHazardRiskCols, dict[RiskColumn, float]] = {
-            MainHazardRiskCols.EXTREME_WEATHER: extreme_weather.as_mapping(),  # pylint: disable=no-member
-            MainHazardRiskCols.FLOODING: flooding.as_mapping(),  # pylint: disable=no-member
-            MainHazardRiskCols.GROUND_STABILITY: ground_stability.as_mapping(),  # pylint: disable=no-member
-            MainHazardRiskCols.COASTAL_EROSION: {},
+        mapping: dict[MainHazardLikelihoodCols, dict[RiskColumn, float]] = {
+            MainHazardLikelihoodCols.EXTREME_WEATHER: extreme_weather.as_mapping(),  # pylint: disable=no-member
+            MainHazardLikelihoodCols.FLOODING: flooding.as_mapping(),  # pylint: disable=no-member
+            MainHazardLikelihoodCols.GROUND_STABILITY: ground_stability.as_mapping(),  # pylint: disable=no-member
+            MainHazardLikelihoodCols.COASTAL_EROSION: {},
         }
         return mapping[main_hazard]
 
@@ -1257,17 +1263,19 @@ class ExtremeWeatherSubHazardWeightsConfig(ctk.BaseConfig):
     drought: DroughtWeightsConfig
     storm: StormWeightsConfig
 
-    def for_sub_hazard(self, sub_hazard: ExtremeWeatherRiskCols) -> dict[RiskColumn, float]:
+    def for_sub_hazard(
+        self, sub_hazard: ExtremeWeatherLikelihoodCols
+    ) -> dict[RiskColumn, float]:
         """Return variable weights for an extreme weather sub-hazard."""
         extreme_heat = cast("ExtremeHeatWeightsConfig", self.extreme_heat)  # pylint: disable=no-member
         extreme_cold = cast("ExtremeColdWeightsConfig", self.extreme_cold)  # pylint: disable=no-member
         drought = cast("DroughtWeightsConfig", self.drought)  # pylint: disable=no-member
         storm = cast("StormWeightsConfig", self.storm)  # pylint: disable=no-member
-        mapping: dict[ExtremeWeatherRiskCols, dict[RiskColumn, float]] = {
-            ExtremeWeatherRiskCols.EXTREME_HEAT: extreme_heat.as_mapping(),  # pylint: disable=no-member
-            ExtremeWeatherRiskCols.EXTREME_COLD: extreme_cold.as_mapping(),  # pylint: disable=no-member
-            ExtremeWeatherRiskCols.DROUGHT: drought.as_mapping(),  # pylint: disable=no-member
-            ExtremeWeatherRiskCols.STORM: storm.as_mapping(),  # pylint: disable=no-member
+        mapping: dict[ExtremeWeatherLikelihoodCols, dict[RiskColumn, float]] = {
+            ExtremeWeatherLikelihoodCols.EXTREME_HEAT: extreme_heat.as_mapping(),  # pylint: disable=no-member
+            ExtremeWeatherLikelihoodCols.EXTREME_COLD: extreme_cold.as_mapping(),  # pylint: disable=no-member
+            ExtremeWeatherLikelihoodCols.DROUGHT: drought.as_mapping(),  # pylint: disable=no-member
+            ExtremeWeatherLikelihoodCols.STORM: storm.as_mapping(),  # pylint: disable=no-member
         }
         return mapping[sub_hazard]
 
@@ -1283,10 +1291,10 @@ class RailExtremeWeatherWeightsConfig(ctk.BaseConfig):
     def as_mapping(self) -> dict[RiskColumn, float]:
         """Return rail-specific extreme weather weights keyed by risk columns."""
         return {
-            ExtremeWeatherRiskCols.EXTREME_HEAT: self.extreme_heat,
-            ExtremeWeatherRiskCols.EXTREME_COLD: self.extreme_cold,
-            ExtremeWeatherRiskCols.DROUGHT: self.drought,
-            ExtremeWeatherRiskCols.STORM: self.storm,
+            ExtremeWeatherLikelihoodCols.EXTREME_HEAT: self.extreme_heat,
+            ExtremeWeatherLikelihoodCols.EXTREME_COLD: self.extreme_cold,
+            ExtremeWeatherLikelihoodCols.DROUGHT: self.drought,
+            ExtremeWeatherLikelihoodCols.STORM: self.storm,
         }
 
 
@@ -1303,13 +1311,15 @@ class WeightConfig(ctk.BaseConfig):
     extreme_weather_sub_hazard: ExtremeWeatherSubHazardWeightsConfig
     asset_hazard_overrides: AssetHazardWeightOverridesConfig
 
-    def main_hazard_weights(self, main_hazard: MainHazardRiskCols) -> dict[RiskColumn, float]:
+    def main_hazard_weights(
+        self, main_hazard: MainHazardLikelihoodCols
+    ) -> dict[RiskColumn, float]:
         """Return sub-hazard weights for a main hazard."""
         configured_main_hazard = cast("MainHazardWeightsConfig", self.main_hazard)  # pylint: disable=no-member
         return configured_main_hazard.for_main_hazard(main_hazard)  # pylint: disable=no-member
 
     def extreme_weather_sub_hazard_weights(
-        self, sub_hazard: ExtremeWeatherRiskCols
+        self, sub_hazard: ExtremeWeatherLikelihoodCols
     ) -> dict[RiskColumn, float]:
         """Return variable weights for an extreme weather sub-hazard index."""
         configured_sub_hazards = cast(
@@ -1319,14 +1329,17 @@ class WeightConfig(ctk.BaseConfig):
         return configured_sub_hazards.for_sub_hazard(sub_hazard)  # pylint: disable=no-member
 
     def asset_hazard_weights(
-        self, asset_type: AssetTypes, main_hazard: MainHazardRiskCols
+        self, asset_type: AssetTypes, main_hazard: MainHazardLikelihoodCols
     ) -> dict[RiskColumn, float]:
         """Return asset-specific hazard weights, falling back to default main hazard."""
         configured_overrides = cast(
             "AssetHazardWeightOverridesConfig",
             self.asset_hazard_overrides,  # pylint: disable=no-member
         )
-        if asset_type == AssetTypes.RAIL and main_hazard == MainHazardRiskCols.EXTREME_WEATHER:
+        if (
+            asset_type == AssetTypes.RAIL
+            and main_hazard == MainHazardLikelihoodCols.EXTREME_WEATHER
+        ):
             return configured_overrides.rail_extreme_weather.as_mapping()  # pylint: disable=no-member
         return self.main_hazard_weights(main_hazard)
 
@@ -1374,8 +1387,8 @@ class Config(ctk.BaseConfig):
         Configuration for hazards data.
     demand : DemandConfig
         Configuration for demand data.
-    asset_risk_weighting : AssetRiskWeightingConfig | None
-        Configuration for asset risk weighting workflow.
+    asset_hazard_weighting : AssetHazardWeightingConfig | None
+        Configuration for asset hazard weighting workflow.
     structure_vulnerability: StructureVulnerabilityConfig
         Vulnerability modifier definitions for road and rail structures.
     weights: WeightConfig
@@ -1391,7 +1404,7 @@ class Config(ctk.BaseConfig):
     infrastructure: InfrastructureConfig
     hazards: HazardsConfig
     demand: DemandConfig
-    asset_risk_weighting: AssetRiskWeightingConfig | None = None
+    asset_hazard_weighting: AssetHazardWeightingConfig | None = None
     structure_vulnerability: StructureVulnerabilityConfig
     weights: WeightConfig
     constants: ConstantConfig

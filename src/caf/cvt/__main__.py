@@ -8,7 +8,7 @@ import caf.toolkit as ctk
 
 from caf import cvt
 from caf.cvt import cleaning_funcs
-from caf.cvt.asset_risk_weighting import run_asset_risk_weighting
+from caf.cvt.asset_hazard_weighting import run_asset_hazard_weighting
 from caf.cvt.demand_cleaning import clean_demand
 from caf.cvt.functional_rules import apply_functional_rules
 from caf.cvt.hazard_cleaning import clean_hazards
@@ -44,20 +44,20 @@ def _run_model(args: argparse.Namespace) -> None:
             LOG.info("Finished layering step.")
 
 
-def _run_asset_risk_weighting(args: argparse.Namespace) -> None:
-    """Run the asset risk weighting workflow."""
+def _run_asset_hazard_weighting(args: argparse.Namespace) -> None:
+    """Run the asset hazard weighting workflow."""
     config = Config.load_yaml(args.config)
-    if config.asset_risk_weighting is None:
+    if config.asset_hazard_weighting is None:
         raise ValueError(
-            "Missing 'asset_risk_weighting' section in config file. "
+            "Missing 'asset_hazard_weighting' section in config file. "
             "Add paths and incident_weights before running this subcommand."
         )
 
-    run_asset_risk_weighting(
-        nwr_eastern_path=config.asset_risk_weighting.nwr_eastern_path,
-        nwr_northwest_path=config.asset_risk_weighting.nwr_northwest_path,
-        output_path=config.asset_risk_weighting.output_path,
-        incident_weights=config.asset_risk_weighting.incident_weights,
+    run_asset_hazard_weighting(
+        nwr_eastern_path=config.asset_hazard_weighting.nwr_eastern_path,
+        nwr_northwest_path=config.asset_hazard_weighting.nwr_northwest_path,
+        output_path=config.asset_hazard_weighting.output_path,
+        incident_weights=config.asset_hazard_weighting.incident_weights,
     )
 
 
@@ -73,10 +73,10 @@ def _main() -> None:
 
     subparsers = parser.add_subparsers(dest="command")
     asset_weighting_parser = subparsers.add_parser(
-        "asset-risk-weighting",
-        help="Derive hazard impact weights for rail assets from incident data",
+        "asset-hazard-weighting",
+        help="Derive hazard consequence weights for rail assets from incident data",
     )
-    asset_weighting_parser.set_defaults(func=_run_asset_risk_weighting)
+    asset_weighting_parser.set_defaults(func=_run_asset_hazard_weighting)
 
     args = parser.parse_args()
     args.func(args)
