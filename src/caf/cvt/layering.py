@@ -528,7 +528,7 @@ def _os_open_road_risk(
         os_road_risk,
         structure_enum=OSRoadStructure,
         structure_col=OSRoadCols.ROAD_STRUCTURE,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
         config=config,
     )
 
@@ -554,7 +554,7 @@ def _os_open_road_risk(
         "All Roads",
         risk_cols,
         config.paths.os_road_layering_audit,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "os_road_risk"
@@ -605,7 +605,7 @@ def _noham_road_risk(
         noham_risk, AssetTypes.ROAD, hazards=hazard_layers, config=config
     )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     noham_risk = _noham_risk_index(
         noham_risk, feature_range, config.parameters.user_classes.noham
     )
@@ -754,7 +754,7 @@ def _model_road_risk(
 
     # TODO (DJ): (#26) Apply asset-specific vulnerability modifiers for model roads.
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     model_road_risk = _model_road_risk_index(
         model_road_risk, feature_range, config.parameters.user_classes.model_roads
     )
@@ -905,7 +905,7 @@ def _passenger_rail_risk(
         passenger_rail_network_risk,
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
         config=config,
     )
 
@@ -924,7 +924,7 @@ def _passenger_rail_risk(
         risk_cols,
         config.paths.passenger_rail_layering_audit,
         linewidth=1.0,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "passenger_rail_network_risk"
@@ -978,7 +978,7 @@ def _freight_rail_risk(
         freight_rail_network_risk, AssetTypes.RAIL, hazards=hazard_layers, config=config
     )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
 
     freight_rail_network_risk = _apply_asset_vulnerability(
         freight_rail_network_risk,
@@ -1161,7 +1161,7 @@ def _train_stations_risk(
         "Train Stations",
         risk_cols,
         config.paths.train_stations_layering_audit,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "train_stations_risk"
@@ -1214,7 +1214,7 @@ def _airports_risk(
         "Airports",
         risk_cols,
         config.paths.airports_layering_audit,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "airports_risk"
@@ -1264,7 +1264,7 @@ def _bus_coach_stations_risk(
         "Bus and Coach Stations",
         risk_cols,
         config.paths.bus_coach_stations_layering_audit,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "bus_coach_stations_risk"
@@ -1314,7 +1314,7 @@ def _bus_stops_risk(
         "Bus Stops",
         risk_cols,
         config.paths.bus_stops_layering_audit,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "bus_stops_risk"
@@ -1368,7 +1368,7 @@ def _tram_stations_risk(
         "Tram Stations",
         risk_cols,
         config.paths.tram_stations_layering_audit,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "tram_stations_risk"
@@ -1422,7 +1422,7 @@ def _rapid_transport_stations_risk(
         "Rapid Transport Stations",
         risk_cols,
         config.paths.rapid_transport_stations_layering_audit,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "rapid_transport_stations_risk"
@@ -1472,7 +1472,7 @@ def _ferry_terminals_risk(
         "Ferry Terminals",
         risk_cols,
         config.paths.ferry_terminals_layering_audit,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "ferry_terminals_risk"
@@ -1531,7 +1531,7 @@ def _national_cycle_network_risk(
         "National Cycle Network",
         risk_cols,
         config.paths.national_cycle_network_layering_audit,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "national_cycle_network_risk"
@@ -1583,7 +1583,7 @@ def _tram_network_risk(
         tram_risk,
         structure_enum=OSRailStructure,
         structure_col=OSRailCols.STRUCTURE,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
         config=config,
     )
 
@@ -1602,7 +1602,7 @@ def _tram_network_risk(
         risk_cols,
         config.paths.tram_network_layering_audit,
         linewidth=1.0,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
     )
 
     output_filename = "tram_network_risk"
@@ -1650,7 +1650,7 @@ def _rapid_transport_network_risk(
         rapid_transport, hazard_layers, config
     )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
 
     rapid_transport_risk = _apply_asset_vulnerability(
         rapid_transport_risk,
@@ -1741,7 +1741,7 @@ def _nexus_metro_links_risk(
         metro_link_flows, hazard_layers, config
     )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
 
     metro_links_risk = _metro_risk_index(metro_links_risk, feature_range)
 
@@ -1851,7 +1851,7 @@ def _nexus_metro_stations_risk(
         metro_stations, hazard_layers, config
     )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
 
     _audit_infrastructure_risk(
         metro_stations_risk,

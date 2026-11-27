@@ -17,3 +17,4 @@ openpyxl>=3.1.5
 networkx>=3.6.1
 rasterio>=1.4.4
 rasterstats>=0.21.0
+pydap>=3.5.11

@@ -264,8 +264,8 @@ def _clean_noham_roads(config: model_config.Config, boundary: gpd.GeoDataFrame) 
     )
     # Filter out links with a or b less than 10,000 (zone connectors)
     noham_network_clean = noham_network_clean[
-        (noham_network_clean["a"] >= config.constants.noham_road_id_threshold)
-        & (noham_network_clean["b"] >= config.constants.noham_road_id_threshold)
+        (noham_network_clean["a"] >= config.parameters.noham_road_id_threshold)
+        & (noham_network_clean["b"] >= config.parameters.noham_road_id_threshold)
     ]
     noham_network_clean = noham_network_clean.drop(columns=["a", "b"])
     noham_network_clean = noham_network_clean.rename(
@@ -768,7 +768,7 @@ def _clean_rapid_transport_stations(
     ]
     rapid_transport_stations = rail_transport[
         rail_transport[definitions.MasterMapSiteCols.STAKEHOLDER_1].str.contains(
-            "|".join(config.constants.rapid_transport_stakeholders)
+            "|".join(config.parameters.rapid_transport_stakeholders)
         )
     ]
     rapid_transport_stations = rapid_transport_stations.drop(

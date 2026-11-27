@@ -304,7 +304,7 @@ def _calculate_risk_distribution_percentages(
     percentages = []
     categories = []
     for category, (lower, upper) in LikelihoodCategories.get_likelihood_bands().items():
-        if upper == config.constants.score_max:
+        if upper == config.parameters.score_max:
             mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] <= upper)
         else:
             mask = (asset_risk[risk_column] >= lower) & (asset_risk[risk_column] < upper)

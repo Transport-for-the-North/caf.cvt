@@ -769,7 +769,7 @@ def _extreme_weather_index(config: model_config.Config) -> None:
         MainHazardLikelihoodCols.EXTREME_WEATHER,
     )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
 
     extreme_weather_risk = gpd.GeoDataFrame(
         extreme_weather_risk, geometry=GEOMETRY_COL, crs=BNG_CRS
@@ -817,7 +817,7 @@ def _extreme_heat_index(
         _EXTREME_HEAT_RISK_THRESHOLD,
     )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     extreme_heat = min_max_scaling_pair(
         extreme_heat,
         [
@@ -897,7 +897,7 @@ def _extreme_cold_index(
         invert=True,
     )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     extreme_cold = min_max_scaling_pair(
         extreme_cold,
         [
@@ -1001,7 +1001,7 @@ def _drought_index(
         ]
     ]
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     drought_risk = min_max_scaling_pair(
         drought_risk,
         [
@@ -1019,11 +1019,11 @@ def _drought_index(
 
     # Reverse the polarity for precipitation
     drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}"] = (
-        config.constants.score_max
+        config.parameters.score_max
         - drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.CURRENT}"]
     )
     drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FUTURE}"] = (
-        config.constants.score_max
+        config.parameters.score_max
         - drought_risk[f"{DroughtCols.PRECIP_SUMMER}_{Scenarios.FUTURE}"]
     )
 
@@ -1048,7 +1048,7 @@ def _drought_index(
 
     drought_risk = gpd.GeoDataFrame(drought_risk, geometry=GEOMETRY_COL, crs=BNG_CRS)
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     _validate_index(
         drought_risk, [*DroughtCols, ExtremeWeatherLikelihoodCols.DROUGHT], feature_range
     )
@@ -1137,7 +1137,7 @@ def _storm_index(
         f"{StormCols.WIND_SPEED}_{Scenarios.FUTURE}"
     ].apply(_wind_risk_scaled)
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     storm_risk = min_max_scaling_pair(
         storm_risk,
         [
@@ -1248,7 +1248,7 @@ def _flooding_index_raster(
     _rasterize_and_stack_tiled(
         flooding_paths,
         config.paths.flooding_risk_raster_model_interim_output,
-        feature_range=(config.constants.score_min, config.constants.score_max),
+        feature_range=(config.parameters.score_min, config.parameters.score_max),
         flooding_weights=config.weights.main_hazard_weights(MainHazardLikelihoodCols.FLOODING),
     )
     LOG.info("Flooding risk index calculation complete.")
@@ -1603,7 +1603,7 @@ def _flooding_index_vector(
             flooding_risk[col].map(FloodingLikelihoodCols.get_likelihood_map()).astype(float)
         )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     flooding_risk = min_max_scaling_pair(
         flooding_risk,
         [
@@ -1631,7 +1631,7 @@ def _flooding_index_vector(
         feature_range,
     )
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     _audit_index(
         flooding_risk,
         [*FloodingLikelihoodCols, MainHazardLikelihoodCols.FLOODING],
@@ -1753,7 +1753,7 @@ def _process_flooding_overlay_tile(
 def _ground_stability_index(config: model_config.Config) -> None:
     """Combine GeoSure risk into a single index, using a spatial overlay."""
     LOG.info("Calculating ground stability risk index...")
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     if config.switches.ground_stability_premium:
         geosure_layers = {}
         for geosure_hazard in GroundStabilityLikelihoodCols:
@@ -1865,7 +1865,7 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
             return
 
         coastal_erosion_risk[scenario][MainHazardLikelihoodCols.COASTAL_EROSION] = (
-            config.constants.score_max
+            config.parameters.score_max
         )
 
         coastal_erosion_risk[scenario] = coastal_erosion_risk[scenario].rename(
@@ -1907,7 +1907,7 @@ def _coastal_erosion_index(config: model_config.Config) -> None:
         ]
     ]
 
-    feature_range = (config.constants.score_min, config.constants.score_max)
+    feature_range = (config.parameters.score_min, config.parameters.score_max)
     _validate_index(
         coastal_erosion_risk, [MainHazardLikelihoodCols.COASTAL_EROSION], feature_range
     )

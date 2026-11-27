@@ -7,6 +7,7 @@ import json
 import logging
 import pathlib
 import sys
+import time
 import warnings
 
 import fiona
@@ -23,34 +24,24 @@ LOG = logging.getLogger(__name__)
 
 # MODULE CONSTANTS
 
-_WIND_SPEED_EXCEEDANCE_THRESHOLD = 20
-_WIND_SPEED_PERCENTILE = 0.99
-_WIND_SPEED_GRID_SIZE_M = 5000
+_SUCCESS_STATUS_CODE = 200
 
-SUCCESS_STATUS_CODE = 200
-
-CEDA_API = {
-    "url": "https://services.ceda.ac.uk/api/token/create/",
-    "username": "djtfn1015",
-    "password": "wR3pG_h4_NZ3jCU"
-}
-
-CHESS_SCAPE_SENTINEL = -1e+20
-
-CHESS_SCAPE_SCENARIOS = {
+_CHESS_SCAPE_SCENARIOS = {
     definitions.Scenarios.CURRENT: {
         "rcp": "rcp85",
         "period": range(2001, 2021),
     },
-    f"{definitions.Scenarios.FUTURE}_2": {
-        "rcp": "rcp65",
+    f"{definitions.Scenarios.FUTURE}_2deg": {
+        "rcp": "rcp60",
         "period": range(2061, 2081),
     },
-    f"{definitions.Scenarios.FUTURE}_4": {
+    f"{definitions.Scenarios.FUTURE}_4deg": {
         "rcp": "rcp85",
         "period": range(2061, 2081),
     }
 }
+
+_MISSING_YEAR_MONTH = (2080, 12)
 
 # WARNING FILTERS
 
@@ -113,38 +104,27 @@ def _clean_extreme_weather(config: model_config.Config, boundary: gpd.GeoDataFra
     LOG.info("Cleaning extreme weather data...")
 
     ceda_token = _get_ceda_token(
-        url=CEDA_API["url"],
-        username=CEDA_API["username"],
-        password=CEDA_API["password"]
+        url=config.parameters.chess_scape.token_url,
+        username=config.parameters.chess_scape.username,
+        password=config.parameters.chess_scape.password
     )
 
     session = requests.Session()
     session.headers.update({"Authorization": f"Bearer {ceda_token}"})
 
-    tasmax_by_scenario = _clean_temperature(session=session, variable="tasmax")
-    _aggregate_extreme_heat_tasmax(tasmax_by_scenario)
+    _clean_chess_scape(
+        config=config,
+        boundary=boundary,
+        session=session,
+    )
 
-    hazard_grid = _clean_hazard_grid(config, boundary)
-
-    # MET OFFICE CLEANING
-    _clean_temp_max(config, hazard_grid)
-    _clean_temp_min(config, hazard_grid)
-    _clean_summer_precip(config, hazard_grid)
-    _clean_winter_precip(config, hazard_grid)
-    _clean_rain_days(config, boundary)
-    _clean_drought_index(config, boundary)
-    _clean_hot_summer_days(config, hazard_grid)
-    _clean_extreme_summer_days(config, hazard_grid)
-    _clean_frost_days(config, hazard_grid)
-    _clean_icing_days(config, hazard_grid)
-    _clean_wind_speed(config, boundary)
-    _clean_wind_driven_rain(config, boundary)
     LOG.info("Finished cleaning extreme weather data.")
 
 
 
 def _get_ceda_token(url: str, username: str, password: str) -> str:
     """Get CEDA access token for authentication to the API."""
+    LOG.info("Requesting CEDA API access token")
     token = base64.b64encode(f"{username}:{password}".encode()).decode('ascii')
     headers = {
         "Authorization": f"Basic {token}"
@@ -154,58 +134,116 @@ def _get_ceda_token(url: str, username: str, password: str) -> str:
     except requests.exceptions.Timeout as e:
         raise RuntimeError("Request to CEDA API timed out.") from e
     response_data = json.loads(response.text)
-    if response.status_code == SUCCESS_STATUS_CODE:
+    if response.status_code == _SUCCESS_STATUS_CODE:
         return response_data["access_token"]
 
     raise RuntimeError(f"Failed to get CEDA token: {response.text}")
 
 
-def _read_clean_chess_scape_file(
+def _get_chess_scape_url(
     rcp: str,
     year: int,
     month: int,
     variable: str,
-    sentinel: float,
-    session: requests.Session,
     resolution: str = "1km",
     timescale: str = "daily",
     realisation: str = "01",
-    bias_corrected: bool = True,
-) -> xr.DataArray:
-    """Read and clean CHESS-SCAPE climate data for a given RCP, year, month, and variable."""
-    url = (
+    bias_corrected: bool = True
+) -> str:
+    """Return the specific URL for a climate dataset."""
+    return (
         f"dap2://dap.ceda.ac.uk/thredds/dodsC/badc/deposited2021/chess-scape/data/"
         f"{rcp}{'_bias-corrected' if bias_corrected else ''}/{realisation}/{timescale}"
         f"/{variable}/chess-scape_{rcp}{'_bias-corrected' if bias_corrected else ''}_"
         f"{realisation}_{variable}_uk_{resolution}_{timescale}_{year}{month:02d}01-{year}{month:02d}30.nc"
     )
-    ds = xr.open_dataset(url, engine="pydap", session=session)
-    cleaned = ds[variable].where(ds[variable] != sentinel)
-    return cleaned.drop_vars(["lat", "lon"], errors="ignore")
 
 
-def _read_clean_chess_scape_for_scenario(
-    scenario: str,
+def _read_clean_chess_scape_file(
+    url: str,
+    max_retries: int,
     variable: str,
     sentinel: float,
+    bounds: tuple[float, float, float, float],
     session: requests.Session,
 ) -> xr.DataArray:
-    """Read and clean CHESS-SCAPE climate data for all months in a scenario period."""
-    if scenario not in CHESS_SCAPE_SCENARIOS:
-        valid = ", ".join(CHESS_SCAPE_SCENARIOS)
+    """Read and clean CHESS-SCAPE climate data for a given RCP, year, month, and variable."""
+    for attempt in range(max_retries):
+        try:
+            with xr.open_dataset(
+                url,
+                engine="pydap",
+                session=session
+            ) as ds:
+                data = ds[variable]
+                min_x, min_y, max_x, max_y = bounds
+                x_is_ascending = bool((data["x"][0] <= data["x"][-1]).item())
+                y_is_ascending = bool((data["y"][0] <= data["y"][-1]).item())
+                data = data.sel(
+                    x=slice(min_x, max_x) if x_is_ascending else slice(max_x, min_x),
+                    y=slice(min_y, max_y) if y_is_ascending else slice(max_y, min_y),
+                )
+                cleaned = (
+                    data
+                    .where(data != sentinel)
+                    .drop_vars(["lat", "lon"], errors="ignore")
+                )
+                return cleaned.load()
+        except Exception as e:
+            if "429" not in str(e):
+                raise
+            wait = 2 ** attempt
+            LOG.warning(
+                "Rate limited by server. Retrying in %s seconds... (attempt %s/%s)",
+                wait,
+                attempt + 1,
+                max_retries,
+            )
+            time.sleep(wait)
+
+    raise RuntimeError("Failed to open CHESS-SCAPE dataset after multiple retries.")
+
+
+def _process_variable_for_scenario(
+    scenario: str,
+    max_retries: int,
+    variable: str,
+    sentinel: float,
+    bounds: tuple[float, float, float, float],
+    session: requests.Session,
+) -> xr.DataArray:
+    """Read and clean CHESS-SCAPE climate data for variable in entire scenario period."""
+    if scenario not in _CHESS_SCAPE_SCENARIOS:
+        valid = ", ".join(_CHESS_SCAPE_SCENARIOS)
         raise ValueError(f"Unknown CHESS-SCAPE scenario '{scenario}'. Valid values: {valid}.")
 
-    params = CHESS_SCAPE_SCENARIOS[scenario]
+    params = _CHESS_SCAPE_SCENARIOS[scenario]
+    LOG.info(
+        "Reading CHESS-SCAPE data for %s variable, %s scenario (%s %s)",
+        variable,
+        scenario,
+        params["rcp"],
+        params["period"]
+    )
     monthly_data = []
     for year in params["period"]:
+        LOG.info("Processing %s %s data.", variable, year)
         for month in range(1, 13):
+            if (year, month) == _MISSING_YEAR_MONTH:
+                continue
+            url = _get_chess_scape_url(
+                params["rcp"],
+                year,
+                month,
+                variable
+            )
             monthly_data.append(
                 _read_clean_chess_scape_file(
-                    params["rcp"],
-                    year,
-                    month,
+                    url,
+                    max_retries,
                     variable,
                     sentinel,
+                    bounds,
                     session,
                 )
             )
@@ -214,603 +252,29 @@ def _read_clean_chess_scape_for_scenario(
     return xr.concat(monthly_data, dim="time").sortby("time")
 
 
-def _clean_temperature(
+def _clean_chess_scape(
+    config: model_config.Config,
+    boundary: gpd.GeoDataFrame,
     session: requests.Session,
-    variable: str,
-    sentinel: float = CHESS_SCAPE_SENTINEL,
-) -> dict[str, xr.DataArray]:
-    """Read and clean temperature data from CHESS-SCAPE for all configured scenarios."""
-    temperature_by_scenario = {}
-    for scenario in CHESS_SCAPE_SCENARIOS:
-        temperature_by_scenario[scenario] = _read_clean_chess_scape_for_scenario(
-            scenario,
-            variable,
-            sentinel,
-            session,
-        )
-    return temperature_by_scenario
+) -> None:
+    """Read, clean, and write CHESS-SCAPE variables for all configured scenarios."""
+    bounds = boundary.total_bounds
 
-
-def _aggregate_extreme_heat_tasmax(
-    tasmax_by_scenario: dict[str, xr.DataArray], quantile: float = 0.99
-) -> dict[str, xr.Dataset]:
-    """Aggregate tasmax into event intensity and frequency for each configured scenario."""
-    if not 0 < quantile < 1:
-        raise ValueError("quantile must be between 0 and 1.")
-
-    aggregated = {}
-    for scenario, tasmax in tasmax_by_scenario.items():
-        threshold = tasmax.quantile(quantile, dim="time").squeeze(drop=True)
-        extreme_events = tasmax > threshold
-        annual_event_frequency = extreme_events.groupby("time.year").sum(dim="time").mean(
-            dim="year"
-        )
-        annual_event_intensity = (
-            tasmax.where(extreme_events).groupby("time.year").mean(dim="time").mean(dim="year")
-        )
-        aggregated[scenario] = xr.Dataset(
-            data_vars={
-                "extreme_heat_frequency": annual_event_frequency,
-                "extreme_heat_intensity": annual_event_intensity,
-            },
-            attrs={
-                "scenario": scenario,
-                "rcp": CHESS_SCAPE_SCENARIOS[scenario]["rcp"],
-                "period_start": min(CHESS_SCAPE_SCENARIOS[scenario]["period"]),
-                "period_end": max(CHESS_SCAPE_SCENARIOS[scenario]["period"]),
-                "extreme_quantile": quantile,
-            },
-        )
-    return aggregated
-
-
-
-def _clean_hazard_grid(
-    config: model_config.Config, boundary: gpd.GeoDataFrame
-) -> gpd.GeoDataFrame:
-    """Create and prepare common hazard grid DataFrame for variables on same 12km BNG."""
-    hazard_grid = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.max_temp_summer,
-        mask=boundary,
-        columns=[],
-    )
-    hazard_grid["grid_id"] = range(1, len(hazard_grid) + 1)
-    len_before_filter = len(hazard_grid)
-    hazard_grid = cleaning_funcs.clip_to_boundary(hazard_grid, boundary)
-    filter_removed = len_before_filter - len(hazard_grid)
-    LOG.debug(
-        "Extreme weather grid filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    hazard_grid = cleaning_funcs.explode_to_polygons(hazard_grid, track_part=True)
-    cleaning_funcs.write_to_file(
-        hazard_grid,
-        config.paths.hazard_grid_model_input,
-    )
-    return hazard_grid
-
-
-def _clean_temp_max(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
-    """Read and clean max summer temperature change projections, then write to file."""
-    LOG.info("Cleaning summer maximum temperature change projections.")
-    temp_max = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.max_temp_summer,
-        columns=["tasmax_summer_01_20_median", "tasmax_summer_change_40_median"],
-    )
-    temp_max["grid_id"] = range(1, len(temp_max) + 1)
-    temp_max = temp_max.drop(columns=[definitions.GEOMETRY_COL])
-    temp_max = temp_max.rename(
-        columns={
-            "tasmax_summer_01_20_median": (
-                f"{definitions.ExtremeHeatCols.MAX_TEMP_SUMMER}_{definitions.Scenarios.CURRENT}"
-            ),
-            "tasmax_summer_change_40_median": (
-                f"{definitions.ExtremeHeatCols.MAX_TEMP_SUMMER}_{definitions.Scenarios.FUTURE}"
-            ),
-        }
-    )
-    temp_max[
-        f"{definitions.ExtremeHeatCols.MAX_TEMP_SUMMER}_{definitions.Scenarios.FUTURE}"
-    ] = (
-        temp_max[
-            f"{definitions.ExtremeHeatCols.MAX_TEMP_SUMMER}_{definitions.Scenarios.CURRENT}"
-        ]
-        + temp_max[
-            f"{definitions.ExtremeHeatCols.MAX_TEMP_SUMMER}_{definitions.Scenarios.FUTURE}"
-        ]
-    )
-    len_before_filter = len(temp_max)
-    temp_max = temp_max[temp_max["grid_id"].isin(grid["grid_id"])]
-    filter_removed = len_before_filter - len(temp_max)
-    LOG.debug(
-        "Summer max temperature change projections filtered - %s of %s (%.1f percent) rows "
-        "removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    cleaning_funcs.write_to_file(temp_max, config.paths.summer_max_temperature_model_input)
-
-
-def _clean_temp_min(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
-    """Read and clean min winter temperature change projections, then write to file."""
-    LOG.info("Cleaning winter minimum temperature change projections.")
-    temp_min = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.min_temp_winter,
-        columns=["tasmin_winter_01_20_median", "tasmin_winter_change_40_median"],
-    )
-    temp_min["grid_id"] = range(1, len(temp_min) + 1)
-    temp_min = temp_min.drop(columns=[definitions.GEOMETRY_COL])
-    temp_min = temp_min.rename(
-        columns={
-            "tasmin_winter_01_20_median": (
-                f"{definitions.ExtremeColdCols.MIN_TEMP_WINTER}_{definitions.Scenarios.CURRENT}"
-            ),
-            "tasmin_winter_change_40_median": (
-                f"{definitions.ExtremeColdCols.MIN_TEMP_WINTER}_{definitions.Scenarios.FUTURE}"
-            ),
-        }
-    )
-    temp_min[
-        f"{definitions.ExtremeColdCols.MIN_TEMP_WINTER}_{definitions.Scenarios.FUTURE}"
-    ] = (
-        temp_min[
-            f"{definitions.ExtremeColdCols.MIN_TEMP_WINTER}_{definitions.Scenarios.CURRENT}"
-        ]
-        + temp_min[
-            f"{definitions.ExtremeColdCols.MIN_TEMP_WINTER}_{definitions.Scenarios.FUTURE}"
-        ]
-    )
-    len_before_filter = len(temp_min)
-    temp_min = temp_min[temp_min["grid_id"].isin(grid["grid_id"])]
-    filter_removed = len_before_filter - len(temp_min)
-    LOG.debug(
-        "Winter minimum temperature change projections filtered - %s of %s (%.1f percent) "
-        "rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    cleaning_funcs.write_to_file(
-        temp_min,
-        config.paths.winter_min_temperature_model_input,
-    )
-
-
-def _clean_summer_precip(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
-    """Read and clean summer precipitation change projections, then write to file."""
-    LOG.info("Cleaning summer precipitation change projections.")
-    precip_sum = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.precip_summer,
-        columns=["pr_summer_01_20_median", "pr_summer_change_40_median"],
-    )
-    precip_sum["grid_id"] = range(1, len(precip_sum) + 1)
-    precip_sum = precip_sum.drop(columns=[definitions.GEOMETRY_COL])
-    precip_sum = precip_sum.rename(
-        columns={
-            "pr_summer_01_20_median": (
-                f"{definitions.DroughtCols.PRECIP_SUMMER}_{definitions.Scenarios.CURRENT}"
-            ),
-            "pr_summer_change_40_median": (
-                f"{definitions.DroughtCols.PRECIP_SUMMER}_pct_chg_{definitions.Scenarios.FUTURE}"
-            ),
-        }
-    )
-    precip_sum[f"{definitions.DroughtCols.PRECIP_SUMMER}_{definitions.Scenarios.FUTURE}"] = (
-        precip_sum[f"{definitions.DroughtCols.PRECIP_SUMMER}_{definitions.Scenarios.CURRENT}"]
-        * (
-            1
-            + (
-                precip_sum[
-                    f"{definitions.DroughtCols.PRECIP_SUMMER}_pct_chg_{definitions.Scenarios.FUTURE}"
-                ]
-                / 100
+    for variable in config.parameters.chess_scape.variables:
+        LOG.info("Cleaning CHESS-SCAPE %s data.", variable)
+        for scenario in _CHESS_SCAPE_SCENARIOS:
+            variable_scenario = _process_variable_for_scenario(
+                scenario=scenario,
+                max_retries=config.parameters.chess_scape.max_access_retries,
+                variable=variable,
+                sentinel=config.parameters.chess_scape.sentinel,
+                bounds=bounds,
+                session=session,
             )
-        )
-    )
-    precip_sum = precip_sum.drop(
-        columns=[
-            f"{definitions.DroughtCols.PRECIP_SUMMER}_pct_chg_{definitions.Scenarios.FUTURE}"
-        ]
-    )
-    len_before_filter = len(precip_sum)
-    precip_sum = precip_sum[precip_sum["grid_id"].isin(grid["grid_id"])]
-    filter_removed = len_before_filter - len(precip_sum)
-    LOG.debug(
-        "Summer precipitation change projections filtered - %s of %s (%.1f percent) rows "
-        "removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    cleaning_funcs.write_to_file(precip_sum, config.paths.summer_precipitation_model_input)
-
-
-def _clean_winter_precip(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
-    """Read and clean winter precipitation change projections, then write to file."""
-    LOG.info("Cleaning winter precipitation change projections.")
-    precip_win = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.precip_winter,
-        columns=["pr_winter_01_20_median", "pr_winter_change_40_median"],
-    )
-    precip_win["grid_id"] = range(1, len(precip_win) + 1)
-    precip_win = precip_win.drop(columns=[definitions.GEOMETRY_COL])
-    precip_win = precip_win.rename(
-        columns={
-            "pr_winter_01_20_median": (
-                f"{definitions.StormCols.PRECIP_WINTER}_{definitions.Scenarios.CURRENT}"
-            ),
-            "pr_winter_change_40_median": (
-                f"{definitions.StormCols.PRECIP_WINTER}_pct_chg_{definitions.Scenarios.FUTURE}"
-            ),
-        },
-    )
-    precip_win[f"{definitions.StormCols.PRECIP_WINTER}_{definitions.Scenarios.FUTURE}"] = (
-        precip_win[f"{definitions.StormCols.PRECIP_WINTER}_{definitions.Scenarios.CURRENT}"]
-        * (
-            1
-            + (
-                precip_win[
-                    f"{definitions.StormCols.PRECIP_WINTER}_pct_chg_{definitions.Scenarios.FUTURE}"
-                ]
-                / 100
+            variable_scenario.to_netcdf(
+                config.paths.chess_scape_model_input(variable, scenario),
+                engine="netcdf4"
             )
-        )
-    )
-    precip_win = precip_win.drop(
-        columns=[
-            f"{definitions.StormCols.PRECIP_WINTER}_pct_chg_{definitions.Scenarios.FUTURE}"
-        ]
-    )
-    len_before_filter = len(precip_win)
-    precip_win = precip_win[precip_win["grid_id"].isin(grid["grid_id"])]
-    filter_removed = len_before_filter - len(precip_win)
-    LOG.debug(
-        "Winter precipitation change projections filtered - %s of %s (%.1f percent) rows "
-        "removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    cleaning_funcs.write_to_file(precip_win, config.paths.winter_precipitation_model_input)
-
-
-def _clean_rain_days(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Read and clean 10mm rain days observations, then write to file."""
-    LOG.info("Cleaning 10mm rain days observations.")
-    rain_days = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.rain_days,
-        mask=boundary,
-    )
-    len_before_filter = len(rain_days)
-    rain_days = cleaning_funcs.clip_to_boundary(rain_days, boundary)
-    rain_days = rain_days.rename(
-        columns={
-            "Rain10mmDays": (
-                f"{definitions.StormCols.RAIN_DAYS}_{definitions.Scenarios.CURRENT}"
-            )
-        }
-    )
-    filter_removed = len_before_filter - len(rain_days)
-    LOG.debug(
-        "10mm rain days 1991-2020 filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    rain_days = cleaning_funcs.explode_to_polygons(rain_days)
-    cleaning_funcs.write_to_file(rain_days, config.paths.rain_days_model_input)
-
-
-def _clean_drought_index(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Read and clean drought severity index data, then write to file."""
-    LOG.info("Cleaning drought severity index data.")
-    drought_index = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.drought_index,
-        mask=boundary,
-        columns=["DSI12_baseline_00_17_median", "DSI12_40_median"],
-    )
-    drought_index = drought_index.rename(
-        columns={
-            "DSI12_baseline_00_17_median": (
-                f"{definitions.DroughtCols.DROUGHT_SEVERITY_INDEX}_{definitions.Scenarios.CURRENT}"
-            ),
-            "DSI12_40_median": (
-                f"{definitions.DroughtCols.DROUGHT_SEVERITY_INDEX}_{definitions.Scenarios.FUTURE}"
-            ),
-        }
-    )
-    len_before_filter = len(drought_index)
-    drought_index = cleaning_funcs.clip_to_boundary(drought_index, boundary)
-    filter_removed = len_before_filter - len(drought_index)
-    LOG.debug(
-        "Drought severity index filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    drought_index = cleaning_funcs.explode_to_polygons(drought_index)
-    cleaning_funcs.write_to_file(
-        drought_index, config.paths.drought_severity_index_model_input
-    )
-
-
-def _clean_hot_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
-    """Read and clean hot summer days projections, then write to file."""
-    LOG.info("Cleaning hot summer days projections.")
-    hot_days = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.hot_days,
-        columns=["HSD_baseline_01_20_median", "HSD_40_median"],
-    )
-    hot_days["grid_id"] = range(1, len(hot_days) + 1)
-    hot_days = hot_days.drop(columns=[definitions.GEOMETRY_COL])
-    hot_days = hot_days.rename(
-        columns={
-            "HSD_baseline_01_20_median": (
-                f"{definitions.ExtremeHeatCols.HOT_SUMMER_DAYS}_{definitions.Scenarios.CURRENT}"
-            ),
-            "HSD_40_median": (
-                f"{definitions.ExtremeHeatCols.HOT_SUMMER_DAYS}_{definitions.Scenarios.FUTURE}"
-            ),
-        }
-    )
-    len_before_filter = len(hot_days)
-    hot_days = hot_days[hot_days["grid_id"].isin(grid["grid_id"])]
-    filter_removed = len_before_filter - len(hot_days)
-    LOG.debug(
-        "Hot summer days projections filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    cleaning_funcs.write_to_file(hot_days, config.paths.hot_summer_days_model_input)
-
-
-def _clean_extreme_summer_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
-    """Read and clean extreme summer days projections, then write to file."""
-    LOG.info("Cleaning extreme summer days projections.")
-    extr_days = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.extreme_summer_days,
-        columns=["ESD_baseline_01_20_median", "ESD_40_median"],
-    )
-    extr_days["grid_id"] = range(1, len(extr_days) + 1)
-    extr_days = extr_days.drop(columns=[definitions.GEOMETRY_COL])
-    extr_days = extr_days.rename(
-        columns={
-            "ESD_baseline_01_20_median": (
-                f"{definitions.ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{definitions.Scenarios.CURRENT}"
-            ),
-            "ESD_40_median": (
-                f"{definitions.ExtremeHeatCols.EXTREME_SUMMER_DAYS}_{definitions.Scenarios.FUTURE}"
-            ),
-        }
-    )
-    len_before_filter = len(extr_days)
-    extr_days = extr_days[extr_days["grid_id"].isin(grid["grid_id"])]
-    filter_removed = len_before_filter - len(extr_days)
-    LOG.debug(
-        "Extreme summer days projections filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    cleaning_funcs.write_to_file(
-        extr_days,
-        config.paths.extreme_summer_days_model_input,
-    )
-
-
-def _clean_frost_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
-    """Read and clean frost days projections, then write to file."""
-    LOG.info("Cleaning frost days projections.")
-    frost_days = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.frost_days,
-        columns=["FrostDays_baseline_01_20_median", "FrostDays_40_median"],
-    )
-    frost_days["grid_id"] = range(1, len(frost_days) + 1)
-    frost_days = frost_days.drop(columns=[definitions.GEOMETRY_COL])
-    frost_days = frost_days.rename(
-        columns={
-            "FrostDays_baseline_01_20_median": (
-                f"{definitions.ExtremeColdCols.FROST_DAYS}_{definitions.Scenarios.CURRENT}"
-            ),
-            "FrostDays_40_median": (
-                f"{definitions.ExtremeColdCols.FROST_DAYS}_{definitions.Scenarios.FUTURE}"
-            ),
-        }
-    )
-    len_before_filter = len(frost_days)
-    frost_days = frost_days[frost_days["grid_id"].isin(grid["grid_id"])]
-    filter_removed = len_before_filter - len(frost_days)
-    LOG.debug(
-        "Frost days projections filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    cleaning_funcs.write_to_file(frost_days, config.paths.frost_days_model_input)
-
-
-def _clean_icing_days(config: model_config.Config, grid: gpd.GeoDataFrame) -> None:
-    """Read and clean icing days projections, then write to file."""
-    LOG.info("Cleaning icing days projections.")
-    ice_days = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.icing_days,
-        columns=["IcingDays_baseline_01_20_median", "IcingDays_40_median"],
-    )
-    ice_days["grid_id"] = range(1, len(ice_days) + 1)
-    ice_days = ice_days.drop(columns=[definitions.GEOMETRY_COL])
-    ice_days = ice_days.rename(
-        columns={
-            "IcingDays_baseline_01_20_median": (
-                f"{definitions.ExtremeColdCols.ICING_DAYS}_{definitions.Scenarios.CURRENT}"
-            ),
-            "IcingDays_40_median": (
-                f"{definitions.ExtremeColdCols.ICING_DAYS}_{definitions.Scenarios.FUTURE}"
-            ),
-        }
-    )
-    len_before_filter = len(ice_days)
-    ice_days = ice_days[ice_days["grid_id"].isin(grid["grid_id"])]
-    filter_removed = len_before_filter - len(ice_days)
-    LOG.debug(
-        "Icing days projections filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    cleaning_funcs.write_to_file(ice_days, config.paths.icing_days_model_input)
-
-
-def _clean_wind_speed(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Read wind speed projections, calculate metrics, clean, then write to file."""
-    LOG.info("Cleaning wind speed projections.")
-    windspd_current_agg, len_before_filter_current = _read_wind_speed_reduce(
-        config.paths.raw_input / config.hazards.extreme_weather.wind_speed["1990_2000"],
-        definitions.Scenarios.CURRENT,
-    )
-    windspd_future_agg, len_before_filter_future = _read_wind_speed_reduce(
-        config.paths.raw_input / config.hazards.extreme_weather.wind_speed["2070_2080"],
-        definitions.Scenarios.FUTURE,
-    )
-
-    metric_cols = [
-        f"{definitions.StormCols.WIND_SPEED}_{definitions.Scenarios.CURRENT}",
-        f"{definitions.StormCols.EXCEEDANCE_DAYS}_{definitions.Scenarios.CURRENT}",
-        f"{definitions.StormCols.WIND_SPEED}_{definitions.Scenarios.FUTURE}",
-        f"{definitions.StormCols.EXCEEDANCE_DAYS}_{definitions.Scenarios.FUTURE}",
-    ]
-
-    len_before_filter = len_before_filter_current + len_before_filter_future
-
-    windspd_combined = windspd_current_agg.merge(
-        windspd_future_agg,
-        on=["projection_y_coordinate", "projection_x_coordinate", "latitude", "longitude"],
-        how="outer",
-    ).fillna({col: 0 for col in metric_cols})
-
-    windspd_combined[definitions.GEOMETRY_COL] = [
-        cleaning_funcs.convert_point_to_grid(x, y, _WIND_SPEED_GRID_SIZE_M)
-        for x, y in zip(
-            windspd_combined["projection_x_coordinate"],
-            windspd_combined["projection_y_coordinate"],
-            strict=False,
-        )
-    ]
-    windspd_combined = gpd.GeoDataFrame(
-        windspd_combined, geometry=definitions.GEOMETRY_COL, crs=definitions.BNG_CRS
-    )
-    windspd_combined = windspd_combined[[*metric_cols, definitions.GEOMETRY_COL]]
-    windspd_combined = cleaning_funcs.clip_to_boundary(windspd_combined, boundary)
-    filter_removed = len_before_filter - len(windspd_combined)
-    LOG.debug(
-        "Wind speed projections filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    windspd_combined = cleaning_funcs.explode_to_polygons(windspd_combined)
-    cleaning_funcs.write_to_file(windspd_combined, config.paths.wind_speed_model_input)
-
-
-def _read_wind_speed_reduce(xr_path: pathlib.Path, scenario: str) -> tuple[pd.DataFrame, int]:
-    """Read wind speed projections, calculate metrics and return a merged dataframe."""
-    windspd_dataset = xr.open_dataset(xr_path)
-    var = "wsgmax10m"
-
-    # Compute exceedance and percentile aggregations
-    exceedance_dataset = _calculate_windspd_exceedance(
-        windspd_dataset, _WIND_SPEED_EXCEEDANCE_THRESHOLD, var, scenario
-    )
-    percentile_dataset = _calculate_windspd_percentile(
-        windspd_dataset, _WIND_SPEED_PERCENTILE, var, scenario=scenario
-    )
-
-    windspd_aggregations = xr.merge(
-        [exceedance_dataset, percentile_dataset], compat="override"
-    )
-    windspd_dataframe = windspd_aggregations.to_dataframe().reset_index()
-    len_before_filter = windspd_dataset.sizes["time"]
-
-    return windspd_dataframe, len_before_filter
-
-
-def _calculate_windspd_exceedance(
-    windspd_data: xr.Dataset, threshold: int, variable: str, scenario: str
-) -> xr.Dataset:
-    """Compute average exceedance days per geometry for values above a given threshold."""
-    # boolean exceedance mask
-    exceedance = windspd_data[variable] > threshold
-
-    # count exceedance days per year, per grid cell
-    exceedance_per_year = exceedance.groupby("year").sum(dim="time")
-
-    # average exceedance across years
-    avg_exc = exceedance_per_year.mean(dim="year")
-
-    # store in a Dataset with a named variable
-    return avg_exc.to_dataset(name=f"{definitions.StormCols.EXCEEDANCE_DAYS}_{scenario}")
-
-
-def _calculate_windspd_percentile(
-    windspd_data: xr.Dataset, quantile: float, variable: str, scenario: str
-) -> xr.Dataset:
-    """Calculate the wind speed percentiles per geometry for a given variable."""
-    pct = windspd_data[variable].quantile(quantile, dim="time")
-    return pct.to_dataset(name=f"{definitions.StormCols.WIND_SPEED}_{scenario}")
-
-
-def _clean_wind_driven_rain(config: model_config.Config, boundary: gpd.GeoDataFrame) -> None:
-    """Read and clean wind driven rain index data, then write to file."""
-    LOG.info("Cleaning wind driven rain index data.")
-    wind_driven_rain = gpd.read_file(
-        config.paths.raw_input / config.hazards.extreme_weather.wdr_index,
-        mask=boundary,
-        columns=["WDR_baseline_Median", "WDR_40_Median", "x_coord", "y_coord"],
-    )
-    len_before_filter = len(wind_driven_rain)
-    # Aggregate by wind direction to calculate mean wind speed
-    wind_driven_rain = (
-        wind_driven_rain.groupby(["x_coord", "y_coord"])
-        .agg(
-            {
-                "WDR_baseline_Median": "mean",
-                "WDR_40_Median": "mean",
-                definitions.GEOMETRY_COL: "first",
-            }
-        )
-        .reset_index()
-    )
-
-    wind_driven_rain = wind_driven_rain.drop(columns=["x_coord", "y_coord"])
-    wind_driven_rain = wind_driven_rain.rename(
-        columns={
-            "WDR_baseline_Median": (
-                f"{definitions.StormCols.WIND_DRIVEN_RAIN_INDEX}_{definitions.Scenarios.CURRENT}"
-            ),
-            "WDR_40_Median": (
-                f"{definitions.StormCols.WIND_DRIVEN_RAIN_INDEX}_{definitions.Scenarios.FUTURE}"
-            ),
-        }
-    )
-    wind_driven_rain = gpd.GeoDataFrame(
-        wind_driven_rain, geometry=definitions.GEOMETRY_COL, crs="EPSG:3857"
-    )
-    wind_driven_rain = cleaning_funcs.clip_to_boundary(wind_driven_rain, boundary)
-    filter_removed = len_before_filter - len(wind_driven_rain)
-    LOG.debug(
-        "Wind driven rain index filtered - %s of %s (%.1f percent) rows removed",
-        filter_removed,
-        len_before_filter,
-        (filter_removed / len_before_filter) * 100,
-    )
-    wind_driven_rain = cleaning_funcs.explode_to_polygons(wind_driven_rain)
-    cleaning_funcs.write_to_file(
-        wind_driven_rain,
-        config.paths.wind_driven_rain_model_input,
-    )
 
 
 ### FLOODING

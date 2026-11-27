@@ -410,6 +410,10 @@ class PathConfig(ctk.BaseConfig):
             / f"national_coastal_erosion_risk_mapping_smp_{year}_70CC.gpkg"
         )
 
+    def chess_scape_model_input(self, variable: str, scenario: str) -> pathlib.Path:
+        """Return CHESS-SCAPE model input path based on variable and scenario."""
+        return self.extreme_weather_model_input / f"{variable}_{scenario}.nc"
+
 
 class OtherInput(ctk.BaseConfig):
     """Configuration for other raw input data.
@@ -541,55 +545,6 @@ class WeatherGenerator(ctk.BaseConfig):
     hourly_rainfall: pathlib.Path
 
 
-class ExtremeWeather(ctk.BaseConfig):
-    """Configuration for extreme weather data.
-
-    Attributes
-    ----------
-    weather_generator: pathlib.Path
-        Path to the weather generator outputs directory.
-    wind_spd_current : pathlib.Path
-        Path to the current wind speed data.
-    wind_spd_future : pathlib.Path
-        Path to the future wind speed data.
-    rain_days : ZipFileEntry
-        Configuration for rain days zip file entry.
-    extreme_summer_days : ZipFileEntry
-        Configuration for extreme summer days zip file entry.
-    frost_days : ZipFileEntry
-        Configuration for frost days zip file entry.
-    hot_days : ZipFileEntry
-        Configuration for hot days zip file entry.
-    icing_days : ZipFileEntry
-        Configuration for icing days zip file entry.
-    wdr_index : ZipFileEntry
-        Configuration for WDR index zip file entry.
-    drought_index : ZipFileEntry
-        Configuration for drought index zip file entry.
-    max_temp_summer : ZipFileEntry
-        Configuration for max temperature summer zip file entry.
-    precip_summer : ZipFileEntry
-        Configuration for precipitation summer zip file entry.
-    min_temp_winter : ZipFileEntry
-        Configuration for min temperature winter zip file entry.
-    precip_winter : ZipFileEntry
-        Configuration for precipitation winter zip file entry.
-    """
-
-    weather_generator: WeatherGenerator
-    wind_speed: dict[str, pathlib.Path]
-    rain_days: pathlib.Path
-    extreme_summer_days: pathlib.Path
-    frost_days: pathlib.Path
-    hot_days: pathlib.Path
-    icing_days: pathlib.Path
-    wdr_index: pathlib.Path
-    drought_index: pathlib.Path
-    max_temp_summer: pathlib.Path
-    precip_summer: pathlib.Path
-    min_temp_winter: pathlib.Path
-    precip_winter: pathlib.Path
-
 
 class PremiumGeoSureEntry(ctk.BaseConfig):
     """Configuration for the premium GeoSure data.
@@ -678,8 +633,6 @@ class HazardsConfig(ctk.BaseConfig):
     ----------
     coastal_erosion : ZipFileEntry
         Configuration for coastal erosion zip file entry.
-    extreme_weather : ExtremeWeather
-        Configuration for extreme weather data.
     flooding : Flooding
         Configuration for flooding data.
     ground_stability : GroundStability
@@ -687,7 +640,6 @@ class HazardsConfig(ctk.BaseConfig):
     """
 
     coastal_erosion: ZipFileEntry
-    extreme_weather: ExtremeWeather
     flooding: Flooding
     ground_stability: GroundStability
 
@@ -901,6 +853,32 @@ class SwitchConfig(ctk.BaseConfig):
         return self
 
 
+class ChessScapeConfig(ctk.BaseConfig):
+    """Configuration for CHESS-SCAPE parameters.
+
+    Attributes
+    ----------
+    token_url : str
+        URL to obtain the CHESS-SCAPE API token.
+    username : str
+        Username for CHESS-SCAPE API authentication.
+    password : str
+        Password for CHESS-SCAPE API authentication.
+    max_access_retries : int
+        Maximum number of retries for accessing a CHESS-SCAPE dataset.
+    sentinel : float
+        Sentinel value used in CHESS-SCAPE datasets.
+    variables : list[str]
+        List of CHESS-SCAPE climate variables to process.
+    """
+
+    token_url: str
+    username: str
+    password: str
+    max_access_retries: int
+    sentinel: float
+    variables: list[str]
+
 class ParameterConfig(ctk.BaseConfig):
     """Configuration for model parameters.
 
@@ -956,6 +934,10 @@ class ParameterConfig(ctk.BaseConfig):
     stb: str | None = None
     ca: str | None = None
     user_classes: RoadUserClassConfig = pydantic.Field(default_factory=RoadUserClassConfig)
+    noham_road_id_threshold: int
+    score_min: float
+    score_max: float
+    chess_scape: ChessScapeConfig
 
     # Empty yaml values are loaded as strings, so need to convert to None
     @pydantic.field_validator("stb", "ca", mode="before")
@@ -1361,26 +1343,6 @@ class WeightConfig(ctk.BaseConfig):
         return self.main_hazard_weights(main_hazard)
 
 
-class ConstantConfig(ctk.BaseConfig):
-    """Configuration for model constants.
-
-    Attributes
-    ----------
-    noham_road_id_threshold : int
-        Threshold for NoHAM road IDs.
-    score_min : float
-        Minimum score for risk calculations.
-    score_max : float
-        Maximum score for risk calculations.
-    rapid_transport_stakeholders : list[str]
-        List of rapid transport stakeholders defined in the MasterMap Site data.
-    """
-
-    noham_road_id_threshold: int
-    score_min: int
-    score_max: int
-    rapid_transport_stakeholders: list[str]
-
 
 # -------------------------
 # MAIN CONFIG
@@ -1424,4 +1386,3 @@ class Config(ctk.BaseConfig):
     asset_hazard_weighting: AssetHazardWeightingConfig | None = None
     structure_vulnerability: StructureVulnerabilityConfig
     weights: WeightConfig
-    constants: ConstantConfig
