@@ -37,6 +37,21 @@ CEDA_API = {
 
 CHESS_SCAPE_SENTINEL = -1e+20
 
+CHESS_SCAPE_SCENARIOS = {
+    definitions.Scenarios.CURRENT: {
+        "rcp": "rcp85",
+        "period": range(2001, 2021),
+    },
+    f"{definitions.Scenarios.FUTURE}_2": {
+        "rcp": "rcp65",
+        "period": range(2061, 2081),
+    },
+    f"{definitions.Scenarios.FUTURE}_4": {
+        "rcp": "rcp85",
+        "period": range(2061, 2081),
+    }
+}
+
 # WARNING FILTERS
 
 # This warning is raised by xarray when reading the .nc wind speed files. It does not change
@@ -106,6 +121,9 @@ def _clean_extreme_weather(config: model_config.Config, boundary: gpd.GeoDataFra
     session = requests.Session()
     session.headers.update({"Authorization": f"Bearer {ceda_token}"})
 
+    tasmax_by_scenario = _clean_temperature(session=session, variable="tasmax")
+    _aggregate_extreme_heat_tasmax(tasmax_by_scenario)
+
     hazard_grid = _clean_hazard_grid(config, boundary)
 
     # MET OFFICE CLEANING
@@ -140,6 +158,111 @@ def _get_ceda_token(url: str, username: str, password: str) -> str:
         return response_data["access_token"]
 
     raise RuntimeError(f"Failed to get CEDA token: {response.text}")
+
+
+def _read_clean_chess_scape_file(
+    rcp: str,
+    year: int,
+    month: int,
+    variable: str,
+    sentinel: float,
+    session: requests.Session,
+    resolution: str = "1km",
+    timescale: str = "daily",
+    realisation: str = "01",
+    bias_corrected: bool = True,
+) -> xr.DataArray:
+    """Read and clean CHESS-SCAPE climate data for a given RCP, year, month, and variable."""
+    url = (
+        f"dap2://dap.ceda.ac.uk/thredds/dodsC/badc/deposited2021/chess-scape/data/"
+        f"{rcp}{'_bias-corrected' if bias_corrected else ''}/{realisation}/{timescale}"
+        f"/{variable}/chess-scape_{rcp}{'_bias-corrected' if bias_corrected else ''}_"
+        f"{realisation}_{variable}_uk_{resolution}_{timescale}_{year}{month:02d}01-{year}{month:02d}30.nc"
+    )
+    ds = xr.open_dataset(url, engine="pydap", session=session)
+    cleaned = ds[variable].where(ds[variable] != sentinel)
+    return cleaned.drop_vars(["lat", "lon"], errors="ignore")
+
+
+def _read_clean_chess_scape_for_scenario(
+    scenario: str,
+    variable: str,
+    sentinel: float,
+    session: requests.Session,
+) -> xr.DataArray:
+    """Read and clean CHESS-SCAPE climate data for all months in a scenario period."""
+    if scenario not in CHESS_SCAPE_SCENARIOS:
+        valid = ", ".join(CHESS_SCAPE_SCENARIOS)
+        raise ValueError(f"Unknown CHESS-SCAPE scenario '{scenario}'. Valid values: {valid}.")
+
+    params = CHESS_SCAPE_SCENARIOS[scenario]
+    monthly_data = []
+    for year in params["period"]:
+        for month in range(1, 13):
+            monthly_data.append(
+                _read_clean_chess_scape_file(
+                    params["rcp"],
+                    year,
+                    month,
+                    variable,
+                    sentinel,
+                    session,
+                )
+            )
+    if not monthly_data:
+        raise ValueError(f"No CHESS-SCAPE time slices found for scenario '{scenario}'.")
+    return xr.concat(monthly_data, dim="time").sortby("time")
+
+
+def _clean_temperature(
+    session: requests.Session,
+    variable: str,
+    sentinel: float = CHESS_SCAPE_SENTINEL,
+) -> dict[str, xr.DataArray]:
+    """Read and clean temperature data from CHESS-SCAPE for all configured scenarios."""
+    temperature_by_scenario = {}
+    for scenario in CHESS_SCAPE_SCENARIOS:
+        temperature_by_scenario[scenario] = _read_clean_chess_scape_for_scenario(
+            scenario,
+            variable,
+            sentinel,
+            session,
+        )
+    return temperature_by_scenario
+
+
+def _aggregate_extreme_heat_tasmax(
+    tasmax_by_scenario: dict[str, xr.DataArray], quantile: float = 0.99
+) -> dict[str, xr.Dataset]:
+    """Aggregate tasmax into event intensity and frequency for each configured scenario."""
+    if not 0 < quantile < 1:
+        raise ValueError("quantile must be between 0 and 1.")
+
+    aggregated = {}
+    for scenario, tasmax in tasmax_by_scenario.items():
+        threshold = tasmax.quantile(quantile, dim="time").squeeze(drop=True)
+        extreme_events = tasmax > threshold
+        annual_event_frequency = extreme_events.groupby("time.year").sum(dim="time").mean(
+            dim="year"
+        )
+        annual_event_intensity = (
+            tasmax.where(extreme_events).groupby("time.year").mean(dim="time").mean(dim="year")
+        )
+        aggregated[scenario] = xr.Dataset(
+            data_vars={
+                "extreme_heat_frequency": annual_event_frequency,
+                "extreme_heat_intensity": annual_event_intensity,
+            },
+            attrs={
+                "scenario": scenario,
+                "rcp": CHESS_SCAPE_SCENARIOS[scenario]["rcp"],
+                "period_start": min(CHESS_SCAPE_SCENARIOS[scenario]["period"]),
+                "period_end": max(CHESS_SCAPE_SCENARIOS[scenario]["period"]),
+                "extreme_quantile": quantile,
+            },
+        )
+    return aggregated
+
 
 
 def _clean_hazard_grid(
